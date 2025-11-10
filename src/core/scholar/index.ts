@@ -1,18 +1,15 @@
 /**
  * Main Scholar extraction orchestrator
- * Supports both Semantic Scholar API and Google Scholar scraping
+ * Uses Semantic Scholar API for paper search
  */
 
 import { SearchParameters, Paper, SearchProgress, ProgressCallback, PaperCallback } from '../types';
 import { LitRevDatabase } from '../database';
-import { TorPoolManager } from './tor-manager';
-import { ParallelScholarScraper, GoogleScholarScraper } from './scraper';
 import { SemanticScholarService } from './semantic-scholar';
 import { LLMService } from '../llm';
 
 export class ScholarExtractor {
   private database: LitRevDatabase;
-  private torPool?: TorPoolManager;
   private sessionId?: string;
   private isRunning: boolean = false;
   private startTime?: number;
@@ -20,16 +17,8 @@ export class ScholarExtractor {
   private onPaper?: PaperCallback;
   private llmService?: LLMService;
 
-  constructor(
-    database: LitRevDatabase,
-    useTor: boolean = true,
-    parallelCount: number = 3
-  ) {
+  constructor(database: LitRevDatabase) {
     this.database = database;
-
-    if (useTor) {
-      this.torPool = new TorPoolManager(parallelCount);
-    }
   }
 
   /**
@@ -56,26 +45,11 @@ export class ScholarExtractor {
     this.updateProgress({
       status: 'running',
       currentTask: 'Initializing search',
-      nextTask: 'Checking Tor availability',
+      nextTask: 'Preparing Semantic Scholar search',
       progress: 5
     });
 
     try {
-      // Check Tor availability if enabled
-      if (this.torPool) {
-        this.updateProgress({
-          currentTask: 'Checking Tor availability',
-          nextTask: 'Preparing search queries',
-          progress: 10
-        });
-
-        const isTorAvailable = await this.torPool.isAnyAvailable();
-        if (!isTorAvailable) {
-          console.warn('Tor is not available, continuing without Tor');
-          this.torPool = undefined;
-        }
-      }
-
       // Determine year range
       const currentYear = new Date().getFullYear();
       const startYear = parameters.startYear || 2000;
@@ -83,8 +57,8 @@ export class ScholarExtractor {
       const years = this.generateYearRange(startYear, endYear);
 
       this.updateProgress({
-        currentTask: 'Preparing parallel search',
-        nextTask: `Searching ${years.length} years in parallel`,
+        currentTask: 'Preparing search',
+        nextTask: `Searching ${years.length} years`,
         progress: 15
       });
 
@@ -188,68 +162,7 @@ export class ScholarExtractor {
       });
     } catch (error) {
       console.error('Semantic Scholar search failed:', error);
-
-      // Fallback to Google Scholar scraping (without Tor, will likely hit CAPTCHA)
-      console.log('Falling back to Google Scholar scraping...');
-
-      this.updateProgress({
-        currentTask: 'Semantic Scholar failed, trying Google Scholar',
-        nextTask: 'Extracting papers from Google Scholar',
-        progress: 20
-      });
-
-      const scraper = new GoogleScholarScraper({
-        useTor: false,
-        headless: true,
-        screenshotEnabled: true
-      });
-
-      try {
-        await scraper.initialize();
-
-        for (let i = 0; i < years.length; i++) {
-          const year = years[i];
-
-          this.updateProgress({
-            currentTask: `Searching year ${year}`,
-            nextTask: i < years.length - 1 ? `Next: year ${years[i + 1]}` : 'Finalizing search',
-            progress: 20 + (60 * (i + 1) / years.length),
-            currentYear: year
-          });
-
-          const result = await scraper.search(
-            parameters.inclusionKeywords,
-            year,
-            maxResultsPerYear
-          );
-
-          allPapers.push(...result.papers);
-
-          // Save papers incrementally
-          for (const paper of result.papers) {
-            this.database.addPaper(this.sessionId!, paper);
-            if (this.onPaper) {
-              this.onPaper(paper);
-            }
-          }
-
-          if (result.screenshot) {
-            this.updateProgress({ screenshot: result.screenshot });
-          }
-
-          // Delay between years
-          await this.delay(3000);
-        }
-
-        this.updateProgress({
-          currentTask: 'Papers extracted successfully',
-          nextTask: 'Applying exclusion filters',
-          progress: 80,
-          totalPapers: allPapers.length
-        });
-      } finally {
-        await scraper.close();
-      }
+      throw new Error(`Failed to search Semantic Scholar: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

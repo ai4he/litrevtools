@@ -57,11 +57,7 @@ export class LitRevTools {
   ): Promise<string> {
     try {
       // Initialize scholar extractor
-      this.scholarExtractor = new ScholarExtractor(
-        this.database,
-        true, // use Tor
-        this.config.maxParallelRequests
-      );
+      this.scholarExtractor = new ScholarExtractor(this.database);
 
       // Start the search
       const sessionId = await this.scholarExtractor.startSearch(
