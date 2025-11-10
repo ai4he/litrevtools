@@ -10,6 +10,8 @@ export interface SearchParameters {
   maxResults?: number; // undefined means infinite
   startYear?: number;
   endYear?: number;
+  startMonth?: number; // 1-12, optional month filter
+  endMonth?: number; // 1-12, optional month filter
   llmConfig?: LLMConfig; // LLM configuration for intelligent tasks
 }
 
@@ -18,6 +20,7 @@ export interface Paper {
   title: string;
   authors: string[];
   year: number;
+  publicationDate?: string; // ISO date string (YYYY-MM-DD) if available
   abstract?: string;
   url: string;
   citations?: number;

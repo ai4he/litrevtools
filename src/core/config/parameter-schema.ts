@@ -105,6 +105,30 @@ export const SEARCH_PARAMETER_SCHEMA: ParameterDefinition[] = [
     group: 'basic',
     cliFlag: '--end-year',
   },
+  {
+    key: 'startMonth',
+    type: 'number',
+    label: 'Start Month',
+    description: 'Earliest month to include in search (1-12, optional)',
+    required: false,
+    min: 1,
+    max: 12,
+    placeholder: '1',
+    group: 'basic',
+    cliFlag: '--start-month',
+  },
+  {
+    key: 'endMonth',
+    type: 'number',
+    label: 'End Month',
+    description: 'Latest month to include in search (1-12, optional)',
+    required: false,
+    min: 1,
+    max: 12,
+    placeholder: '12',
+    group: 'basic',
+    cliFlag: '--end-month',
+  },
 
   // LLM Configuration
   {

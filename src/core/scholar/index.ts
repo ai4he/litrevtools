@@ -51,16 +51,28 @@ export class ScholarExtractor {
 
     try {
       // Determine year range
-      const currentYear = new Date().getFullYear();
-      const startYear = parameters.startYear || 2000;
-      const endYear = parameters.endYear || currentYear;
-      const years = this.generateYearRange(startYear, endYear);
+      // If no time range is provided at all, search without year filter (all results)
+      let years: number[] | undefined;
 
-      this.updateProgress({
-        currentTask: 'Preparing search',
-        nextTask: `Searching ${years.length} years`,
-        progress: 15
-      });
+      if (parameters.startYear !== undefined || parameters.endYear !== undefined) {
+        const currentYear = new Date().getFullYear();
+        const startYear = parameters.startYear || 2000;
+        const endYear = parameters.endYear || currentYear;
+        years = this.generateYearRange(startYear, endYear);
+
+        this.updateProgress({
+          currentTask: 'Preparing search',
+          nextTask: `Searching ${years.length} years`,
+          progress: 15
+        });
+      } else {
+        // No year range specified - search all years
+        this.updateProgress({
+          currentTask: 'Preparing search',
+          nextTask: 'Searching all years',
+          progress: 15
+        });
+      }
 
       // Execute parallel search
       await this.executeParallelSearch(parameters, years);
@@ -106,13 +118,9 @@ export class ScholarExtractor {
    */
   private async executeParallelSearch(
     parameters: SearchParameters,
-    years: number[]
+    years: number[] | undefined
   ): Promise<void> {
     if (!this.sessionId) throw new Error('No active session');
-
-    const maxResultsPerYear = parameters.maxResults
-      ? Math.ceil(parameters.maxResults / years.length)
-      : undefined;
 
     // Use Semantic Scholar API (preferred method)
     this.updateProgress({
@@ -126,6 +134,16 @@ export class ScholarExtractor {
     let totalFetched = 0; // Track total papers fetched across all years
 
     try {
+      // If no year range is specified, search without year filter
+      if (!years) {
+        await this.searchWithoutYearFilter(parameters, semanticScholar);
+        return;
+      }
+
+      const maxResultsPerYear = parameters.maxResults
+        ? Math.ceil(parameters.maxResults / years.length)
+        : undefined;
+
       for (let i = 0; i < years.length; i++) {
         const year = years[i];
 
@@ -136,14 +154,16 @@ export class ScholarExtractor {
           currentYear: year
         });
 
-        const targetResults = maxResultsPerYear || 100;
         const maxPerRequest = 100; // Semantic Scholar API limit
         let offset = 0;
         let fetchedForYear = 0;
 
         // Paginate if needed
-        while (fetchedForYear < targetResults) {
-          const limit = Math.min(maxPerRequest, targetResults - fetchedForYear);
+        // If maxResultsPerYear is undefined, fetch all available papers
+        while (true) {
+          const limit = maxResultsPerYear
+            ? Math.min(maxPerRequest, maxResultsPerYear - fetchedForYear)
+            : maxPerRequest;
 
           const result = await semanticScholar.search({
             query: parameters.inclusionKeywords.join(' '),
@@ -152,11 +172,17 @@ export class ScholarExtractor {
             offset
           });
 
-          allPapers.push(...result.papers);
-          totalFetched += result.papers.length;
+          // Filter by month if specified
+          let papersToAdd = result.papers;
+          if (parameters.startMonth || parameters.endMonth) {
+            papersToAdd = this.filterPapersByMonth(result.papers, parameters.startMonth, parameters.endMonth, year, years[0], years[years.length - 1]);
+          }
+
+          allPapers.push(...papersToAdd);
+          totalFetched += papersToAdd.length;
 
           // Save papers incrementally
-          for (const paper of result.papers) {
+          for (const paper of papersToAdd) {
             this.database.addPaper(this.sessionId!, paper);
             if (this.onPaper) {
               this.onPaper(paper, this.sessionId!);
@@ -170,6 +196,11 @@ export class ScholarExtractor {
 
           // Stop if no more results available
           if (!result.hasMore || result.papers.length === 0) {
+            break;
+          }
+
+          // Stop if we've reached the target for this year (when limit is specified)
+          if (maxResultsPerYear && fetchedForYear >= maxResultsPerYear) {
             break;
           }
         }
@@ -393,6 +424,152 @@ export class ScholarExtractor {
         this.onProgress(session.progress, this.sessionId);
       }
     }
+  }
+
+  /**
+   * Search without year filter - fetches all available papers
+   */
+  private async searchWithoutYearFilter(
+    parameters: SearchParameters,
+    semanticScholar: SemanticScholarService
+  ): Promise<void> {
+    if (!this.sessionId) throw new Error('No active session');
+
+    this.updateProgress({
+      currentTask: 'Searching Semantic Scholar (all years)',
+      nextTask: 'Fetching papers',
+      progress: 30
+    });
+
+    const maxPerRequest = 100; // Semantic Scholar API limit
+    const maxResults = parameters.maxResults; // undefined means fetch all
+    let offset = 0;
+    let totalFetched = 0;
+
+    // Paginate through all results
+    while (true) {
+      const limit = maxResults
+        ? Math.min(maxPerRequest, maxResults - totalFetched)
+        : maxPerRequest;
+
+      const result = await semanticScholar.search({
+        query: parameters.inclusionKeywords.join(' '),
+        // No year filter - search all years
+        limit,
+        offset
+      });
+
+      // Filter by month if specified (though this is less meaningful without year context)
+      let papersToAdd = result.papers;
+      if (parameters.startMonth || parameters.endMonth) {
+        console.warn('Month filtering without year range may produce unexpected results');
+        // When no year range is specified, we can't effectively filter by month
+        // So we'll just include all papers
+      }
+
+      totalFetched += papersToAdd.length;
+
+      // Save papers incrementally
+      for (const paper of papersToAdd) {
+        this.database.addPaper(this.sessionId!, paper);
+        if (this.onPaper) {
+          this.onPaper(paper, this.sessionId!);
+        }
+      }
+
+      offset += result.papers.length;
+
+      console.log(`Found ${totalFetched}/${result.total} papers (all years)`);
+
+      this.updateProgress({
+        currentTask: `Fetching papers (${totalFetched}/${result.total})`,
+        nextTask: 'Continuing search',
+        progress: 20 + Math.min(60, (totalFetched / result.total) * 60)
+      });
+
+      // Stop if no more results available
+      if (!result.hasMore || result.papers.length === 0) {
+        break;
+      }
+
+      // Stop if we've reached the max results (when limit is specified)
+      if (maxResults && totalFetched >= maxResults) {
+        break;
+      }
+    }
+
+    // Calculate duplicates
+    const uniquePapers = this.database.getPapers(this.sessionId!);
+    const duplicateCount = totalFetched - uniquePapers.length;
+
+    console.log(`Total fetched: ${totalFetched}, Unique papers: ${uniquePapers.length}, Duplicates: ${duplicateCount}`);
+
+    this.updateProgress({
+      currentTask: 'Papers extracted successfully',
+      nextTask: 'Applying exclusion filters',
+      progress: 80,
+      totalPapers: uniquePapers.length,
+      duplicateCount
+    });
+  }
+
+  /**
+   * Filter papers by month based on publication date
+   */
+  private filterPapersByMonth(
+    papers: Paper[],
+    startMonth: number | undefined,
+    endMonth: number | undefined,
+    currentYear: number,
+    firstYear: number,
+    lastYear: number
+  ): Paper[] {
+    // If no month filtering is specified, return all papers
+    if (!startMonth && !endMonth) {
+      return papers;
+    }
+
+    return papers.filter(paper => {
+      // If paper doesn't have a publication date, include it conservatively
+      if (!paper.publicationDate) {
+        return true;
+      }
+
+      try {
+        // Parse the publication date (format: YYYY-MM-DD or YYYY-MM or YYYY)
+        const dateParts = paper.publicationDate.split('-');
+        const pubYear = parseInt(dateParts[0]);
+        const pubMonth = dateParts.length > 1 ? parseInt(dateParts[1]) : undefined;
+
+        // If we can't determine the month, include the paper conservatively
+        if (!pubMonth) {
+          return true;
+        }
+
+        // For the first year of the range
+        if (currentYear === firstYear && startMonth) {
+          // Only include papers from startMonth onwards in the first year
+          if (pubYear === firstYear) {
+            return pubMonth >= startMonth;
+          }
+        }
+
+        // For the last year of the range
+        if (currentYear === lastYear && endMonth) {
+          // Only include papers up to endMonth in the last year
+          if (pubYear === lastYear) {
+            return pubMonth <= endMonth;
+          }
+        }
+
+        // For years in between, include all papers
+        return true;
+      } catch (error) {
+        // If there's any error parsing the date, include the paper conservatively
+        console.warn(`Error parsing publication date for paper: ${paper.title}`, error);
+        return true;
+      }
+    });
   }
 
   /**
