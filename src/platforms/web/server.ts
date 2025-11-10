@@ -2,6 +2,9 @@
  * Web Server Platform for LitRevTools
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -34,7 +37,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const litrev = new LitRevTools();
 
 // Active searches map
-const activeSear ches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
+const activeSearches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
 
 // REST API Routes
 
@@ -87,7 +90,7 @@ app.post('/api/search/start', async (req, res) => {
 
         if (progress.status === 'completed' || progress.status === 'error') {
           // Clean up
-          activeSear.delete(sessionId);
+          activeSearches.delete(sessionId);
           if (progress.status === 'completed') {
             // Generate outputs
             tools.generateOutputs(sessionId).then(() => {
@@ -105,7 +108,7 @@ app.post('/api/search/start', async (req, res) => {
       }
     });
 
-    activeSear.set(sessionId, { sessionId, tools });
+    activeSearches.set(sessionId, { sessionId, tools });
 
     res.json({ success: true, sessionId });
   } catch (error: any) {
@@ -115,7 +118,7 @@ app.post('/api/search/start', async (req, res) => {
 
 // Pause search
 app.post('/api/search/:id/pause', (req, res) => {
-  const search = activeSear.get(req.params.id);
+  const search = activeSearches.get(req.params.id);
   if (!search) {
     res.status(404).json({ success: false, error: 'Search not found' });
     return;
@@ -127,7 +130,7 @@ app.post('/api/search/:id/pause', (req, res) => {
 
 // Resume search
 app.post('/api/search/:id/resume', (req, res) => {
-  const search = activeSear.get(req.params.id);
+  const search = activeSearches.get(req.params.id);
   if (!search) {
     res.status(404).json({ success: false, error: 'Search not found' });
     return;
@@ -139,14 +142,14 @@ app.post('/api/search/:id/resume', (req, res) => {
 
 // Stop search
 app.post('/api/search/:id/stop', (req, res) => {
-  const search = activeSear.get(req.params.id);
+  const search = activeSearches.get(req.params.id);
   if (!search) {
     res.status(404).json({ success: false, error: 'Search not found' });
     return;
   }
 
   search.tools.stopSearch();
-  activeSear.delete(req.params.id);
+  activeSearches.delete(req.params.id);
   res.json({ success: true });
 });
 

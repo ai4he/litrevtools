@@ -18,5 +18,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "build"]
+  "exclude": ["node_modules", "dist", "build", "src/platforms/mobile", "src/platforms/desktop"]
 }

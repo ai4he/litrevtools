@@ -90,14 +90,14 @@ npm run cli view <session-id>
 npm run cli generate <session-id>
 ```
 
-#### Web Application
+#### Web Application (Development)
 
 ```bash
-# Start the web server
-npm run web:start
+# Start the web server in development mode
+npm run web:dev
 
 # Open in browser
-# http://localhost:3000
+# http://localhost:3001
 ```
 
 Features:
@@ -106,6 +106,36 @@ Features:
 - Live paper list updates
 - Screenshot preview
 - One-click output downloads
+
+#### Production Deployment
+
+For production deployment with PM2 and nginx:
+
+```bash
+# 1. System setup (run as root/sudo)
+sudo bash scripts/setup.sh
+
+# 2. Configure environment
+cp .env.example .env
+nano .env  # Add your API keys
+
+# 3. Deploy
+npm run deploy:setup
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions including:
+- Nginx reverse proxy configuration
+- SSL/TLS setup with Let's Encrypt
+- PM2 process management
+- Monitoring and troubleshooting
+
+**Quick deployment commands:**
+```bash
+npm run deploy:setup    # Build and start with PM2
+npm run deploy:restart  # Restart the service
+npm run deploy:logs     # View logs
+npm run deploy:status   # Check status
+```
 
 #### Desktop Application
 

@@ -1,0 +1,59 @@
+# Nginx Configuration Template for LitRevTools
+#
+# Replace the following placeholders:
+# - YOUR_DOMAIN: Your domain name (e.g., litrev.example.com)
+# - YOUR_PORT: The port your LitRevTools server is running on (default: 3001)
+#
+# To use this template:
+# 1. Copy this file: sudo cp nginx.conf.template /etc/nginx/sites-available/YOUR_DOMAIN
+# 2. Replace placeholders with actual values
+# 3. Create symlink: sudo ln -s /etc/nginx/sites-available/YOUR_DOMAIN /etc/nginx/sites-enabled/
+# 4. Test config: sudo nginx -t
+# 5. Reload nginx: sudo systemctl reload nginx
+# 6. Setup SSL: sudo certbot --nginx -d YOUR_DOMAIN
+
+server {
+    server_name YOUR_DOMAIN;
+
+    # Logs
+    access_log /var/log/nginx/litrevtools.access.log;
+    error_log /var/log/nginx/litrevtools.error.log;
+
+    # Max upload size (for paper uploads if added in future)
+    client_max_body_size 100M;
+
+    # Timeouts (important for long-running literature searches)
+    proxy_connect_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+
+    # WebSocket support for Socket.IO (real-time progress updates)
+    location /socket.io/ {
+        proxy_pass http://localhost:YOUR_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Proxy all other requests to LitRevTools
+    location / {
+        proxy_pass http://localhost:YOUR_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Initial HTTP configuration (SSL will be added by certbot)
+    listen 80;
+    listen [::]:80;
+}

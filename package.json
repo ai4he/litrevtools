@@ -9,7 +9,7 @@
     "cli": "node dist/platforms/cli/index.js",
     "web:dev": "ts-node src/platforms/web/server.ts",
     "web:build": "tsc && npm run web:copy-static",
-    "web:copy-static": "cp -r src/platforms/web/public dist/platforms/web/",
+    "web:copy-static": "mkdir -p dist/platforms/web/public && cp -r src/platforms/web/public/* dist/platforms/web/public/ 2>/dev/null || true",
     "web:start": "node dist/platforms/web/server.js",
     "desktop:dev": "electron src/platforms/desktop/main.ts",
     "desktop:build": "tsc && electron-builder",
@@ -18,7 +18,13 @@
     "mobile:add:ios": "npx cap add ios",
     "mobile:sync": "npx cap sync",
     "test": "jest",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "deploy:setup": "chmod +x scripts/*.sh && bash scripts/deploy.sh",
+    "deploy:start": "pm2 start ecosystem.config.js",
+    "deploy:restart": "pm2 restart litrevtools-web --update-env",
+    "deploy:stop": "pm2 stop litrevtools-web",
+    "deploy:logs": "pm2 logs litrevtools-web",
+    "deploy:status": "pm2 list | grep litrevtools-web"
   },
   "keywords": [
     "prisma",
@@ -34,7 +40,7 @@
     "@capacitor/core": "^5.5.1",
     "@capacitor/ios": "^5.5.1",
     "@google/generative-ai": "^0.2.1",
-    "better-sqlite3": "^9.2.2",
+    "better-sqlite3": "^12.4.1",
     "commander": "^11.1.0",
     "express": "^4.18.2",
     "google-auth-library": "^9.4.1",
@@ -57,7 +63,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^5.5.1",
-    "@types/better-sqlite3": "^7.6.8",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.5",
     "@types/cli-progress": "^3.11.5",
