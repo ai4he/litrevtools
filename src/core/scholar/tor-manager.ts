@@ -70,8 +70,8 @@ export class TorManager {
               this.currentCircuit = circuitInfo;
               socket.destroy();
 
-              // Give Tor a moment to establish new circuit
-              setTimeout(() => resolve(circuitInfo), 2000);
+              // Give Tor a moment to establish new circuit (reduced for faster rotation)
+              setTimeout(() => resolve(circuitInfo), 1000);
             } else {
               socket.destroy();
               reject(new Error('Circuit rotation failed'));
@@ -145,7 +145,7 @@ export class TorPoolManager {
   private managers: TorManager[];
   private currentIndex: number = 0;
   private lastRotation: Map<number, Date> = new Map();
-  private minRotationInterval: number = 10000; // 10 seconds minimum between rotations
+  private minRotationInterval: number = 2000; // 2 seconds minimum between rotations (reduced for CAPTCHA bypass)
 
   constructor(count: number = 3, basePort: number = 9050) {
     this.managers = [];

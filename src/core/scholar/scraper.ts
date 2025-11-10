@@ -55,56 +55,191 @@ export class GoogleScholarScraper {
   }
 
   /**
-   * Search Google Scholar for papers
+   * Check if page contains CAPTCHA
+   */
+  private async detectCaptcha(page: Page): Promise<boolean> {
+    try {
+      const captchaSelectors = [
+        '#gs_captcha_c',
+        '#gs_captcha_f',
+        'iframe[src*="recaptcha"]',
+        '[id*="captcha"]',
+        'h1:has-text("kein Roboter")',
+        'h1:has-text("not a robot")'
+      ];
+
+      for (const selector of captchaSelectors) {
+        const element = await page.$(selector).catch(() => null);
+        if (element) {
+          console.log(`CAPTCHA detected: ${selector}`);
+          return true;
+        }
+      }
+
+      // Check page content for CAPTCHA text
+      const bodyText = await page.evaluate(() => {
+        // @ts-ignore - document is available in browser context
+        const body = document.body;
+        return body ? body.textContent || '' : '';
+      }).catch(() => '');
+      if (bodyText.toLowerCase().includes('captcha') || bodyText.includes('Roboter') || bodyText.includes('not a robot')) {
+        console.log('CAPTCHA detected in page text');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Random delay between min and max milliseconds
+   */
+  private async randomDelay(min: number, max: number): Promise<void> {
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  /**
+   * Search Google Scholar for papers with automatic retry and circuit rotation
    */
   async search(
     keywords: string[],
     year?: number,
     maxResults?: number
   ): Promise<{ papers: Paper[], screenshot?: string }> {
-    if (!this.browser) {
-      await this.initialize();
+    const maxRetries = 10;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+      attempt++;
+
+      try {
+        console.log(`Search attempt ${attempt}/${maxRetries}${year ? ` for year ${year}` : ''}`);
+
+        // Rotate circuit before each attempt (except first)
+        if (attempt > 1 && this.torManager) {
+          console.log('Rotating Tor circuit...');
+          await this.rotateTorCircuit();
+          // Wait for circuit to stabilize
+          await this.randomDelay(3000, 5000);
+        }
+
+        if (!this.browser) {
+          await this.initialize();
+        }
+
+        const page = await this.browser!.newPage();
+
+        try {
+          // Set viewport with slight randomization
+          const width = 1920 + Math.floor(Math.random() * 100);
+          const height = 1080 + Math.floor(Math.random() * 100);
+          await page.setViewport({ width, height });
+
+          // Random delay before navigation
+          await this.randomDelay(1000, 3000);
+
+          // Build search query
+          const query = keywords.join(' ');
+          let url = `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
+
+          if (year) {
+            url += `&as_ylo=${year}&as_yhi=${year}`;
+          }
+
+          // Navigate to Google Scholar
+          console.log(`Navigating to: ${url.substring(0, 100)}...`);
+          await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+
+          // Check for CAPTCHA
+          const hasCaptcha = await this.detectCaptcha(page);
+
+          if (hasCaptcha) {
+            console.log(`CAPTCHA detected on attempt ${attempt}, will retry with new circuit`);
+            await page.close();
+
+            // Exponential backoff
+            const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            await this.randomDelay(backoffDelay, backoffDelay + 2000);
+
+            continue; // Retry with new circuit
+          }
+
+          // Wait for results to load
+          let resultsFound = false;
+          try {
+            await page.waitForSelector('.gs_r.gs_or.gs_scl', { timeout: 10000 });
+            resultsFound = true;
+            console.log('Results found!');
+          } catch (e) {
+            console.log('No results with selector .gs_r.gs_or.gs_scl, checking for alternate structures');
+
+            // Try alternate selectors
+            const alternateSelectors = [
+              '.gs_r',
+              '.gs_ri',
+              '[data-rp]',
+              '#gs_res_ccl_mid .gs_r'
+            ];
+
+            for (const selector of alternateSelectors) {
+              try {
+                await page.waitForSelector(selector, { timeout: 2000 });
+                console.log(`Found results with selector: ${selector}`);
+                resultsFound = true;
+                break;
+              } catch (e2) {
+                // Continue to next selector
+              }
+            }
+          }
+
+          if (!resultsFound) {
+            console.log('No results found, retrying...');
+            await page.close();
+            continue;
+          }
+
+          // Extract papers
+          const papers = await this.extractPapers(page, maxResults);
+
+          if (papers.length === 0) {
+            console.log('No papers extracted, retrying...');
+            await page.close();
+            continue;
+          }
+
+          console.log(`Successfully extracted ${papers.length} papers`);
+
+          // Take screenshot if enabled
+          let screenshot: string | undefined;
+          if (this.config.screenshotEnabled) {
+            const buffer = await page.screenshot({ encoding: 'base64' });
+            screenshot = buffer as string;
+          }
+
+          await page.close();
+
+          return { papers, screenshot };
+        } catch (error) {
+          await page.close().catch(() => {});
+          throw error;
+        }
+      } catch (error: any) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt >= maxRetries) {
+          throw new Error(`Failed to fetch results after ${maxRetries} attempts: ${error.message}`);
+        }
+
+        // Wait before next retry
+        await this.randomDelay(2000, 4000);
+      }
     }
 
-    const page = await this.browser!.newPage();
-
-    try {
-      // Set viewport
-      await page.setViewport({ width: 1920, height: 1080 });
-
-      // Build search query
-      const query = keywords.join(' ');
-      let url = `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
-
-      if (year) {
-        url += `&as_ylo=${year}&as_yhi=${year}`;
-      }
-
-      // Navigate to Google Scholar
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-
-      // Wait for results to load
-      await page.waitForSelector('.gs_r.gs_or.gs_scl', { timeout: 10000 }).catch(() => {
-        console.log('No results found or page structure changed');
-      });
-
-      // Extract papers
-      const papers = await this.extractPapers(page, maxResults);
-
-      // Take screenshot if enabled
-      let screenshot: string | undefined;
-      if (this.config.screenshotEnabled) {
-        const buffer = await page.screenshot({ encoding: 'base64' });
-        screenshot = buffer as string;
-      }
-
-      await page.close();
-
-      return { papers, screenshot };
-    } catch (error) {
-      await page.close().catch(() => {});
-      throw error;
-    }
+    throw new Error(`Failed to fetch results after ${maxRetries} attempts`);
   }
 
   /**
