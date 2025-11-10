@@ -28,9 +28,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear auth token and redirect to login
+      // Clear invalid auth token
+      // Don't redirect - let the component handle the auth state
       localStorage.removeItem('authToken');
-      window.location.href = '/';
     }
     return Promise.reject(error);
   }

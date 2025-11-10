@@ -132,8 +132,11 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
     // Create a new tools instance for this search
     const tools = new LitRevTools();
 
+    // Declare sessionId first so it can be used in callbacks
+    let sessionId: string = '';
+
     // Start search with WebSocket callbacks
-    const sessionId = await tools.startSearch(params, {
+    sessionId = await tools.startSearch(params, {
       onProgress: (progress: SearchProgress) => {
         io.emit(`progress:${sessionId}`, progress);
 
@@ -161,6 +164,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
     res.json({ success: true, sessionId });
   } catch (error: any) {
+    console.error('Error starting search:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

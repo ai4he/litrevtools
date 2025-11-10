@@ -274,8 +274,11 @@ searchCommand.action(async (options) => {
     let papersFound = 0;
     const startTime = Date.now();
 
+    // Declare sessionId first so it can be used in callbacks
+    let sessionId: string = '';
+
     // Start search
-    const sessionId = await tools.startSearch(validParams, {
+    sessionId = await tools.startSearch(validParams, {
       onProgress: (progress: SearchProgress) => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
 
