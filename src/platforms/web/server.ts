@@ -12,6 +12,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { LitRevTools, SearchParameters, SearchProgress, Paper } from '../../core';
 import * as path from 'path';
+import { verifyGoogleToken, generateJWT, authMiddleware, optionalAuthMiddleware, AuthRequest } from './auth';
 
 const app = express();
 const httpServer = createServer(app);
@@ -31,6 +32,12 @@ app.use(helmet({
 }));
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from React frontend (if built)
+const frontendPath = path.join(__dirname, 'frontend', 'dist');
+app.use(express.static(frontendPath));
+
+// Fallback to old public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize LitRevTools instance
@@ -40,6 +47,47 @@ const litrev = new LitRevTools();
 const activeSearches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
 
 // REST API Routes
+
+// Authentication Routes
+
+// Google OAuth login
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      res.status(400).json({ success: false, error: 'Google credential is required' });
+      return;
+    }
+
+    // Verify Google token
+    const user = await verifyGoogleToken(credential);
+
+    // Generate JWT token
+    const token = generateJWT(user);
+
+    res.json({
+      success: true,
+      user,
+      token,
+    });
+  } catch (error: any) {
+    console.error('Google login error:', error);
+    res.status(401).json({ success: false, error: error.message });
+  }
+});
+
+// Get current user
+app.get('/api/auth/me', authMiddleware, (req: AuthRequest, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+// Logout (client-side only, just a placeholder)
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// Session Routes (with optional authentication)
 
 // Get all sessions
 app.get('/api/sessions', (req, res) => {
@@ -66,7 +114,7 @@ app.get('/api/sessions/:id', (req, res) => {
 });
 
 // Start a new search
-app.post('/api/search/start', async (req, res) => {
+app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {
     const params: SearchParameters = req.body;
 
@@ -234,14 +282,23 @@ io.on('connection', (socket) => {
   });
 });
 
-// Serve HTML interface
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });
+});
+
+// Serve React app for all non-API routes (SPA fallback) - MUST BE LAST
+app.get('*', (req, res) => {
+  // Check if React app is built
+  const reactIndexPath = path.join(__dirname, 'frontend', 'dist', 'index.html');
+  const publicIndexPath = path.join(__dirname, 'public', 'index.html');
+
+  // Try to serve React app first, fallback to old public HTML
+  try {
+    res.sendFile(reactIndexPath);
+  } catch (error) {
+    res.sendFile(publicIndexPath);
+  }
 });
 
 // Start server
