@@ -2,13 +2,16 @@
  * LLM Service - Main service for managing LLM providers and batch processing
  */
 
-import { LLMConfig, LLMRequest, LLMResponse, LLMTaskType, Paper } from '../types';
+import { LLMConfig, LLMRequest, LLMResponse, LLMTaskType, Paper, FallbackStrategy } from '../types';
 import { LLMProvider } from './base-provider';
 import { GeminiProvider } from './gemini-provider';
+import { APIKeyManager } from './api-key-manager';
 
 export class LLMService {
   private provider?: LLMProvider;
   private config: LLMConfig;
+  private keyManager?: APIKeyManager;
+  private onKeyExhausted?: () => Promise<string | null>;
 
   constructor(config?: Partial<LLMConfig>) {
     // Default configuration with Gemini as default provider
@@ -17,12 +20,22 @@ export class LLMService {
       provider: config?.provider || 'gemini',
       model: config?.model,
       apiKey: config?.apiKey,
+      apiKeys: config?.apiKeys,
       batchSize: config?.batchSize || 10,
       maxConcurrentBatches: config?.maxConcurrentBatches || 3,
       timeout: config?.timeout || 30000,
       retryAttempts: config?.retryAttempts || 3,
-      temperature: config?.temperature || 0.3
+      temperature: config?.temperature || 0.3,
+      fallbackStrategy: config?.fallbackStrategy || 'rule_based',
+      enableKeyRotation: config?.enableKeyRotation ?? true
     };
+  }
+
+  /**
+   * Set callback for when all API keys are exhausted
+   */
+  setOnKeyExhausted(callback: () => Promise<string | null>): void {
+    this.onKeyExhausted = callback;
   }
 
   /**
@@ -33,8 +46,35 @@ export class LLMService {
       return;
     }
 
-    if (!this.config.apiKey) {
-      throw new Error('LLM API key is required when LLM is enabled');
+    // Prepare API keys
+    const keys: string[] = [];
+    if (this.config.apiKeys && this.config.apiKeys.length > 0) {
+      keys.push(...this.config.apiKeys);
+    } else if (this.config.apiKey) {
+      keys.push(this.config.apiKey);
+    }
+
+    // Check environment variable as fallback
+    if (keys.length === 0 && process.env.GEMINI_API_KEY) {
+      keys.push(process.env.GEMINI_API_KEY);
+    }
+
+    if (keys.length === 0) {
+      throw new Error('LLM API key is required when LLM is enabled. Provide apiKey, apiKeys, or set GEMINI_API_KEY environment variable.');
+    }
+
+    // Create API key manager if rotation is enabled and we have multiple keys
+    if (this.config.enableKeyRotation && keys.length > 0) {
+      this.keyManager = new APIKeyManager(
+        keys,
+        this.config.fallbackStrategy,
+        this.config.enableKeyRotation
+      );
+
+      // Set callback for exhausted keys
+      if (this.onKeyExhausted) {
+        this.keyManager.setOnKeyExhausted(this.onKeyExhausted);
+      }
     }
 
     // Create provider based on configuration
@@ -50,7 +90,12 @@ export class LLMService {
         throw new Error(`Unknown LLM provider: ${this.config.provider}`);
     }
 
-    await this.provider.initialize(this.config.apiKey, { model: this.config.model });
+    // Initialize provider with key manager or single key
+    const initKey = keys[0]; // Provide first key as fallback
+    await this.provider.initialize(initKey, {
+      model: this.config.model,
+      keyManager: this.keyManager
+    });
   }
 
   /**
@@ -322,5 +367,64 @@ Use an academic tone with proper citations (Author et al., Year format).`;
    */
   getConfig(): LLMConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Get API key statistics
+   */
+  getKeyStatistics() {
+    return this.keyManager?.getKeyStatistics() || [];
+  }
+
+  /**
+   * Get count of active API keys
+   */
+  getActiveKeyCount(): number {
+    return this.keyManager?.getActiveKeyCount() || (this.config.apiKey ? 1 : 0);
+  }
+
+  /**
+   * Add a new API key to the rotation pool
+   */
+  addApiKey(apiKey: string, label?: string): void {
+    if (!this.keyManager) {
+      // If no key manager, create one
+      this.keyManager = new APIKeyManager(
+        [apiKey],
+        this.config.fallbackStrategy,
+        this.config.enableKeyRotation
+      );
+    } else {
+      this.keyManager.addKey(apiKey, label);
+    }
+  }
+
+  /**
+   * Remove an API key from the rotation pool
+   */
+  removeApiKey(apiKey: string): void {
+    this.keyManager?.removeKey(apiKey);
+  }
+
+  /**
+   * Get fallback strategy
+   */
+  getFallbackStrategy(): FallbackStrategy {
+    return this.config.fallbackStrategy;
+  }
+
+  /**
+   * Set fallback strategy
+   */
+  setFallbackStrategy(strategy: FallbackStrategy): void {
+    this.config.fallbackStrategy = strategy;
+    this.keyManager?.setFallbackStrategy(strategy);
+  }
+
+  /**
+   * Reset all rate-limited keys
+   */
+  resetRateLimitedKeys(): void {
+    this.keyManager?.resetRateLimitedKeys();
   }
 }

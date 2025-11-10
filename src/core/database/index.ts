@@ -114,8 +114,31 @@ export class LitRevDatabase {
         timeout INTEGER DEFAULT 30000,
         retry_attempts INTEGER DEFAULT 3,
         temperature REAL DEFAULT 0.3,
+        fallback_strategy TEXT DEFAULT 'rule_based',
+        enable_key_rotation INTEGER DEFAULT 1,
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
+    `);
+
+    // API Keys table (for rotation)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        api_key TEXT NOT NULL,
+        label TEXT,
+        status TEXT DEFAULT 'active',
+        error_count INTEGER DEFAULT 0,
+        request_count INTEGER DEFAULT 0,
+        last_used TEXT,
+        rate_limit_reset_at TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+      )
+    `);
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_api_keys_session ON api_keys(session_id);
     `);
 
     // Screenshots table
@@ -193,8 +216,9 @@ export class LitRevDatabase {
     this.db.prepare(`
       INSERT OR REPLACE INTO llm_config (
         session_id, enabled, provider, model, batch_size,
-        max_concurrent_batches, timeout, retry_attempts, temperature
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        max_concurrent_batches, timeout, retry_attempts, temperature,
+        fallback_strategy, enable_key_rotation
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       sessionId,
       config.enabled ? 1 : 0,
@@ -204,8 +228,19 @@ export class LitRevDatabase {
       config.maxConcurrentBatches,
       config.timeout,
       config.retryAttempts,
-      config.temperature
+      config.temperature,
+      config.fallbackStrategy || 'rule_based',
+      config.enableKeyRotation ? 1 : 0
     );
+
+    // Save API keys if provided
+    if (config.apiKeys && Array.isArray(config.apiKeys)) {
+      for (const key of config.apiKeys) {
+        this.addApiKey(sessionId, key);
+      }
+    } else if (config.apiKey) {
+      this.addApiKey(sessionId, config.apiKey);
+    }
   }
 
   /**
@@ -218,6 +253,9 @@ export class LitRevDatabase {
 
     if (!row) return null;
 
+    // Get API keys
+    const apiKeys = this.getApiKeys(sessionId);
+
     return {
       enabled: row.enabled === 1,
       provider: row.provider,
@@ -226,8 +264,60 @@ export class LitRevDatabase {
       maxConcurrentBatches: row.max_concurrent_batches,
       timeout: row.timeout,
       retryAttempts: row.retry_attempts,
-      temperature: row.temperature
+      temperature: row.temperature,
+      fallbackStrategy: row.fallback_strategy || 'rule_based',
+      enableKeyRotation: row.enable_key_rotation === 1,
+      apiKeys: apiKeys.map(k => k.api_key)
     };
+  }
+
+  /**
+   * Add an API key to a session
+   */
+  addApiKey(sessionId: string, apiKey: string, label?: string): void {
+    this.db.prepare(`
+      INSERT INTO api_keys (session_id, api_key, label, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(sessionId, apiKey, label || null, new Date().toISOString());
+  }
+
+  /**
+   * Get all API keys for a session
+   */
+  getApiKeys(sessionId: string): any[] {
+    return this.db.prepare(`
+      SELECT * FROM api_keys WHERE session_id = ? ORDER BY created_at ASC
+    `).all(sessionId) as any[];
+  }
+
+  /**
+   * Update API key status
+   */
+  updateApiKeyStatus(sessionId: string, apiKey: string, status: string, errorCount?: number): void {
+    const fields: string[] = ['status = ?'];
+    const values: any[] = [status];
+
+    if (errorCount !== undefined) {
+      fields.push('error_count = ?');
+      values.push(errorCount);
+    }
+
+    fields.push('last_used = ?');
+    values.push(new Date().toISOString());
+
+    values.push(sessionId, apiKey);
+
+    const sql = `UPDATE api_keys SET ${fields.join(', ')} WHERE session_id = ? AND api_key = ?`;
+    this.db.prepare(sql).run(...values);
+  }
+
+  /**
+   * Remove an API key
+   */
+  removeApiKey(sessionId: string, apiKey: string): void {
+    this.db.prepare(`
+      DELETE FROM api_keys WHERE session_id = ? AND api_key = ?
+    `).run(sessionId, apiKey);
   }
 
   updateProgress(sessionId: string, progress: Partial<SearchProgress>): void {

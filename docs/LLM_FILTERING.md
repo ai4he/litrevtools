@@ -118,20 +118,49 @@ const sessionId = await extractor.startSearch({
 - 1,500 requests per day
 - Generous token limits
 
+**Tip**: Create multiple API keys from different Google accounts for automatic rotation!
+
 ### Environment Variables
 
 Set your API key as an environment variable:
 
 ```bash
-# Linux/Mac
+# Linux/Mac - Single Key
 export GEMINI_API_KEY="your-api-key-here"
+
+# Multiple Keys (comma-separated)
+export GEMINI_API_KEYS="key1,key2,key3"
 
 # Windows (PowerShell)
 $env:GEMINI_API_KEY="your-api-key-here"
 
 # .env file
 GEMINI_API_KEY=your-api-key-here
+GEMINI_API_KEYS=key1,key2,key3
 ```
+
+### API Key Rotation
+
+**NEW**: LitRevTools now supports automatic API key rotation!
+
+When one key hits rate limits, the system automatically switches to the next available key. This ensures uninterrupted processing for large literature reviews.
+
+**Quick Setup:**
+```typescript
+llmConfig: {
+  apiKeys: ['key1', 'key2', 'key3'], // Multiple keys
+  enableKeyRotation: true,           // Enable rotation
+  fallbackStrategy: 'rule_based'     // What to do when all exhausted
+}
+```
+
+**Benefits:**
+- No interruptions when hitting rate limits
+- Process 3x more papers without waiting
+- Automatic recovery after rate limit resets
+- Smart error detection and key management
+
+See [API Key Rotation Guide](./API_KEY_ROTATION.md) for detailed documentation.
 
 ## Batch Processing
 

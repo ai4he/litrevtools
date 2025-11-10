@@ -6,61 +6,99 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { BaseLLMProvider } from './base-provider';
 import { LLMRequest, LLMResponse } from '../types';
+import { APIKeyManager } from './api-key-manager';
 
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
-  private genAI?: GoogleGenerativeAI;
-  private model?: GenerativeModel;
+  private keyManager?: APIKeyManager;
   private defaultModel = 'gemini-1.5-flash'; // Fast and cost-effective for batch processing
+  private modelName: string;
 
-  async initialize(apiKey: string, config?: { model?: string }): Promise<void> {
+  async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
     await super.initialize(apiKey, config);
 
-    if (!apiKey) {
+    this.modelName = config?.model || this.defaultModel;
+
+    // Use provided key manager or API key
+    if (config?.keyManager) {
+      this.keyManager = config.keyManager;
+    } else if (!apiKey) {
       throw new Error('Gemini API key is required');
     }
+  }
 
-    this.genAI = new GoogleGenerativeAI(apiKey);
-    const modelName = config?.model || this.defaultModel;
-    this.model = this.genAI.getGenerativeModel({ model: modelName });
+  /**
+   * Get a model instance with the current API key
+   */
+  private getModel(): GenerativeModel {
+    const apiKey = this.keyManager?.getCurrentKey() || this.apiKey;
+
+    if (!apiKey) {
+      throw new Error('No API key available');
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({ model: this.modelName });
   }
 
   async request(prompt: string, temperature: number = 0.3): Promise<string> {
-    if (!this.model) {
-      throw new Error('Gemini provider not initialized. Call initialize() first.');
+    let lastError: Error | null = null;
+    const maxAttempts = 3;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const model = this.getModel();
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature,
+            maxOutputTokens: 2048,
+          },
+        });
+
+        const response = result.response;
+        const text = response.text();
+
+        // Estimate tokens and cost (Gemini 1.5 Flash pricing)
+        const estimatedTokens = Math.ceil((prompt.length + text.length) / 4);
+        const cost = this.estimateCost(estimatedTokens);
+        this.updateStats(estimatedTokens, cost);
+
+        // Mark key as successful
+        if (this.keyManager) {
+          this.keyManager.markSuccess();
+        }
+
+        return text;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+
+        // Handle error and rotate key if available
+        if (this.keyManager) {
+          await this.keyManager.handleError(error);
+
+          // Check if we have more keys to try
+          if (!this.keyManager.hasAvailableKeys()) {
+            throw new Error(`Gemini API request failed - all keys exhausted: ${lastError.message}`);
+          }
+
+          // Wait a bit before retry
+          await this.delay(1000 * (attempt + 1));
+        } else {
+          // No key manager, throw immediately
+          throw new Error(`Gemini API request failed: ${lastError.message}`);
+        }
+      }
     }
 
-    try {
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature,
-          maxOutputTokens: 2048,
-        },
-      });
-
-      const response = result.response;
-      const text = response.text();
-
-      // Estimate tokens and cost (Gemini 1.5 Flash pricing)
-      const estimatedTokens = Math.ceil((prompt.length + text.length) / 4);
-      const cost = this.estimateCost(estimatedTokens);
-      this.updateStats(estimatedTokens, cost);
-
-      return text;
-    } catch (error) {
-      throw new Error(`Gemini API request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    throw new Error(`Gemini API request failed after ${maxAttempts} attempts: ${lastError?.message || 'Unknown error'}`);
   }
 
   async batchRequest(
     requests: LLMRequest[],
     temperature: number = 0.3
   ): Promise<LLMResponse[]> {
-    if (!this.model) {
-      throw new Error('Gemini provider not initialized. Call initialize() first.');
-    }
-
     const responses: LLMResponse[] = [];
 
     // Process requests in parallel with rate limiting
@@ -102,6 +140,13 @@ export class GeminiProvider extends BaseLLMProvider {
     }
 
     return responses;
+  }
+
+  /**
+   * Get API key manager for monitoring
+   */
+  getKeyManager(): APIKeyManager | undefined {
+    return this.keyManager;
   }
 
   /**

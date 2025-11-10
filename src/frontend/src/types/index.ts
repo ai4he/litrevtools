@@ -3,11 +3,14 @@ export interface LLMConfig {
   provider: 'gemini' | 'openai' | 'anthropic';
   model?: string;
   apiKey?: string;
+  apiKeys?: string[];
   batchSize: number;
   maxConcurrentBatches: number;
   timeout: number;
   retryAttempts: number;
   temperature: number;
+  fallbackStrategy: 'rule_based' | 'prompt_user' | 'fail';
+  enableKeyRotation: boolean;
 }
 
 export interface SearchParameters {

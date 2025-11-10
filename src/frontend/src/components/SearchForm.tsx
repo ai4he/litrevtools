@@ -25,9 +25,12 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [showLLMConfig, setShowLLMConfig] = useState(false);
   const [llmEnabled, setLlmEnabled] = useState(true);
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'openai' | 'anthropic'>('gemini');
-  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmApiKeys, setLlmApiKeys] = useState<string[]>([]);
+  const [currentApiKey, setCurrentApiKey] = useState('');
   const [llmBatchSize, setLlmBatchSize] = useState('10');
   const [llmTemperature, setLlmTemperature] = useState('0.3');
+  const [fallbackStrategy, setFallbackStrategy] = useState<'rule_based' | 'prompt_user' | 'fail'>('rule_based');
+  const [enableKeyRotation, setEnableKeyRotation] = useState(true);
 
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();
@@ -68,12 +71,15 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       llmConfig: llmEnabled ? {
         enabled: true,
         provider: llmProvider,
-        apiKey: llmApiKey.trim() || undefined,
+        apiKeys: llmApiKeys.length > 0 ? llmApiKeys : undefined,
+        apiKey: llmApiKeys.length > 0 ? llmApiKeys[0] : undefined,
         batchSize: parseInt(llmBatchSize) || 10,
         maxConcurrentBatches: 3,
         timeout: 30000,
         retryAttempts: 3,
         temperature: parseFloat(llmTemperature) || 0.3,
+        fallbackStrategy: fallbackStrategy,
+        enableKeyRotation: enableKeyRotation
       } : {
         enabled: false,
         provider: 'gemini',
@@ -82,6 +88,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
         timeout: 30000,
         retryAttempts: 3,
         temperature: 0.3,
+        fallbackStrategy: 'rule_based',
+        enableKeyRotation: false
       },
     };
 
@@ -309,10 +317,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                   </select>
                 </div>
 
-                {/* API Key */}
+                {/* API Keys (Multiple for rotation) */}
                 <div>
                   <label className="label">
-                    API Key (optional)
+                    API Keys (one per line for rotation)
                     {llmProvider === 'gemini' && (
                       <a
                         href="https://aistudio.google.com/app/apikey"
@@ -324,17 +332,100 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                       </a>
                     )}
                   </label>
-                  <input
-                    type="password"
-                    value={llmApiKey}
-                    onChange={(e) => setLlmApiKey(e.target.value)}
-                    placeholder="Enter your API key or leave empty to use environment variable"
+
+                  {/* Display existing keys */}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {llmApiKeys.map((key, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                      >
+                        Key {index + 1} ({key.substring(0, 8)}...{key.substring(key.length - 4)})
+                        <button
+                          type="button"
+                          onClick={() => setLlmApiKeys(llmApiKeys.filter((_, i) => i !== index))}
+                          className="hover:text-purple-600"
+                          disabled={disabled}
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Input for adding new key */}
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="password"
+                      value={currentApiKey}
+                      onChange={(e) => setCurrentApiKey(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (currentApiKey.trim()) {
+                            setLlmApiKeys([...llmApiKeys, currentApiKey.trim()]);
+                            setCurrentApiKey('');
+                          }
+                        }
+                      }}
+                      placeholder="Paste API key and press Enter to add"
+                      className="input-field"
+                      disabled={disabled}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentApiKey.trim()) {
+                          setLlmApiKeys([...llmApiKeys, currentApiKey.trim()]);
+                          setCurrentApiKey('');
+                        }
+                      }}
+                      className="btn-secondary"
+                      disabled={disabled || !currentApiKey.trim()}
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-1">
+                    {llmApiKeys.length === 0
+                      ? "Add API keys for automatic rotation. If none provided, will use GEMINI_API_KEY environment variable."
+                      : `${llmApiKeys.length} key(s) configured. System will automatically rotate when one hits rate limits.`
+                    }
+                  </p>
+                </div>
+
+                {/* Fallback Strategy */}
+                <div>
+                  <label className="label">When All API Keys Exhausted</label>
+                  <select
+                    value={fallbackStrategy}
+                    onChange={(e) => setFallbackStrategy(e.target.value as any)}
                     className="input-field"
                     disabled={disabled}
-                  />
+                  >
+                    <option value="rule_based">Fall back to rule-based filtering (Default)</option>
+                    <option value="prompt_user">Prompt me for a new API key</option>
+                    <option value="fail">Fail the operation</option>
+                  </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    If not provided, the system will use the GEMINI_API_KEY environment variable
+                    Choose what happens when all API keys hit rate limits or quotas
                   </p>
+                </div>
+
+                {/* Enable Key Rotation */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="enable-key-rotation"
+                    checked={enableKeyRotation}
+                    onChange={(e) => setEnableKeyRotation(e.target.checked)}
+                    className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
+                    disabled={disabled || llmApiKeys.length <= 1}
+                  />
+                  <label htmlFor="enable-key-rotation" className="text-sm font-medium text-gray-700">
+                    Enable automatic key rotation ({llmApiKeys.length} key{llmApiKeys.length !== 1 ? 's' : ''})
+                  </label>
                 </div>
 
                 {/* Advanced Settings */}
