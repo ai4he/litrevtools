@@ -113,16 +113,29 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
             <User className="text-primary-600" size={32} />
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">Welcome to LitRevTools</h3>
-          <p className="text-gray-600">Sign in with your Google account to continue</p>
+          <p className="text-gray-600">Sign in with your Google account or continue as guest</p>
         </div>
-        <GoogleLogin
-          onSuccess={handleLoginSuccess}
-          onError={handleLoginError}
-          useOneTap
-          theme="outline"
-          size="large"
-          text="signin_with"
-        />
+        {GOOGLE_CLIENT_ID && (
+          <div className="mb-4">
+            <GoogleLogin
+              onSuccess={handleLoginSuccess}
+              onError={handleLoginError}
+              useOneTap={false}
+              theme="outline"
+              size="large"
+              text="signin_with"
+            />
+          </div>
+        )}
+        <button
+          onClick={() => {
+            setUser({ id: 'guest', email: 'guest@local', name: 'Guest User' });
+            onAuthChange?.({ id: 'guest', email: 'guest@local', name: 'Guest User' });
+          }}
+          className="px-6 py-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-300"
+        >
+          Continue as Guest
+        </button>
       </div>
     </GoogleOAuthProvider>
   );
