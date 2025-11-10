@@ -147,7 +147,7 @@ export class ScholarExtractor {
         for (const paper of result.papers) {
           this.database.addPaper(this.sessionId!, paper);
           if (this.onPaper) {
-            this.onPaper(paper);
+            this.onPaper(paper, this.sessionId!);
           }
         }
 
@@ -341,7 +341,7 @@ export class ScholarExtractor {
     if (this.onProgress) {
       const session = this.database.getSession(this.sessionId);
       if (session) {
-        this.onProgress(session.progress);
+        this.onProgress(session.progress, this.sessionId);
       }
     }
   }

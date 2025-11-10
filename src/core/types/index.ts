@@ -204,6 +204,6 @@ export interface AppConfig {
   outputDir: string;
 }
 
-export type ProgressCallback = (progress: SearchProgress) => void;
-export type PaperCallback = (paper: Paper) => void;
-export type ErrorCallback = (error: Error) => void;
+export type ProgressCallback = (progress: SearchProgress, sessionId: string) => void;
+export type PaperCallback = (paper: Paper, sessionId: string) => void;
+export type ErrorCallback = (error: Error, sessionId: string) => void;

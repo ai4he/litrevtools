@@ -55,12 +55,13 @@ export class LitRevTools {
       onError?: ErrorCallback;
     }
   ): Promise<string> {
+    let sessionId = '';
     try {
       // Initialize scholar extractor
       this.scholarExtractor = new ScholarExtractor(this.database);
 
       // Start the search
-      const sessionId = await this.scholarExtractor.startSearch(
+      sessionId = await this.scholarExtractor.startSearch(
         parameters,
         callbacks?.onProgress,
         callbacks?.onPaper
@@ -72,7 +73,7 @@ export class LitRevTools {
       return sessionId;
     } catch (error) {
       if (callbacks?.onError) {
-        callbacks.onError(error as Error);
+        callbacks.onError(error as Error, sessionId);
       }
       throw error;
     }

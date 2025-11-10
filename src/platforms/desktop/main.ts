@@ -81,17 +81,17 @@ ipcMain.handle('start-search', async (event, params: SearchParameters) => {
   if (!litrev) throw new Error('LitRevTools not initialized');
 
   const sessionId = await litrev.startSearch(params, {
-    onProgress: (progress: SearchProgress) => {
+    onProgress: (progress: SearchProgress, sid: string) => {
       if (mainWindow) {
         mainWindow.webContents.send('search-progress', progress);
       }
     },
-    onPaper: (paper: Paper) => {
+    onPaper: (paper: Paper, sid: string) => {
       if (mainWindow) {
         mainWindow.webContents.send('paper-found', paper);
       }
     },
-    onError: (error: Error) => {
+    onError: (error: Error, sid: string) => {
       if (mainWindow) {
         mainWindow.webContents.send('search-error', error.message);
       }

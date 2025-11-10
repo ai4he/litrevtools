@@ -274,12 +274,9 @@ searchCommand.action(async (options) => {
     let papersFound = 0;
     const startTime = Date.now();
 
-    // Declare sessionId first so it can be used in callbacks
-    let sessionId: string = '';
-
     // Start search
-    sessionId = await tools.startSearch(validParams, {
-      onProgress: (progress: SearchProgress) => {
+    const sessionId = await tools.startSearch(validParams, {
+      onProgress: (progress: SearchProgress, sid: string) => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
 
         progressBar.update(progress.progress, {
@@ -297,8 +294,8 @@ searchCommand.action(async (options) => {
           console.log(chalk.white(`Time elapsed: ${elapsed}s\n`));
 
           console.log(chalk.blue('Generating outputs...'));
-          tools.generateOutputs(sessionId).then(() => {
-            const session = tools.getSession(sessionId);
+          tools.generateOutputs(sid).then(() => {
+            const session = tools.getSession(sid);
             if (session?.outputs) {
               console.log(chalk.green('\n✓ Outputs generated:'));
               if (session.outputs.csv) console.log(chalk.gray(`  CSV: ${session.outputs.csv}`));
@@ -307,7 +304,7 @@ searchCommand.action(async (options) => {
               if (session.outputs.zip) console.log(chalk.gray(`  ZIP: ${session.outputs.zip}`));
             }
 
-            console.log(chalk.blue.bold(`\nSession ID: ${sessionId}\n`));
+            console.log(chalk.blue.bold(`\nSession ID: ${sid}\n`));
             tools.close();
             process.exit(0);
           }).catch(err => {
@@ -322,13 +319,13 @@ searchCommand.action(async (options) => {
           process.exit(1);
         }
       },
-      onPaper: (paper: Paper) => {
+      onPaper: (paper: Paper, sid: string) => {
         papersFound++;
         if (papersFound % 10 === 0) {
           console.log(chalk.gray(`\n  Found: ${paper.title.substring(0, 60)}...`));
         }
       },
-      onError: (error: Error) => {
+      onError: (error: Error, sid: string) => {
         progressBar.stop();
         console.error(chalk.red('\n✗ Error:'), error.message);
         tools.close();

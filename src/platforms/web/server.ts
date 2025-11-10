@@ -132,31 +132,28 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
     // Create a new tools instance for this search
     const tools = new LitRevTools();
 
-    // Declare sessionId first so it can be used in callbacks
-    let sessionId: string = '';
-
-    // Start search with WebSocket callbacks
-    sessionId = await tools.startSearch(params, {
-      onProgress: (progress: SearchProgress) => {
-        io.emit(`progress:${sessionId}`, progress);
+    // Start search with WebSocket callbacks that receive sessionId as parameter
+    const sessionId = await tools.startSearch(params, {
+      onProgress: (progress: SearchProgress, sid: string) => {
+        io.emit(`progress:${sid}`, progress);
 
         if (progress.status === 'completed' || progress.status === 'error') {
           // Clean up
-          activeSearches.delete(sessionId);
+          activeSearches.delete(sid);
           if (progress.status === 'completed') {
             // Generate outputs
-            tools.generateOutputs(sessionId).then(() => {
-              const session = tools.getSession(sessionId);
-              io.emit(`outputs:${sessionId}`, session?.outputs);
+            tools.generateOutputs(sid).then(() => {
+              const session = tools.getSession(sid);
+              io.emit(`outputs:${sid}`, session?.outputs);
             }).catch(console.error);
           }
         }
       },
-      onPaper: (paper: Paper) => {
-        io.emit(`paper:${sessionId}`, paper);
+      onPaper: (paper: Paper, sid: string) => {
+        io.emit(`paper:${sid}`, paper);
       },
-      onError: (error: Error) => {
-        io.emit(`error:${sessionId}`, { message: error.message });
+      onError: (error: Error, sid: string) => {
+        io.emit(`error:${sid}`, { message: error.message });
       }
     });
 
