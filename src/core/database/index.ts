@@ -67,6 +67,9 @@ export class LitRevDatabase {
         extracted_at TEXT NOT NULL,
         included INTEGER NOT NULL DEFAULT 1,
         exclusion_reason TEXT,
+        category TEXT,
+        llm_confidence REAL,
+        llm_reasoning TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
     `);
@@ -95,6 +98,22 @@ export class LitRevDatabase {
         prisma_diagram_path TEXT,
         prisma_table_path TEXT,
         zip_path TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+      )
+    `);
+
+    // LLM configuration table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS llm_config (
+        session_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        provider TEXT NOT NULL DEFAULT 'gemini',
+        model TEXT,
+        batch_size INTEGER DEFAULT 10,
+        max_concurrent_batches INTEGER DEFAULT 3,
+        timeout INTEGER DEFAULT 30000,
+        retry_attempts INTEGER DEFAULT 3,
+        temperature REAL DEFAULT 0.3,
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
     `);
@@ -159,7 +178,56 @@ export class LitRevDatabase {
       INSERT INTO output_files (session_id) VALUES (?)
     `).run(id);
 
+    // Save LLM configuration if provided
+    if (parameters.llmConfig) {
+      this.saveLLMConfig(id, parameters.llmConfig);
+    }
+
     return id;
+  }
+
+  /**
+   * Save LLM configuration for a session
+   */
+  saveLLMConfig(sessionId: string, config: any): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO llm_config (
+        session_id, enabled, provider, model, batch_size,
+        max_concurrent_batches, timeout, retry_attempts, temperature
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      sessionId,
+      config.enabled ? 1 : 0,
+      config.provider,
+      config.model || null,
+      config.batchSize,
+      config.maxConcurrentBatches,
+      config.timeout,
+      config.retryAttempts,
+      config.temperature
+    );
+  }
+
+  /**
+   * Get LLM configuration for a session
+   */
+  getLLMConfig(sessionId: string): any | null {
+    const row = this.db.prepare(`
+      SELECT * FROM llm_config WHERE session_id = ?
+    `).get(sessionId) as any;
+
+    if (!row) return null;
+
+    return {
+      enabled: row.enabled === 1,
+      provider: row.provider,
+      model: row.model,
+      batchSize: row.batch_size,
+      maxConcurrentBatches: row.max_concurrent_batches,
+      timeout: row.timeout,
+      retryAttempts: row.retry_attempts,
+      temperature: row.temperature
+    };
   }
 
   updateProgress(sessionId: string, progress: Partial<SearchProgress>): void {
@@ -230,8 +298,8 @@ export class LitRevDatabase {
       INSERT OR REPLACE INTO papers (
         id, session_id, title, authors, year, abstract, url, citations,
         source, pdf_url, venue, doi, keywords, extracted_at, included,
-        exclusion_reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        exclusion_reason, category, llm_confidence, llm_reasoning
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -250,7 +318,10 @@ export class LitRevDatabase {
       paper.keywords ? JSON.stringify(paper.keywords) : null,
       paper.extractedAt.toISOString(),
       paper.included ? 1 : 0,
-      paper.exclusionReason || null
+      paper.exclusionReason || null,
+      paper.category || null,
+      paper.llmConfidence || null,
+      paper.llmReasoning || null
     );
 
     // Update session counts
@@ -495,7 +566,10 @@ export class LitRevDatabase {
       keywords: row.keywords ? JSON.parse(row.keywords) : undefined,
       extractedAt: new Date(row.extracted_at),
       included: row.included === 1,
-      exclusionReason: row.exclusion_reason
+      exclusionReason: row.exclusion_reason,
+      category: row.category,
+      llmConfidence: row.llm_confidence,
+      llmReasoning: row.llm_reasoning
     };
   }
 

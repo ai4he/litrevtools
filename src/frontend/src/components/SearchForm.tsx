@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, X } from 'lucide-react';
+import { Search, Plus, X, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { SearchParameters } from '../types';
 import { generateSearchName } from '../utils/helpers';
 
@@ -20,6 +20,14 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [startYear, setStartYear] = useState<string>('');
   const [endYear, setEndYear] = useState<string>('');
   const [maxResults, setMaxResults] = useState<string>('');
+
+  // LLM Configuration
+  const [showLLMConfig, setShowLLMConfig] = useState(false);
+  const [llmEnabled, setLlmEnabled] = useState(true);
+  const [llmProvider, setLlmProvider] = useState<'gemini' | 'openai' | 'anthropic'>('gemini');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmBatchSize, setLlmBatchSize] = useState('10');
+  const [llmTemperature, setLlmTemperature] = useState('0.3');
 
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();
@@ -57,6 +65,24 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       ...(startYear && { startYear: parseInt(startYear) }),
       ...(endYear && { endYear: parseInt(endYear) }),
       ...(maxResults && { maxResults: parseInt(maxResults) }),
+      llmConfig: llmEnabled ? {
+        enabled: true,
+        provider: llmProvider,
+        apiKey: llmApiKey.trim() || undefined,
+        batchSize: parseInt(llmBatchSize) || 10,
+        maxConcurrentBatches: 3,
+        timeout: 30000,
+        retryAttempts: 3,
+        temperature: parseFloat(llmTemperature) || 0.3,
+      } : {
+        enabled: false,
+        provider: 'gemini',
+        batchSize: 10,
+        maxConcurrentBatches: 3,
+        timeout: 30000,
+        retryAttempts: 3,
+        temperature: 0.3,
+      },
     };
 
     onSubmit(params);
@@ -225,6 +251,133 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
         <p className="text-sm text-gray-500 mt-1">
           Infinite results if left empty
         </p>
+      </div>
+
+      {/* LLM Configuration Section */}
+      <div className="border-t pt-6">
+        <button
+          type="button"
+          onClick={() => setShowLLMConfig(!showLLMConfig)}
+          className="flex items-center justify-between w-full text-left"
+          disabled={disabled}
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="text-purple-600" size={24} />
+            <h3 className="text-lg font-semibold text-gray-900">
+              AI-Powered Analysis (LLM)
+            </h3>
+          </div>
+          {showLLMConfig ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+
+        <p className="text-sm text-gray-600 mt-2">
+          Use LLMs for intelligent tasks like semantic filtering, category identification, and draft generation.
+          Default: Enabled with Gemini API.
+        </p>
+
+        {showLLMConfig && (
+          <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
+            {/* Enable/Disable LLM */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="llm-enabled"
+                checked={llmEnabled}
+                onChange={(e) => setLlmEnabled(e.target.checked)}
+                className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
+                disabled={disabled}
+              />
+              <label htmlFor="llm-enabled" className="text-sm font-medium text-gray-700">
+                Enable LLM for intelligent tasks
+              </label>
+            </div>
+
+            {llmEnabled && (
+              <>
+                {/* Provider Selection */}
+                <div>
+                  <label className="label">LLM Provider</label>
+                  <select
+                    value={llmProvider}
+                    onChange={(e) => setLlmProvider(e.target.value as any)}
+                    className="input-field"
+                    disabled={disabled}
+                  >
+                    <option value="gemini">Google Gemini (Default, Fast & Cost-effective)</option>
+                    <option value="openai">OpenAI (Coming Soon)</option>
+                    <option value="anthropic">Anthropic Claude (Coming Soon)</option>
+                  </select>
+                </div>
+
+                {/* API Key */}
+                <div>
+                  <label className="label">
+                    API Key (optional)
+                    {llmProvider === 'gemini' && (
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary-600 hover:underline ml-2"
+                      >
+                        Get Gemini API Key
+                      </a>
+                    )}
+                  </label>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder="Enter your API key or leave empty to use environment variable"
+                    className="input-field"
+                    disabled={disabled}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    If not provided, the system will use the GEMINI_API_KEY environment variable
+                  </p>
+                </div>
+
+                {/* Advanced Settings */}
+                <details>
+                  <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
+                    Advanced Settings
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="label text-xs">Batch Size</label>
+                        <input
+                          type="number"
+                          value={llmBatchSize}
+                          onChange={(e) => setLlmBatchSize(e.target.value)}
+                          min="1"
+                          max="50"
+                          className="input-field text-sm"
+                          disabled={disabled}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Papers per batch (1-50)</p>
+                      </div>
+                      <div>
+                        <label className="label text-xs">Temperature</label>
+                        <input
+                          type="number"
+                          value={llmTemperature}
+                          onChange={(e) => setLlmTemperature(e.target.value)}
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          className="input-field text-sm"
+                          disabled={disabled}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Creativity (0-1)</p>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Submit Button */}

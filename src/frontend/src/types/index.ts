@@ -1,3 +1,15 @@
+export interface LLMConfig {
+  enabled: boolean;
+  provider: 'gemini' | 'openai' | 'anthropic';
+  model?: string;
+  apiKey?: string;
+  batchSize: number;
+  maxConcurrentBatches: number;
+  timeout: number;
+  retryAttempts: number;
+  temperature: number;
+}
+
 export interface SearchParameters {
   name?: string;
   inclusionKeywords: string[];
@@ -5,6 +17,7 @@ export interface SearchParameters {
   startYear?: number;
   endYear?: number;
   maxResults?: number;
+  llmConfig?: LLMConfig;
 }
 
 export interface Paper {
@@ -19,6 +32,9 @@ export interface Paper {
   venue?: string;
   included: boolean;
   exclusionReason?: string;
+  category?: string;
+  llmConfidence?: number;
+  llmReasoning?: string;
 }
 
 export interface ProgressUpdate {

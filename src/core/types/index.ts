@@ -10,6 +10,7 @@ export interface SearchParameters {
   maxResults?: number; // undefined means infinite
   startYear?: number;
   endYear?: number;
+  llmConfig?: LLMConfig; // LLM configuration for intelligent tasks
 }
 
 export interface Paper {
@@ -28,6 +29,9 @@ export interface Paper {
   extractedAt: Date;
   included: boolean; // PRISMA inclusion decision
   exclusionReason?: string;
+  category?: string; // LLM-identified category
+  llmConfidence?: number; // LLM confidence score for filtering decision (0-1)
+  llmReasoning?: string; // LLM reasoning for inclusion/exclusion
 }
 
 export interface SearchProgress {
@@ -96,6 +100,53 @@ export interface DatabaseConfig {
 export interface GeminiConfig {
   apiKey: string;
   model: string;
+}
+
+/**
+ * LLM Configuration for intelligent tasks in literature review
+ */
+export interface LLMConfig {
+  enabled: boolean; // Use LLM for intelligent tasks (default: true)
+  provider: 'gemini' | 'openai' | 'anthropic'; // LLM provider (default: gemini)
+  model?: string; // Model name (default depends on provider)
+  apiKey?: string; // API key for the LLM provider
+  batchSize: number; // Number of items to process in a batch (default: 10)
+  maxConcurrentBatches: number; // Maximum concurrent batch requests (default: 3)
+  timeout: number; // Request timeout in milliseconds (default: 30000)
+  retryAttempts: number; // Number of retry attempts on failure (default: 3)
+  temperature: number; // Model temperature for creative tasks (default: 0.3)
+}
+
+/**
+ * LLM Task Types - Different intelligent tasks that can use LLM
+ */
+export type LLMTaskType =
+  | 'semantic_filtering'      // Semantic understanding of inclusion/exclusion criteria
+  | 'category_identification' // Identifying categories of papers
+  | 'draft_generation'       // Writing draft review papers
+  | 'abstract_summarization' // Summarizing paper abstracts
+  | 'quality_assessment';    // Assessing paper quality
+
+/**
+ * LLM Request for batch processing
+ */
+export interface LLMRequest {
+  id: string;
+  taskType: LLMTaskType;
+  prompt: string;
+  context?: any;
+}
+
+/**
+ * LLM Response from batch processing
+ */
+export interface LLMResponse {
+  id: string;
+  taskType: LLMTaskType;
+  result: any;
+  confidence?: number; // Confidence score 0-1
+  error?: string;
+  tokensUsed?: number;
 }
 
 export interface GoogleAuthConfig {
