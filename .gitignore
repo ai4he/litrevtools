@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.tgz
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.db-journal
+data/*.db
+data/*.csv
+data/*.bib
+data/*.tex
+data/*.zip
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Electron
+out/
+
+# Mobile
+android/
+ios/
+capacitor.config.json
+capacitor.config.ts
+
+# Screenshots
+screenshots/
+*.png
+*.jpg
+
+# Temporary files
+tmp/
+temp/

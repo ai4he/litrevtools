@@ -1,0 +1,98 @@
+{
+  "name": "litrevtools",
+  "version": "1.0.0",
+  "description": "Isomorphic tool for creating systematic literature reviews using PRISMA methodology",
+  "main": "dist/core/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/platforms/cli/index.ts",
+    "cli": "node dist/platforms/cli/index.js",
+    "web:dev": "ts-node src/platforms/web/server.ts",
+    "web:build": "tsc && npm run web:copy-static",
+    "web:copy-static": "cp -r src/platforms/web/public dist/platforms/web/",
+    "web:start": "node dist/platforms/web/server.js",
+    "desktop:dev": "electron src/platforms/desktop/main.ts",
+    "desktop:build": "tsc && electron-builder",
+    "mobile:init": "npx cap init",
+    "mobile:add:android": "npx cap add android",
+    "mobile:add:ios": "npx cap add ios",
+    "mobile:sync": "npx cap sync",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "prisma",
+    "systematic-literature-review",
+    "google-scholar",
+    "research",
+    "isomorphic"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^5.5.1",
+    "@capacitor/core": "^5.5.1",
+    "@capacitor/ios": "^5.5.1",
+    "@google/generative-ai": "^0.2.1",
+    "better-sqlite3": "^9.2.2",
+    "commander": "^11.1.0",
+    "express": "^4.18.2",
+    "google-auth-library": "^9.4.1",
+    "puppeteer": "^21.6.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socks-proxy-agent": "^8.0.2",
+    "axios": "^1.6.2",
+    "csv-stringify": "^6.4.5",
+    "cli-progress": "^3.12.0",
+    "chalk": "^4.1.2",
+    "archiver": "^6.0.1",
+    "sharp": "^0.33.1",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "socket.io": "^4.6.0",
+    "socket.io-client": "^4.6.0",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^5.5.1",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.5",
+    "@types/cli-progress": "^3.11.5",
+    "@types/archiver": "^6.0.2",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "build": {
+    "appId": "com.litrevtools.app",
+    "productName": "LitRevTools",
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    }
+  }
+}
