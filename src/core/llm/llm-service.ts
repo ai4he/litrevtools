@@ -55,23 +55,16 @@ export class LLMService {
     }
 
     // Check environment variables as fallback
-    if (keys.length === 0) {
-      // First try GEMINI_API_KEYS (comma-separated for rotation)
-      if (process.env.GEMINI_API_KEYS) {
-        const envKeys = process.env.GEMINI_API_KEYS
-          .split(',')
-          .map(key => key.trim())
-          .filter(key => key.length > 0);
-        keys.push(...envKeys);
-      }
-      // Fallback to single GEMINI_API_KEY
-      else if (process.env.GEMINI_API_KEY) {
-        keys.push(process.env.GEMINI_API_KEY);
-      }
+    if (keys.length === 0 && process.env.GEMINI_API_KEYS) {
+      const envKeys = process.env.GEMINI_API_KEYS
+        .split(',')
+        .map(key => key.trim())
+        .filter(key => key.length > 0);
+      keys.push(...envKeys);
     }
 
     if (keys.length === 0) {
-      throw new Error('LLM API key is required when LLM is enabled. Provide apiKey, apiKeys, or set GEMINI_API_KEY/GEMINI_API_KEYS environment variable.');
+      throw new Error('LLM API key is required when LLM is enabled. Provide apiKey, apiKeys, or set GEMINI_API_KEYS environment variable.');
     }
 
     // Create API key manager if rotation is enabled and we have multiple keys
