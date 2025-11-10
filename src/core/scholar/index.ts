@@ -6,6 +6,7 @@ import { SearchParameters, Paper, SearchProgress, ProgressCallback, PaperCallbac
 import { LitRevDatabase } from '../database';
 import { TorPoolManager } from './tor-manager';
 import { ParallelScholarScraper, GoogleScholarScraper } from './scraper';
+import { LLMService } from '../llm';
 
 export class ScholarExtractor {
   private database: LitRevDatabase;
@@ -15,6 +16,7 @@ export class ScholarExtractor {
   private startTime?: number;
   private onProgress?: ProgressCallback;
   private onPaper?: PaperCallback;
+  private llmService?: LLMService;
 
   constructor(
     database: LitRevDatabase,
@@ -87,8 +89,20 @@ export class ScholarExtractor {
       // Execute parallel search
       await this.executeParallelSearch(parameters, years);
 
-      // Apply exclusion filters
-      await this.applyExclusionFilters(parameters.exclusionKeywords);
+      // Initialize LLM service if enabled
+      if (parameters.llmConfig?.enabled) {
+        this.updateProgress({
+          currentTask: 'Initializing LLM service',
+          nextTask: 'Applying intelligent filters',
+          progress: 82
+        });
+
+        this.llmService = new LLMService(parameters.llmConfig);
+        await this.llmService.initialize();
+      }
+
+      // Apply exclusion filters (LLM-based or rule-based)
+      await this.applyFilters(parameters);
 
       // Mark as completed
       this.updateProgress({
@@ -239,22 +253,104 @@ export class ScholarExtractor {
   }
 
   /**
-   * Apply exclusion filters to papers
+   * Apply filters to papers (LLM-based or rule-based)
    */
-  private async applyExclusionFilters(exclusionKeywords: string[]): Promise<void> {
+  private async applyFilters(parameters: SearchParameters): Promise<void> {
+    if (!this.sessionId) return;
+
+    const papers = this.database.getPapers(this.sessionId);
+
+    // Use LLM-based filtering if enabled and initialized
+    if (this.llmService?.isEnabled()) {
+      await this.applyLLMFilters(papers, parameters);
+    } else {
+      // Fall back to rule-based filtering
+      await this.applyRuleBasedFilters(papers, parameters.exclusionKeywords);
+    }
+  }
+
+  /**
+   * Apply LLM-based semantic filtering
+   */
+  private async applyLLMFilters(papers: Paper[], parameters: SearchParameters): Promise<void> {
+    if (!this.sessionId || !this.llmService) return;
+
+    this.updateProgress({
+      currentTask: 'Applying LLM-based semantic filters',
+      nextTask: 'Processing papers with AI',
+      progress: 85
+    });
+
+    try {
+      // Use LLM for semantic filtering
+      const filteredPapers = await this.llmService.semanticFilter(
+        papers,
+        parameters.inclusionKeywords,
+        parameters.exclusionKeywords
+      );
+
+      // Save updated papers to database
+      for (const paper of filteredPapers) {
+        this.database.addPaper(this.sessionId, paper);
+      }
+
+      // Update PRISMA data
+      const exclusionReasons: Record<string, number> = {};
+      const excludedPapers = filteredPapers.filter(p => !p.included);
+
+      for (const paper of excludedPapers) {
+        const reason = paper.exclusionReason || 'LLM semantic exclusion';
+        exclusionReasons[reason] = (exclusionReasons[reason] || 0) + 1;
+      }
+
+      const totalPapers = papers.length;
+      const excludedCount = excludedPapers.length;
+      const includedCount = totalPapers - excludedCount;
+
+      this.database.updatePRISMAData(this.sessionId, {
+        identification: {
+          recordsIdentified: totalPapers,
+          recordsRemoved: 0
+        },
+        screening: {
+          recordsScreened: totalPapers,
+          recordsExcluded: excludedCount,
+          reasonsForExclusion: exclusionReasons
+        },
+        included: {
+          studiesIncluded: includedCount
+        }
+      });
+
+      this.updateProgress({
+        currentTask: 'LLM filtering completed',
+        nextTask: 'Finalizing results',
+        progress: 95
+      });
+    } catch (error) {
+      console.error('LLM filtering failed, falling back to rule-based filtering:', error);
+
+      // Fall back to rule-based filtering if LLM fails
+      await this.applyRuleBasedFilters(papers, parameters.exclusionKeywords);
+    }
+  }
+
+  /**
+   * Apply rule-based exclusion filters
+   */
+  private async applyRuleBasedFilters(papers: Paper[], exclusionKeywords: string[]): Promise<void> {
     if (!this.sessionId) return;
 
     this.updateProgress({
-      currentTask: 'Applying exclusion filters',
+      currentTask: 'Applying rule-based exclusion filters',
       nextTask: 'Finalizing results',
       progress: 90
     });
 
-    const papers = this.database.getPapers(this.sessionId);
     const exclusionReasons: Record<string, number> = {};
 
     for (const paper of papers) {
-      const excluded = this.shouldExclude(paper, exclusionKeywords);
+      const excluded = this.shouldExcludeByRules(paper, exclusionKeywords);
 
       if (excluded) {
         const reason = excluded;
@@ -293,9 +389,9 @@ export class ScholarExtractor {
   }
 
   /**
-   * Check if a paper should be excluded
+   * Check if a paper should be excluded using rule-based approach
    */
-  private shouldExclude(paper: Paper, exclusionKeywords: string[]): string | null {
+  private shouldExcludeByRules(paper: Paper, exclusionKeywords: string[]): string | null {
     const searchText = `${paper.title} ${paper.abstract || ''}`.toLowerCase();
 
     for (const keyword of exclusionKeywords) {
@@ -373,5 +469,86 @@ export class ScholarExtractor {
    */
   stop(): void {
     this.isRunning = false;
+  }
+
+  /**
+   * Identify categories for papers in a session using LLM
+   */
+  async identifyCategories(sessionId: string, llmConfig?: any): Promise<void> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    // Initialize LLM service if not already initialized
+    if (!this.llmService) {
+      this.llmService = new LLMService(llmConfig);
+      await this.llmService.initialize();
+    }
+
+    if (!this.llmService.isEnabled()) {
+      throw new Error('LLM service is not enabled. Category identification requires LLM.');
+    }
+
+    // Get papers that are included
+    const includedPapers = session.papers.filter(p => p.included);
+
+    if (includedPapers.length === 0) {
+      throw new Error('No included papers to categorize');
+    }
+
+    // Use LLM to identify categories
+    const categorizedPapers = await this.llmService.identifyCategories(includedPapers);
+
+    // Update papers in database
+    for (const paper of categorizedPapers) {
+      this.database.addPaper(sessionId, paper);
+    }
+  }
+
+  /**
+   * Generate a draft literature review paper using LLM
+   */
+  async generateDraftPaper(sessionId: string, llmConfig?: any): Promise<string> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    // Initialize LLM service if not already initialized
+    if (!this.llmService) {
+      this.llmService = new LLMService(llmConfig);
+      await this.llmService.initialize();
+    }
+
+    if (!this.llmService.isEnabled()) {
+      throw new Error('LLM service is not enabled. Draft generation requires LLM.');
+    }
+
+    // Get included papers
+    const includedPapers = session.papers.filter(p => p.included);
+
+    if (includedPapers.length === 0) {
+      throw new Error('No included papers to generate draft from');
+    }
+
+    // Generate topic from search parameters
+    const topic = session.parameters.name || session.parameters.inclusionKeywords.join(', ');
+
+    // Generate draft using LLM
+    const draft = await this.llmService.generateDraftPaper(
+      includedPapers,
+      topic,
+      session.parameters.inclusionKeywords
+    );
+
+    return draft;
+  }
+
+  /**
+   * Get LLM usage statistics
+   */
+  getLLMUsageStats() {
+    return this.llmService?.getUsageStats() || null;
   }
 }
