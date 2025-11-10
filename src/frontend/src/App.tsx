@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { GoogleAuth } from './components/GoogleAuth';
 import { SearchPage } from './pages/SearchPage';
 import { User } from './types';
