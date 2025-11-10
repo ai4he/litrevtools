@@ -22,8 +22,14 @@ function createWindow() {
     backgroundColor: '#667eea'
   });
 
-  // Load the web interface (reuse from web platform)
-  mainWindow.loadFile(path.join(__dirname, '..', 'web', 'public', 'index.html'));
+  // Load the shared React frontend
+  // In production, load the built React app
+  // In development, point to the dev server
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.loadURL('http://localhost:5173');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html'));
+  }
 
   // Open DevTools in development
   if (process.env.NODE_ENV === 'development') {

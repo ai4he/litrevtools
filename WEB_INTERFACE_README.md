@@ -84,9 +84,11 @@ Available during and after the search:
 # Install root dependencies
 npm install
 
-# Install frontend dependencies
-npm run web:frontend:install
+# Install frontend dependencies (shared across web, desktop, and mobile)
+npm run frontend:install
 ```
+
+**Note**: The frontend is now unified and shared across all platforms (web, desktop, mobile).
 
 ### 2. Configure Environment Variables
 
@@ -147,10 +149,10 @@ TOR_CONTROL_PORT=9051
 
 #### Frontend Environment Configuration
 
-The frontend also needs the Google Client ID. Create a `.env` file in the frontend directory:
+The frontend also needs the Google Client ID. Create a `.env` file in the shared frontend directory:
 
 ```bash
-cd src/platforms/web/frontend
+cd src/frontend
 cp .env.example .env
 # Edit and add your Google Client ID (same as backend)
 nano .env
@@ -171,16 +173,28 @@ Run the backend and frontend separately for development:
 # Terminal 1: Start backend server
 npm run web:dev
 
-# Terminal 2: Start frontend dev server
-npm run web:frontend:dev
+# Terminal 2: Start frontend dev server (shared across all platforms)
+npm run frontend:dev
 ```
 
 The frontend will run on `http://localhost:5173` with proxy to backend on `http://localhost:3000`.
 
+**Desktop Development (Electron)**:
+```bash
+# Terminal 1: Start frontend dev server
+npm run frontend:dev
+
+# Terminal 2: Start Electron app
+npm run desktop:dev
+```
+
+The Electron app will connect to the frontend dev server automatically.
+
 ### 4. Production Build
 
-Build and run the complete application:
+Build and run for different platforms:
 
+**Web Application**:
 ```bash
 # Build everything (frontend + backend)
 npm run web:build
@@ -188,8 +202,25 @@ npm run web:build
 # Start production server
 npm run web:start
 ```
+The web application will be available at `http://localhost:3000`.
 
-The application will be available at `http://localhost:3000`.
+**Desktop Application (Electron)**:
+```bash
+# Build desktop app with installers
+npm run desktop:build
+```
+This creates platform-specific installers in the `build/` directory.
+
+**Mobile Application (Capacitor)**:
+```bash
+# Build and sync for Android
+npm run mobile:build
+npm run mobile:run:android
+
+# Build and sync for iOS
+npm run mobile:build
+npm run mobile:run:ios
+```
 
 ## API Endpoints
 
@@ -263,41 +294,72 @@ socket.emit('subscribe', sessionId);
 - After completion, click "Start New Search"
 - Begin a new literature review
 
-## File Structure
+## Unified File Structure
+
+The application now uses a **shared frontend** across all platforms (web, desktop, mobile):
 
 ```
-src/platforms/web/
-├── frontend/                    # React application
-│   ├── src/
-│   │   ├── components/         # React components
-│   │   │   ├── SearchForm.tsx
-│   │   │   ├── ProgressDashboard.tsx
-│   │   │   ├── ScreenshotViewer.tsx
-│   │   │   ├── PaperList.tsx
-│   │   │   ├── OutputDownloads.tsx
-│   │   │   └── GoogleAuth.tsx
-│   │   ├── pages/              # Page components
-│   │   │   └── SearchPage.tsx
-│   │   ├── hooks/              # Custom React hooks
-│   │   │   ├── useSocket.ts
-│   │   │   └── useProgress.ts
-│   │   ├── utils/              # Utilities
-│   │   │   ├── api.ts
-│   │   │   └── helpers.ts
-│   │   ├── types/              # TypeScript types
-│   │   │   └── index.ts
-│   │   ├── styles/             # CSS styles
-│   │   │   └── index.css
-│   │   ├── App.tsx             # Main app component
-│   │   └── main.tsx            # Entry point
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   └── tsconfig.json
-├── server.ts                    # Express server
-├── auth.ts                      # Authentication utilities
-└── public/                      # Static files (fallback)
+litrevtools/
+├── src/
+│   ├── core/                         # Shared business logic (isomorphic)
+│   │   ├── database/                 # SQLite database
+│   │   ├── scholar/                  # Google Scholar scraper
+│   │   ├── gemini/                   # AI integration
+│   │   ├── outputs/                  # Output generators
+│   │   └── types/                    # TypeScript types
+│   │
+│   ├── frontend/                     # SHARED React UI (all platforms)
+│   │   ├── src/
+│   │   │   ├── components/          # React components
+│   │   │   │   ├── SearchForm.tsx
+│   │   │   │   ├── ProgressDashboard.tsx
+│   │   │   │   ├── ScreenshotViewer.tsx
+│   │   │   │   ├── PaperList.tsx
+│   │   │   │   ├── OutputDownloads.tsx
+│   │   │   │   └── GoogleAuth.tsx
+│   │   │   ├── pages/               # Page components
+│   │   │   │   └── SearchPage.tsx
+│   │   │   ├── hooks/               # Custom React hooks
+│   │   │   │   ├── useSocket.ts
+│   │   │   │   └── useProgress.ts
+│   │   │   ├── utils/               # Utilities
+│   │   │   │   ├── api.ts
+│   │   │   │   └── helpers.ts
+│   │   │   ├── types/               # TypeScript types
+│   │   │   ├── styles/              # CSS styles
+│   │   │   ├── App.tsx              # Main app component
+│   │   │   └── main.tsx             # Entry point
+│   │   ├── package.json
+│   │   ├── vite.config.ts
+│   │   ├── tailwind.config.js
+│   │   └── tsconfig.json
+│   │
+│   └── platforms/                    # Platform-specific wrappers
+│       ├── web/                      # Web server (Express + Socket.IO)
+│       │   ├── server.ts            # Serves shared frontend
+│       │   ├── auth.ts              # Authentication middleware
+│       │   └── public/              # Static fallback files
+│       │
+│       ├── desktop/                  # Electron wrapper
+│       │   ├── main.ts              # Loads shared frontend
+│       │   └── preload.ts           # IPC bridge
+│       │
+│       ├── mobile/                   # Capacitor wrapper
+│       │   └── index.ts             # Mobile API bridge
+│       │
+│       └── cli/                      # Command-line interface
+│           └── index.ts
+│
+├── capacitor.config.json             # Points to shared frontend
+└── package.json                      # Unified build scripts
 ```
+
+### Single Source, Multiple Platforms
+
+The **same React application** (`src/frontend/`) is used by:
+- **Web**: Served by Express at `http://localhost:3000`
+- **Desktop**: Loaded by Electron in a native window
+- **Mobile**: Bundled by Capacitor for iOS/Android
 
 ## Security Considerations
 

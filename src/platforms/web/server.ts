@@ -33,8 +33,8 @@ app.use(helmet({
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from React frontend (if built)
-const frontendPath = path.join(__dirname, 'frontend', 'dist');
+// Serve static files from shared React frontend (if built)
+const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
 app.use(express.static(frontendPath));
 
 // Fallback to old public directory
@@ -289,8 +289,8 @@ app.get('/health', (req, res) => {
 
 // Serve React app for all non-API routes (SPA fallback) - MUST BE LAST
 app.get('*', (req, res) => {
-  // Check if React app is built
-  const reactIndexPath = path.join(__dirname, 'frontend', 'dist', 'index.html');
+  // Shared React app (used by web, desktop, mobile)
+  const reactIndexPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html');
   const publicIndexPath = path.join(__dirname, 'public', 'index.html');
 
   // Try to serve React app first, fallback to old public HTML
