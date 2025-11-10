@@ -123,6 +123,7 @@ export class ScholarExtractor {
 
     const semanticScholar = new SemanticScholarService();
     let allPapers: Paper[] = [];
+    let totalFetched = 0; // Track total papers fetched across all years
 
     try {
       for (let i = 0; i < years.length; i++) {
@@ -135,30 +136,57 @@ export class ScholarExtractor {
           currentYear: year
         });
 
-        const result = await semanticScholar.search({
-          query: parameters.inclusionKeywords.join(' '),
-          year,
-          limit: maxResultsPerYear || 100
-        });
+        const targetResults = maxResultsPerYear || 100;
+        const maxPerRequest = 100; // Semantic Scholar API limit
+        let offset = 0;
+        let fetchedForYear = 0;
 
-        allPapers.push(...result.papers);
+        // Paginate if needed
+        while (fetchedForYear < targetResults) {
+          const limit = Math.min(maxPerRequest, targetResults - fetchedForYear);
 
-        // Save papers incrementally
-        for (const paper of result.papers) {
-          this.database.addPaper(this.sessionId!, paper);
-          if (this.onPaper) {
-            this.onPaper(paper, this.sessionId!);
+          const result = await semanticScholar.search({
+            query: parameters.inclusionKeywords.join(' '),
+            year,
+            limit,
+            offset
+          });
+
+          allPapers.push(...result.papers);
+          totalFetched += result.papers.length;
+
+          // Save papers incrementally
+          for (const paper of result.papers) {
+            this.database.addPaper(this.sessionId!, paper);
+            if (this.onPaper) {
+              this.onPaper(paper, this.sessionId!);
+            }
+          }
+
+          fetchedForYear += result.papers.length;
+          offset += result.papers.length;
+
+          console.log(`Year ${year}: Found ${fetchedForYear}/${result.total} papers`);
+
+          // Stop if no more results available
+          if (!result.hasMore || result.papers.length === 0) {
+            break;
           }
         }
-
-        console.log(`Year ${year}: Found ${result.papers.length}/${result.total} papers`);
       }
+
+      // Calculate duplicates: fetched total vs unique papers in database
+      const uniquePapers = this.database.getPapers(this.sessionId!);
+      const duplicateCount = totalFetched - uniquePapers.length;
+
+      console.log(`Total fetched: ${totalFetched}, Unique papers: ${uniquePapers.length}, Duplicates: ${duplicateCount}`);
 
       this.updateProgress({
         currentTask: 'Papers extracted successfully',
         nextTask: 'Applying exclusion filters',
         progress: 80,
-        totalPapers: allPapers.length
+        totalPapers: uniquePapers.length,
+        duplicateCount
       });
     } catch (error) {
       console.error('Semantic Scholar search failed:', error);
@@ -239,7 +267,11 @@ export class ScholarExtractor {
       this.updateProgress({
         currentTask: 'LLM filtering completed',
         nextTask: 'Finalizing results',
-        progress: 95
+        progress: 95,
+        totalPapers,
+        includedPapers: includedCount,
+        excludedPapers: excludedCount,
+        processedPapers: totalPapers
       });
     } catch (error) {
       console.error('LLM filtering failed, falling back to rule-based filtering:', error);
@@ -278,6 +310,15 @@ export class ScholarExtractor {
         };
 
         this.database.addPaper(this.sessionId, updatedPaper);
+      } else {
+        // Update paper as included
+        const updatedPaper: Paper = {
+          ...paper,
+          included: true,
+          exclusionReason: undefined
+        };
+
+        this.database.addPaper(this.sessionId, updatedPaper);
       }
     }
 
@@ -299,6 +340,14 @@ export class ScholarExtractor {
       included: {
         studiesIncluded: includedCount
       }
+    });
+
+    // Update progress with paper counts
+    this.updateProgress({
+      totalPapers,
+      includedPapers: includedCount,
+      excludedPapers: excludedCount,
+      processedPapers: totalPapers
     });
   }
 

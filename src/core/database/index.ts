@@ -39,6 +39,7 @@ export class LitRevDatabase {
         processed_papers INTEGER DEFAULT 0,
         included_papers INTEGER DEFAULT 0,
         excluded_papers INTEGER DEFAULT 0,
+        duplicate_count INTEGER DEFAULT 0,
         time_elapsed INTEGER DEFAULT 0,
         estimated_time_remaining INTEGER,
         progress INTEGER DEFAULT 0,
@@ -377,6 +378,10 @@ export class LitRevDatabase {
       fields.push('excluded_papers = ?');
       values.push(progress.excludedPapers);
     }
+    if (progress.duplicateCount !== undefined) {
+      fields.push('duplicate_count = ?');
+      values.push(progress.duplicateCount);
+    }
     if (progress.timeElapsed !== undefined) {
       fields.push('time_elapsed = ?');
       values.push(progress.timeElapsed);
@@ -488,6 +493,7 @@ export class LitRevDatabase {
         processedPapers: sessionRow.processed_papers,
         includedPapers: sessionRow.included_papers,
         excludedPapers: sessionRow.excluded_papers,
+        duplicateCount: sessionRow.duplicate_count,
         timeElapsed: sessionRow.time_elapsed,
         estimatedTimeRemaining: sessionRow.estimated_time_remaining,
         progress: sessionRow.progress,

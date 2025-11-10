@@ -153,11 +153,17 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
       </div>
 
       {/* Statistics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-gray-200">
         <div className="text-center">
           <p className="text-2xl font-bold text-primary-600">{progress.totalPapers}</p>
           <p className="text-sm text-gray-500">Total Papers</p>
         </div>
+        {progress.duplicateCount !== undefined && progress.duplicateCount > 0 && (
+          <div className="text-center">
+            <p className="text-2xl font-bold text-orange-600">{progress.duplicateCount}</p>
+            <p className="text-sm text-gray-500">Duplicates</p>
+          </div>
+        )}
         <div className="text-center">
           <p className="text-2xl font-bold text-green-600">{progress.includedPapers}</p>
           <p className="text-sm text-gray-500">Included</p>

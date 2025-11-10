@@ -133,9 +133,10 @@ export class GeminiProvider extends BaseLLMProvider {
       const batchResults = await Promise.all(batchPromises);
       responses.push(...batchResults);
 
-      // Small delay between batches to respect rate limits
+      // Delay between batches to respect rate limits (15 RPM free tier)
+      // With batch size 10, we need ~5 second delay to stay under 15 RPM
       if (i + batchSize < requests.length) {
-        await this.delay(100);
+        await this.delay(5000);
       }
     }
 

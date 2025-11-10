@@ -203,13 +203,17 @@ export class LitRevTools {
    * Build configuration from environment and overrides
    */
   private buildConfig(overrides?: Partial<AppConfig>): AppConfig {
+    // Get Gemini API key - support both singular and plural (for rotation)
+    const geminiApiKey = process.env.GEMINI_API_KEY ||
+                        (process.env.GEMINI_API_KEYS ? process.env.GEMINI_API_KEYS.split(',')[0].trim() : '');
+
     const defaultConfig: AppConfig = {
       database: {
         path: process.env.DATABASE_PATH || './data/litrevtools.db'
       },
       gemini: {
-        apiKey: process.env.GEMINI_API_KEY || '',
-        model: process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
+        apiKey: geminiApiKey,
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'
       },
       googleAuth: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',

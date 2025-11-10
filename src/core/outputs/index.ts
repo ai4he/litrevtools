@@ -57,16 +57,21 @@ export class OutputManager {
     await bibtexGen.generate(session.papers, bibtexPath);
     outputs.bibtex = bibtexPath;
 
-    // Generate LaTeX paper
-    const latexPath = path.join(sessionDir, 'paper.tex');
-    const latexGen = new LaTeXGenerator(this.gemini);
-    await latexGen.generate(
-      session.papers,
-      session.parameters,
-      session.prismaData,
-      latexPath
-    );
-    outputs.latex = latexPath;
+    // Generate LaTeX paper (only if Gemini API is available)
+    try {
+      const latexPath = path.join(sessionDir, 'paper.tex');
+      const latexGen = new LaTeXGenerator(this.gemini);
+      await latexGen.generate(
+        session.papers,
+        session.parameters,
+        session.prismaData,
+        latexPath
+      );
+      outputs.latex = latexPath;
+    } catch (error: any) {
+      console.log('LaTeX generation skipped - Gemini API not available:', error.message);
+      // Skip LaTeX generation if no API key
+    }
 
     // Generate PRISMA diagram
     const prismaDiagramPath = path.join(sessionDir, 'prisma-diagram.tex');
@@ -81,13 +86,19 @@ export class OutputManager {
 
     // Generate ZIP
     const zipPath = path.join(sessionDir, 'litreview.zip');
-    await this.createZip(sessionDir, zipPath, [
+    const filesToZip = [
       outputs.csv!,
       outputs.bibtex!,
-      outputs.latex!,
       outputs.prismaDiagram!,
       outputs.prismaTable!
-    ]);
+    ];
+
+    // Only include LaTeX if it was generated
+    if (outputs.latex) {
+      filesToZip.push(outputs.latex);
+    }
+
+    await this.createZip(sessionDir, zipPath, filesToZip);
     outputs.zip = zipPath;
 
     // Update database with output file paths

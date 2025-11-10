@@ -48,6 +48,7 @@ export interface ProgressUpdate {
   processedPapers: number;
   includedPapers: number;
   excludedPapers: number;
+  duplicateCount?: number;
   currentYear?: number;
   timeElapsed: number;
   estimatedTimeRemaining: number;

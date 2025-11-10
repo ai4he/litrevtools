@@ -42,6 +42,7 @@ export interface SearchProgress {
   processedPapers: number;
   includedPapers: number;
   excludedPapers: number;
+  duplicateCount?: number; // Number of duplicate papers removed
   currentYear?: number;
   timeElapsed: number; // in milliseconds
   estimatedTimeRemaining?: number; // in milliseconds

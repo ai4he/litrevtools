@@ -304,7 +304,8 @@ io.on('connection', (socket) => {
       console.log(`Replaying ${bufferedEvents.length} buffered events for session ${sessionId}`);
 
       // Send each buffered event to the client
-      bufferedEvents.forEach(({ event, data }) => {
+      bufferedEvents.forEach(({ event, data }, index) => {
+        console.log(`Replay event ${index}: ${event}`, JSON.stringify(data).substring(0, 200));
         socket.emit(event, data);
       });
 
