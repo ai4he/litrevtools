@@ -241,6 +241,7 @@ export class LitRevTools {
 
 // Export all types and submodules
 export * from './types';
+export * from './config';
 export { LitRevDatabase } from './database';
 export { GeminiService } from './gemini';
 export { ScholarExtractor } from './scholar';

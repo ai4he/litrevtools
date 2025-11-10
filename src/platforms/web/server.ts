@@ -10,7 +10,7 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
-import { LitRevTools, SearchParameters, SearchProgress, Paper } from '../../core';
+import { LitRevTools, SearchParameters, SearchProgress, Paper, validateParameters, mergeWithDefaults } from '../../core';
 import * as path from 'path';
 import { verifyGoogleToken, generateJWT, authMiddleware, optionalAuthMiddleware, AuthRequest } from './auth';
 
@@ -116,16 +116,17 @@ app.get('/api/sessions/:id', (req, res) => {
 // Start a new search
 app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {
-    const params: SearchParameters = req.body;
+    // Merge with defaults and validate using centralized schema
+    const params = mergeWithDefaults(req.body);
+    const validation = validateParameters(params);
 
-    // Validate parameters
-    if (!params.inclusionKeywords || params.inclusionKeywords.length === 0) {
-      res.status(400).json({ success: false, error: 'Inclusion keywords are required' });
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        errors: validation.errors
+      });
       return;
-    }
-
-    if (!params.exclusionKeywords) {
-      params.exclusionKeywords = [];
     }
 
     // Create a new tools instance for this search

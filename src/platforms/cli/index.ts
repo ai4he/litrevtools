@@ -2,10 +2,20 @@
 
 /**
  * CLI Platform for LitRevTools
+ *
+ * This CLI dynamically generates options from the centralized parameter schema,
+ * ensuring it always stays in sync with the Web UI and other platforms.
  */
 
 import { Command } from 'commander';
 import { LitRevTools, SearchParameters, SearchProgress, Paper } from '../../core';
+import {
+  SEARCH_PARAMETER_SCHEMA,
+  getDefaultParameters,
+  validateParameters,
+  mergeWithDefaults,
+  ParameterDefinition
+} from '../../core/config';
 import * as cliProgress from 'cli-progress';
 import chalk from 'chalk';
 import * as readline from 'readline';
@@ -17,114 +27,317 @@ program
   .description('Systematic Literature Review Tool using PRISMA methodology')
   .version('1.0.0');
 
-// Search command
-program
+/**
+ * Dynamically build CLI options from parameter schema
+ */
+function buildCommandWithOptions(command: Command): Command {
+  SEARCH_PARAMETER_SCHEMA.forEach(param => {
+    if (param.type === 'object' && param.nested) {
+      // Handle nested parameters (like LLM config)
+      param.nested.forEach(nested => {
+        addOptionToCommand(command, nested);
+      });
+    } else {
+      addOptionToCommand(command, param);
+    }
+  });
+  return command;
+}
+
+/**
+ * Add a single option to the command
+ */
+function addOptionToCommand(command: Command, param: ParameterDefinition): void {
+  if (!param.cliFlag) return;
+
+  let flags = param.cliFlag;
+  if (param.cliShortFlag) {
+    flags = `${param.cliShortFlag}, ${param.cliFlag}`;
+  }
+
+  let flagWithArgs = flags;
+  if (param.type === 'string') {
+    flagWithArgs += ' <value>';
+  } else if (param.type === 'number') {
+    flagWithArgs += ' <number>';
+  } else if (param.type === 'string[]') {
+    flagWithArgs += ' <items...>';
+  } else if (param.type === 'boolean') {
+    // Boolean flags don't need arguments
+  } else if (param.type === 'enum' && param.options) {
+    flagWithArgs += ' <value>';
+  }
+
+  const description = param.description +
+    (param.options ? `\nOptions: ${param.options.map(o => o.value).join(', ')}` : '') +
+    (param.default !== undefined ? `\nDefault: ${JSON.stringify(param.default)}` : '');
+
+  if (param.type === 'number') {
+    command.option(flagWithArgs, description, parseFloat);
+  } else if (param.type === 'boolean') {
+    command.option(flagWithArgs, description);
+  } else {
+    command.option(flagWithArgs, description);
+  }
+}
+
+/**
+ * Parse CLI options into SearchParameters
+ */
+function parseOptionsToParameters(options: any): Partial<SearchParameters> {
+  const params: any = {};
+
+  // Map basic parameters
+  if (options.name) params.name = options.name;
+  if (options.include) params.inclusionKeywords = options.include;
+  if (options.exclude) params.exclusionKeywords = options.exclude;
+  if (options.max) params.maxResults = options.max;
+  if (options.startYear) params.startYear = options.startYear;
+  if (options.endYear) params.endYear = options.endYear;
+
+  // Build LLM config from CLI options
+  const llmConfig: any = {};
+  let hasLlmConfig = false;
+
+  if (options.llmEnabled !== undefined) {
+    llmConfig.enabled = options.llmEnabled;
+    hasLlmConfig = true;
+  }
+  if (options.llmProvider) {
+    llmConfig.provider = options.llmProvider;
+    hasLlmConfig = true;
+  }
+  if (options.llmModel) {
+    llmConfig.model = options.llmModel;
+    hasLlmConfig = true;
+  }
+  if (options.llmApiKey) {
+    llmConfig.apiKey = options.llmApiKey;
+    hasLlmConfig = true;
+  }
+  if (options.llmApiKeys) {
+    llmConfig.apiKeys = options.llmApiKeys;
+    hasLlmConfig = true;
+  }
+  if (options.llmBatchSize !== undefined) {
+    llmConfig.batchSize = options.llmBatchSize;
+    hasLlmConfig = true;
+  }
+  if (options.llmMaxConcurrent !== undefined) {
+    llmConfig.maxConcurrentBatches = options.llmMaxConcurrent;
+    hasLlmConfig = true;
+  }
+  if (options.llmTimeout !== undefined) {
+    llmConfig.timeout = options.llmTimeout;
+    hasLlmConfig = true;
+  }
+  if (options.llmRetry !== undefined) {
+    llmConfig.retryAttempts = options.llmRetry;
+    hasLlmConfig = true;
+  }
+  if (options.llmTemperature !== undefined) {
+    llmConfig.temperature = options.llmTemperature;
+    hasLlmConfig = true;
+  }
+  if (options.llmFallback) {
+    llmConfig.fallbackStrategy = options.llmFallback;
+    hasLlmConfig = true;
+  }
+  if (options.llmKeyRotation !== undefined) {
+    llmConfig.enableKeyRotation = options.llmKeyRotation;
+    hasLlmConfig = true;
+  }
+
+  if (hasLlmConfig) {
+    params.llmConfig = llmConfig;
+  }
+
+  return params;
+}
+
+/**
+ * Interactive prompt helper
+ */
+async function promptForMissingParameters(params: Partial<SearchParameters>): Promise<SearchParameters> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  const question = (query: string): Promise<string> => {
+    return new Promise(resolve => rl.question(query, resolve));
+  };
+
+  // If no inclusion keywords provided, ask
+  if (!params.inclusionKeywords || params.inclusionKeywords.length === 0) {
+    console.log(chalk.yellow('\nEnter inclusion keywords (comma-separated):'));
+    console.log(chalk.gray('Papers must contain at least one of these keywords'));
+    console.log(chalk.gray('Default: large language model, mathematical reasoning'));
+    const input = await question('> ');
+    params.inclusionKeywords = input.trim()
+      ? input.split(',').map(k => k.trim())
+      : ['large language model', 'mathematical reasoning'];
+  }
+
+  // If no exclusion keywords provided, ask
+  if (!params.exclusionKeywords || params.exclusionKeywords.length === 0) {
+    console.log(chalk.yellow('\nEnter exclusion keywords (comma-separated, or press Enter to use defaults):'));
+    console.log(chalk.gray('Papers containing these keywords will be excluded'));
+    console.log(chalk.gray('Default: survey, review'));
+    const input = await question('> ');
+    params.exclusionKeywords = input.trim()
+      ? input.split(',').map(k => k.trim())
+      : ['survey', 'review'];
+  }
+
+  rl.close();
+  return mergeWithDefaults(params);
+}
+
+/**
+ * Display parameters summary
+ */
+function displayParametersSummary(params: SearchParameters): void {
+  console.log(chalk.green('\n✓ Search Configuration:'));
+  console.log(chalk.white('\nBasic Parameters:'));
+  console.log(chalk.gray(`  Name: ${params.name || 'Auto-generated'}`));
+  console.log(chalk.gray(`  Include: ${params.inclusionKeywords.join(', ')}`));
+  console.log(chalk.gray(`  Exclude: ${params.exclusionKeywords.join(', ')}`));
+  console.log(chalk.gray(`  Max results: ${params.maxResults || 'Unlimited'}`));
+  console.log(chalk.gray(`  Year range: ${params.startYear || 'N/A'} - ${params.endYear || 'Current'}`));
+
+  if (params.llmConfig?.enabled) {
+    console.log(chalk.white('\nLLM Configuration:'));
+    console.log(chalk.gray(`  Provider: ${params.llmConfig.provider || 'gemini'}`));
+    console.log(chalk.gray(`  Model: ${params.llmConfig.model || 'gemini-1.5-flash'}`));
+    console.log(chalk.gray(`  Batch size: ${params.llmConfig.batchSize || 10}`));
+    console.log(chalk.gray(`  Max concurrent batches: ${params.llmConfig.maxConcurrentBatches || 3}`));
+    console.log(chalk.gray(`  Fallback strategy: ${params.llmConfig.fallbackStrategy || 'rule_based'}`));
+    console.log(chalk.gray(`  Key rotation: ${params.llmConfig.enableKeyRotation ? 'Enabled' : 'Disabled'}`));
+
+    const keyCount = params.llmConfig.apiKeys?.length || (params.llmConfig.apiKey ? 1 : 0);
+    console.log(chalk.gray(`  API keys: ${keyCount} configured`));
+  } else {
+    console.log(chalk.white('\nLLM: Disabled (using rule-based filtering)'));
+  }
+  console.log('');
+}
+
+// Build the search command with dynamically generated options
+const searchCommand = program
   .command('search')
-  .description('Start a new literature review search')
-  .option('-n, --name <name>', 'Name of the search')
-  .option('-i, --include <keywords...>', 'Inclusion keywords', ['large language model', 'mathematical reasoning'])
-  .option('-e, --exclude <keywords...>', 'Exclusion keywords', ['survey', 'review'])
-  .option('-m, --max <number>', 'Maximum number of results', parseInt)
-  .option('--start-year <year>', 'Start year for search', parseInt)
-  .option('--end-year <year>', 'End year for search', parseInt)
-  .action(async (options) => {
-    try {
-      console.log(chalk.blue.bold('\n🔍 LitRevTools - Systematic Literature Review\n'));
+  .description('Start a new literature review search');
 
-      // Get search parameters interactively if not provided
-      const params = await getSearchParameters(options);
+buildCommandWithOptions(searchCommand);
 
-      console.log(chalk.green('\n✓ Starting search with parameters:'));
-      console.log(chalk.gray(`  Name: ${params.name || 'Auto-generated'}`));
-      console.log(chalk.gray(`  Include: ${params.inclusionKeywords.join(', ')}`));
-      console.log(chalk.gray(`  Exclude: ${params.exclusionKeywords.join(', ')}`));
-      console.log(chalk.gray(`  Max results: ${params.maxResults || 'Unlimited'}`));
-      console.log(chalk.gray(`  Year range: ${params.startYear || 'N/A'} - ${params.endYear || 'Current'}\n`));
+searchCommand.action(async (options) => {
+  try {
+    console.log(chalk.blue.bold('\n🔍 LitRevTools - Systematic Literature Review\n'));
 
-      // Initialize LitRevTools
-      const tools = new LitRevTools();
+    // Parse CLI options to parameters
+    let params = parseOptionsToParameters(options);
 
-      // Create progress bar
-      const progressBar = new cliProgress.SingleBar({
-        format: chalk.cyan('{task}') + ' |' + chalk.green('{bar}') + '| {percentage}% | {papers} papers | Time: {elapsed}s',
-        barCompleteChar: '\u2588',
-        barIncompleteChar: '\u2591',
-        hideCursor: true
-      });
+    // Prompt for missing required parameters
+    params = await promptForMissingParameters(params);
 
-      progressBar.start(100, 0, {
-        task: 'Initializing...',
-        papers: 0,
-        elapsed: 0
-      });
+    // Validate parameters
+    const validation = validateParameters(params);
+    if (!validation.valid) {
+      console.error(chalk.red('\n✗ Invalid parameters:'));
+      validation.errors.forEach(err => console.error(chalk.red(`  - ${err}`)));
+      process.exit(1);
+    }
 
-      let papersFound = 0;
-      const startTime = Date.now();
+    // After validation, we know params is complete
+    const validParams = params as SearchParameters;
 
-      // Start search
-      const sessionId = await tools.startSearch(params, {
-        onProgress: (progress: SearchProgress) => {
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    // Display summary
+    displayParametersSummary(validParams);
 
-          progressBar.update(progress.progress, {
-            task: progress.currentTask.substring(0, 40),
-            papers: progress.totalPapers,
-            elapsed
-          });
+    // Initialize LitRevTools
+    const tools = new LitRevTools();
 
-          if (progress.status === 'completed') {
-            progressBar.stop();
-            console.log(chalk.green.bold('\n✓ Search completed!\n'));
-            console.log(chalk.white(`Total papers found: ${progress.totalPapers}`));
-            console.log(chalk.white(`Included papers: ${progress.includedPapers}`));
-            console.log(chalk.white(`Excluded papers: ${progress.excludedPapers}`));
-            console.log(chalk.white(`Time elapsed: ${elapsed}s\n`));
+    // Create progress bar
+    const progressBar = new cliProgress.SingleBar({
+      format: chalk.cyan('{task}') + ' |' + chalk.green('{bar}') + '| {percentage}% | {papers} papers | Time: {elapsed}s',
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true
+    });
 
-            console.log(chalk.blue('Generating outputs...'));
-            tools.generateOutputs(sessionId).then(() => {
-              const session = tools.getSession(sessionId);
-              if (session?.outputs) {
-                console.log(chalk.green('\n✓ Outputs generated:'));
-                if (session.outputs.csv) console.log(chalk.gray(`  CSV: ${session.outputs.csv}`));
-                if (session.outputs.bibtex) console.log(chalk.gray(`  BibTeX: ${session.outputs.bibtex}`));
-                if (session.outputs.latex) console.log(chalk.gray(`  LaTeX: ${session.outputs.latex}`));
-                if (session.outputs.zip) console.log(chalk.gray(`  ZIP: ${session.outputs.zip}`));
-              }
+    progressBar.start(100, 0, {
+      task: 'Initializing...',
+      papers: 0,
+      elapsed: 0
+    });
 
-              console.log(chalk.blue.bold(`\nSession ID: ${sessionId}\n`));
-              tools.close();
-              process.exit(0);
-            }).catch(err => {
-              console.error(chalk.red('\n✗ Error generating outputs:'), err.message);
-              tools.close();
-              process.exit(1);
-            });
-          } else if (progress.status === 'error') {
-            progressBar.stop();
-            console.error(chalk.red('\n✗ Search failed:'), progress.error);
+    let papersFound = 0;
+    const startTime = Date.now();
+
+    // Start search
+    const sessionId = await tools.startSearch(validParams, {
+      onProgress: (progress: SearchProgress) => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+        progressBar.update(progress.progress, {
+          task: progress.currentTask.substring(0, 40),
+          papers: progress.totalPapers,
+          elapsed
+        });
+
+        if (progress.status === 'completed') {
+          progressBar.stop();
+          console.log(chalk.green.bold('\n✓ Search completed!\n'));
+          console.log(chalk.white(`Total papers found: ${progress.totalPapers}`));
+          console.log(chalk.white(`Included papers: ${progress.includedPapers}`));
+          console.log(chalk.white(`Excluded papers: ${progress.excludedPapers}`));
+          console.log(chalk.white(`Time elapsed: ${elapsed}s\n`));
+
+          console.log(chalk.blue('Generating outputs...'));
+          tools.generateOutputs(sessionId).then(() => {
+            const session = tools.getSession(sessionId);
+            if (session?.outputs) {
+              console.log(chalk.green('\n✓ Outputs generated:'));
+              if (session.outputs.csv) console.log(chalk.gray(`  CSV: ${session.outputs.csv}`));
+              if (session.outputs.bibtex) console.log(chalk.gray(`  BibTeX: ${session.outputs.bibtex}`));
+              if (session.outputs.latex) console.log(chalk.gray(`  LaTeX: ${session.outputs.latex}`));
+              if (session.outputs.zip) console.log(chalk.gray(`  ZIP: ${session.outputs.zip}`));
+            }
+
+            console.log(chalk.blue.bold(`\nSession ID: ${sessionId}\n`));
+            tools.close();
+            process.exit(0);
+          }).catch(err => {
+            console.error(chalk.red('\n✗ Error generating outputs:'), err.message);
             tools.close();
             process.exit(1);
-          }
-        },
-        onPaper: (paper: Paper) => {
-          papersFound++;
-          if (papersFound % 10 === 0) {
-            console.log(chalk.gray(`\n  Found: ${paper.title.substring(0, 60)}...`));
-          }
-        },
-        onError: (error: Error) => {
+          });
+        } else if (progress.status === 'error') {
           progressBar.stop();
-          console.error(chalk.red('\n✗ Error:'), error.message);
+          console.error(chalk.red('\n✗ Search failed:'), progress.error);
           tools.close();
           process.exit(1);
         }
-      });
+      },
+      onPaper: (paper: Paper) => {
+        papersFound++;
+        if (papersFound % 10 === 0) {
+          console.log(chalk.gray(`\n  Found: ${paper.title.substring(0, 60)}...`));
+        }
+      },
+      onError: (error: Error) => {
+        progressBar.stop();
+        console.error(chalk.red('\n✗ Error:'), error.message);
+        tools.close();
+        process.exit(1);
+      }
+    });
 
-    } catch (error: any) {
-      console.error(chalk.red('\n✗ Error:'), error.message);
-      process.exit(1);
-    }
-  });
+  } catch (error: any) {
+    console.error(chalk.red('\n✗ Error:'), error.message);
+    process.exit(1);
+  }
+});
 
 // List sessions command
 program
@@ -221,48 +434,44 @@ program
     }
   });
 
-// Interactive helper
-async function getSearchParameters(options: any): Promise<SearchParameters> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
+// Show parameter schema command (helpful for users)
+program
+  .command('params')
+  .description('Show all available search parameters and their descriptions')
+  .action(() => {
+    console.log(chalk.blue.bold('\n📋 Available Search Parameters\n'));
+
+    SEARCH_PARAMETER_SCHEMA.forEach(param => {
+      if (param.type === 'object' && param.nested) {
+        console.log(chalk.white(`\n${param.label}:`));
+        console.log(chalk.gray(`  ${param.description}`));
+        console.log(chalk.white('  Options:'));
+
+        param.nested.forEach(nested => {
+          console.log(chalk.cyan(`    ${nested.cliFlag || nested.key}`));
+          console.log(chalk.gray(`      ${nested.description}`));
+          if (nested.default !== undefined) {
+            console.log(chalk.gray(`      Default: ${JSON.stringify(nested.default)}`));
+          }
+          if (nested.options) {
+            console.log(chalk.gray(`      Options: ${nested.options.map(o => o.value).join(', ')}`));
+          }
+        });
+      } else {
+        console.log(chalk.cyan(`\n${param.cliFlag || param.key}`));
+        console.log(chalk.gray(`  ${param.description}`));
+        if (param.default !== undefined) {
+          console.log(chalk.gray(`  Default: ${JSON.stringify(param.default)}`));
+        }
+        if (param.options) {
+          console.log(chalk.gray(`  Options: ${param.options.map(o => `${o.value} (${o.description})`).join(', ')}`));
+        }
+      }
+    });
+
+    console.log(chalk.white('\n\nExample usage:'));
+    console.log(chalk.gray('  litrevtools search -i "machine learning" -e "survey" --llm-enabled --llm-api-key YOUR_KEY'));
+    console.log('');
   });
-
-  const question = (query: string): Promise<string> => {
-    return new Promise(resolve => rl.question(query, resolve));
-  };
-
-  let params: SearchParameters = {
-    name: options.name,
-    inclusionKeywords: options.include || [],
-    exclusionKeywords: options.exclude || [],
-    maxResults: options.max,
-    startYear: options.startYear,
-    endYear: options.endYear
-  };
-
-  // If no inclusion keywords provided, ask
-  if (params.inclusionKeywords.length === 0) {
-    console.log(chalk.yellow('Enter inclusion keywords (comma-separated):'));
-    console.log(chalk.gray('Default suggestions: large language model, mathematical reasoning'));
-    const input = await question('> ');
-    params.inclusionKeywords = input.trim()
-      ? input.split(',').map(k => k.trim())
-      : ['large language model', 'mathematical reasoning'];
-  }
-
-  // If no exclusion keywords provided, ask
-  if (params.exclusionKeywords.length === 0) {
-    console.log(chalk.yellow('\nEnter exclusion keywords (comma-separated):'));
-    console.log(chalk.gray('Default suggestions: survey, review'));
-    const input = await question('> ');
-    params.exclusionKeywords = input.trim()
-      ? input.split(',').map(k => k.trim())
-      : ['survey', 'review'];
-  }
-
-  rl.close();
-  return params;
-}
 
 program.parse();
