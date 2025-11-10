@@ -20,6 +20,17 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
     // Check if user is already logged in
     const checkAuth = async () => {
       try {
+        // Check for guest mode first
+        const guestMode = localStorage.getItem('guestMode');
+        if (guestMode === 'true') {
+          const guestUser = { id: 'guest', email: 'guest@local', name: 'Guest User' };
+          setUser(guestUser);
+          onAuthChange?.(guestUser);
+          setLoading(false);
+          return;
+        }
+
+        // Try to get authenticated user
         const currentUser = await authAPI.getCurrentUser();
         setUser(currentUser);
         onAuthChange?.(currentUser);
@@ -40,8 +51,9 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
       const response = await authAPI.googleLogin(credentialResponse.credential);
       const { user: userData, token } = response;
 
-      // Store token in localStorage
+      // Store token and clear guest mode
       localStorage.setItem('authToken', token);
+      localStorage.removeItem('guestMode');
 
       setUser(userData);
       onAuthChange?.(userData);
@@ -59,10 +71,14 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
   const handleLogout = async () => {
     try {
       await authAPI.logout();
+      localStorage.removeItem('guestMode');
       setUser(null);
       onAuthChange?.(null);
     } catch (error) {
       console.error('Logout failed:', error);
+      localStorage.removeItem('guestMode');
+      setUser(null);
+      onAuthChange?.(null);
     }
   };
 
@@ -129,8 +145,10 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
         )}
         <button
           onClick={() => {
-            setUser({ id: 'guest', email: 'guest@local', name: 'Guest User' });
-            onAuthChange?.({ id: 'guest', email: 'guest@local', name: 'Guest User' });
+            localStorage.setItem('guestMode', 'true');
+            const guestUser = { id: 'guest', email: 'guest@local', name: 'Guest User' };
+            setUser(guestUser);
+            onAuthChange?.(guestUser);
           }}
           className="px-6 py-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-300"
         >
