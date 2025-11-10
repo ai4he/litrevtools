@@ -141,6 +141,9 @@ export class LitRevDatabase {
       CREATE INDEX IF NOT EXISTS idx_api_keys_session ON api_keys(session_id);
     `);
 
+    // Run migrations for existing databases
+    this.runMigrations();
+
     // Screenshots table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS screenshots (
@@ -158,6 +161,28 @@ export class LitRevDatabase {
       CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(year);
       CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
     `);
+  }
+
+  private runMigrations(): void {
+    // Check if category column exists in papers table
+    const tableInfo = this.db.prepare("PRAGMA table_info(papers)").all() as Array<{ name: string }>;
+    const hasCategory = tableInfo.some(col => col.name === 'category');
+    const hasLlmConfidence = tableInfo.some(col => col.name === 'llm_confidence');
+    const hasLlmReasoning = tableInfo.some(col => col.name === 'llm_reasoning');
+
+    // Add missing columns to papers table
+    if (!hasCategory) {
+      console.log('Adding category column to papers table...');
+      this.db.exec('ALTER TABLE papers ADD COLUMN category TEXT');
+    }
+    if (!hasLlmConfidence) {
+      console.log('Adding llm_confidence column to papers table...');
+      this.db.exec('ALTER TABLE papers ADD COLUMN llm_confidence REAL');
+    }
+    if (!hasLlmReasoning) {
+      console.log('Adding llm_reasoning column to papers table...');
+      this.db.exec('ALTER TABLE papers ADD COLUMN llm_reasoning TEXT');
+    }
   }
 
   // Session operations

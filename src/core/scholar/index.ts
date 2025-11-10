@@ -1,11 +1,13 @@
 /**
- * Main Google Scholar extraction orchestrator
+ * Main Scholar extraction orchestrator
+ * Supports both Semantic Scholar API and Google Scholar scraping
  */
 
 import { SearchParameters, Paper, SearchProgress, ProgressCallback, PaperCallback } from '../types';
 import { LitRevDatabase } from '../database';
 import { TorPoolManager } from './tor-manager';
 import { ParallelScholarScraper, GoogleScholarScraper } from './scraper';
+import { SemanticScholarService } from './semantic-scholar';
 import { LLMService } from '../llm';
 
 export class ScholarExtractor {
@@ -138,32 +140,36 @@ export class ScholarExtractor {
       ? Math.ceil(parameters.maxResults / years.length)
       : undefined;
 
-    if (this.torPool) {
-      // Use parallel scraper with Tor
-      this.updateProgress({
-        currentTask: 'Starting parallel search with Tor',
-        nextTask: 'Extracting papers from Google Scholar',
-        progress: 20
-      });
+    // Use Semantic Scholar API (preferred method)
+    this.updateProgress({
+      currentTask: 'Starting Semantic Scholar API search',
+      nextTask: 'Fetching papers from Semantic Scholar',
+      progress: 20
+    });
 
-      const parallelScraper = new ParallelScholarScraper(
-        3, // parallel count
-        this.torPool,
-        {
-          useTor: true,
-          headless: true,
-          screenshotEnabled: true
-        }
-      );
+    const semanticScholar = new SemanticScholarService();
+    let allPapers: Paper[] = [];
 
-      try {
-        const result = await parallelScraper.searchByYears(
-          parameters.inclusionKeywords,
-          years,
-          maxResultsPerYear
-        );
+    try {
+      for (let i = 0; i < years.length; i++) {
+        const year = years[i];
 
-        // Process papers
+        this.updateProgress({
+          currentTask: `Searching Semantic Scholar for year ${year}`,
+          nextTask: i < years.length - 1 ? `Next: year ${years[i + 1]}` : 'Finalizing search',
+          progress: 20 + (60 * (i + 1) / years.length),
+          currentYear: year
+        });
+
+        const result = await semanticScholar.search({
+          query: parameters.inclusionKeywords.join(' '),
+          year,
+          limit: maxResultsPerYear || 100
+        });
+
+        allPapers.push(...result.papers);
+
+        // Save papers incrementally
         for (const paper of result.papers) {
           this.database.addPaper(this.sessionId!, paper);
           if (this.onPaper) {
@@ -171,26 +177,23 @@ export class ScholarExtractor {
           }
         }
 
-        // Update progress with latest screenshot
-        if (result.screenshots.length > 0) {
-          this.updateProgress({
-            screenshot: result.screenshots[result.screenshots.length - 1]
-          });
-        }
-
-        this.updateProgress({
-          currentTask: 'Papers extracted successfully',
-          nextTask: 'Applying exclusion filters',
-          progress: 80,
-          totalPapers: result.papers.length
-        });
-      } finally {
-        await parallelScraper.closeAll();
+        console.log(`Year ${year}: Found ${result.papers.length}/${result.total} papers`);
       }
-    } else {
-      // Use single scraper without Tor
+
       this.updateProgress({
-        currentTask: 'Starting search without Tor',
+        currentTask: 'Papers extracted successfully',
+        nextTask: 'Applying exclusion filters',
+        progress: 80,
+        totalPapers: allPapers.length
+      });
+    } catch (error) {
+      console.error('Semantic Scholar search failed:', error);
+
+      // Fallback to Google Scholar scraping (without Tor, will likely hit CAPTCHA)
+      console.log('Falling back to Google Scholar scraping...');
+
+      this.updateProgress({
+        currentTask: 'Semantic Scholar failed, trying Google Scholar',
         nextTask: 'Extracting papers from Google Scholar',
         progress: 20
       });
@@ -203,8 +206,6 @@ export class ScholarExtractor {
 
       try {
         await scraper.initialize();
-
-        let allPapers: Paper[] = [];
 
         for (let i = 0; i < years.length; i++) {
           const year = years[i];
