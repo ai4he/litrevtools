@@ -12,7 +12,7 @@ export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
   private keyManager?: APIKeyManager;
   private defaultModel = 'gemini-1.5-flash'; // Fast and cost-effective for batch processing
-  private modelName: string;
+  private modelName: string = this.defaultModel;
 
   async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
     await super.initialize(apiKey, config);

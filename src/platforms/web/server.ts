@@ -293,11 +293,14 @@ app.get('*', (req, res) => {
   const reactIndexPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html');
   const publicIndexPath = path.join(__dirname, 'public', 'index.html');
 
-  // Try to serve React app first, fallback to old public HTML
-  try {
+  // Check if React app exists, otherwise fallback to old public HTML
+  const fs = require('fs');
+  if (fs.existsSync(reactIndexPath)) {
     res.sendFile(reactIndexPath);
-  } catch (error) {
+  } else if (fs.existsSync(publicIndexPath)) {
     res.sendFile(publicIndexPath);
+  } else {
+    res.status(404).send('Frontend not found');
   }
 });
 
