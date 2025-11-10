@@ -1,0 +1,258 @@
+/**
+ * Web Server Platform for LitRevTools
+ */
+
+import express from 'express';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import cors from 'cors';
+import helmet from 'helmet';
+import { LitRevTools, SearchParameters, SearchProgress, Paper } from '../../core';
+import * as path from 'path';
+
+const app = express();
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+const PORT = process.env.WEB_PORT || 3000;
+const HOST = process.env.WEB_HOST || 'localhost';
+
+// Middleware
+app.use(helmet({
+  contentSecurityPolicy: false // Disable for development
+}));
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Initialize LitRevTools instance
+const litrev = new LitRevTools();
+
+// Active searches map
+const activeSear ches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
+
+// REST API Routes
+
+// Get all sessions
+app.get('/api/sessions', (req, res) => {
+  try {
+    const sessions = litrev.getAllSessions();
+    res.json({ success: true, sessions });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get session by ID
+app.get('/api/sessions/:id', (req, res) => {
+  try {
+    const session = litrev.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+    res.json({ success: true, session });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start a new search
+app.post('/api/search/start', async (req, res) => {
+  try {
+    const params: SearchParameters = req.body;
+
+    // Validate parameters
+    if (!params.inclusionKeywords || params.inclusionKeywords.length === 0) {
+      res.status(400).json({ success: false, error: 'Inclusion keywords are required' });
+      return;
+    }
+
+    if (!params.exclusionKeywords) {
+      params.exclusionKeywords = [];
+    }
+
+    // Create a new tools instance for this search
+    const tools = new LitRevTools();
+
+    // Start search with WebSocket callbacks
+    const sessionId = await tools.startSearch(params, {
+      onProgress: (progress: SearchProgress) => {
+        io.emit(`progress:${sessionId}`, progress);
+
+        if (progress.status === 'completed' || progress.status === 'error') {
+          // Clean up
+          activeSear.delete(sessionId);
+          if (progress.status === 'completed') {
+            // Generate outputs
+            tools.generateOutputs(sessionId).then(() => {
+              const session = tools.getSession(sessionId);
+              io.emit(`outputs:${sessionId}`, session?.outputs);
+            }).catch(console.error);
+          }
+        }
+      },
+      onPaper: (paper: Paper) => {
+        io.emit(`paper:${sessionId}`, paper);
+      },
+      onError: (error: Error) => {
+        io.emit(`error:${sessionId}`, { message: error.message });
+      }
+    });
+
+    activeSear.set(sessionId, { sessionId, tools });
+
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pause search
+app.post('/api/search/:id/pause', (req, res) => {
+  const search = activeSear.get(req.params.id);
+  if (!search) {
+    res.status(404).json({ success: false, error: 'Search not found' });
+    return;
+  }
+
+  search.tools.pauseSearch();
+  res.json({ success: true });
+});
+
+// Resume search
+app.post('/api/search/:id/resume', (req, res) => {
+  const search = activeSear.get(req.params.id);
+  if (!search) {
+    res.status(404).json({ success: false, error: 'Search not found' });
+    return;
+  }
+
+  search.tools.resumeSearch();
+  res.json({ success: true });
+});
+
+// Stop search
+app.post('/api/search/:id/stop', (req, res) => {
+  const search = activeSear.get(req.params.id);
+  if (!search) {
+    res.status(404).json({ success: false, error: 'Search not found' });
+    return;
+  }
+
+  search.tools.stopSearch();
+  activeSear.delete(req.params.id);
+  res.json({ success: true });
+});
+
+// Generate outputs
+app.post('/api/sessions/:id/generate', async (req, res) => {
+  try {
+    await litrev.generateOutputs(req.params.id);
+    const session = litrev.getSession(req.params.id);
+    res.json({ success: true, outputs: session?.outputs });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Generate PRISMA paper
+app.post('/api/sessions/:id/prisma-paper', async (req, res) => {
+  try {
+    const content = await litrev.generatePRISMAPaper(req.params.id);
+    res.json({ success: true, content });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download output file
+app.get('/api/sessions/:id/download/:type', (req, res) => {
+  try {
+    const session = litrev.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    const { type } = req.params;
+    let filePath: string | undefined;
+
+    switch (type) {
+      case 'csv':
+        filePath = session.outputs.csv;
+        break;
+      case 'bibtex':
+        filePath = session.outputs.bibtex;
+        break;
+      case 'latex':
+        filePath = session.outputs.latex;
+        break;
+      case 'zip':
+        filePath = session.outputs.zip;
+        break;
+      default:
+        res.status(400).json({ success: false, error: 'Invalid file type' });
+        return;
+    }
+
+    if (!filePath) {
+      res.status(404).json({ success: false, error: 'File not found' });
+      return;
+    }
+
+    res.download(filePath);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// WebSocket connection handler
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+
+  // Subscribe to session updates
+  socket.on('subscribe', (sessionId: string) => {
+    socket.join(`session:${sessionId}`);
+  });
+
+  // Unsubscribe from session updates
+  socket.on('unsubscribe', (sessionId: string) => {
+    socket.leave(`session:${sessionId}`);
+  });
+});
+
+// Serve HTML interface
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', version: '1.0.0' });
+});
+
+// Start server
+httpServer.listen(PORT, () => {
+  console.log(`🌐 LitRevTools Web Server running at http://${HOST}:${PORT}`);
+  console.log(`📊 API available at http://${HOST}:${PORT}/api`);
+});
+
+// Cleanup on exit
+process.on('SIGINT', () => {
+  console.log('\nShutting down gracefully...');
+  litrev.close();
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});

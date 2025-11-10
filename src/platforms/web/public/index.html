@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LitRevTools - Systematic Literature Review</title>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .keywords-input {
+            position: relative;
+        }
+
+        .keyword-suggestions {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+
+        .keyword-tag {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .keyword-tag:hover {
+            background: #5568d3;
+        }
+
+        .keyword-tag.active {
+            background: #4a5cb8;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .progress-section.active {
+            display: block;
+        }
+
+        .progress-bar-container {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .status-text {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .papers-list {
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .paper-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .paper-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .paper-meta {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .screenshot {
+            width: 100%;
+            max-width: 600px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .outputs-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .download-btn {
+            margin: 5px;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 LitRevTools</h1>
+        <p class="subtitle">Systematic Literature Review using PRISMA Methodology</p>
+
+        <div class="form-section">
+            <div class="form-group">
+                <label>Search Name (Optional)</label>
+                <input type="text" id="searchName" placeholder="Auto-generated if empty">
+            </div>
+
+            <div class="form-group">
+                <label>Inclusion Keywords</label>
+                <input type="text" id="includeKeywords" placeholder="Enter keywords separated by commas">
+                <div class="keyword-suggestions">
+                    <span class="keyword-tag" data-keyword="large language model">large language model</span>
+                    <span class="keyword-tag" data-keyword="mathematical reasoning">mathematical reasoning</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Exclusion Keywords</label>
+                <input type="text" id="excludeKeywords" placeholder="Enter keywords separated by commas">
+                <div class="keyword-suggestions">
+                    <span class="keyword-tag" data-keyword="survey">survey</span>
+                    <span class="keyword-tag" data-keyword="review">review</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Max Results (Leave empty for infinite)</label>
+                <input type="number" id="maxResults" placeholder="e.g., 100">
+            </div>
+
+            <button id="startBtn" onclick="startSearch()">Start Search</button>
+        </div>
+
+        <div class="progress-section" id="progressSection">
+            <h2>Search Progress</h2>
+
+            <div class="status-text" id="statusText">Initializing...</div>
+            <div class="status-text" id="nextTask"></div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalPapers">0</div>
+                    <div class="stat-label">Total Papers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="includedPapers">0</div>
+                    <div class="stat-label">Included</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="excludedPapers">0</div>
+                    <div class="stat-label">Excluded</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="timeElapsed">0s</div>
+                    <div class="stat-label">Time Elapsed</div>
+                </div>
+            </div>
+
+            <div id="screenshotContainer"></div>
+
+            <h3>Papers Found</h3>
+            <div class="papers-list" id="papersList"></div>
+        </div>
+
+        <div class="outputs-section" id="outputsSection" style="display: none;">
+            <h2>📦 Outputs</h2>
+            <div id="downloadButtons"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentSessionId = null;
+        const papers = [];
+
+        // Keyword tag handling
+        document.querySelectorAll('.keyword-tag').forEach(tag => {
+            tag.addEventListener('click', function() {
+                this.classList.toggle('active');
+                updateKeywordInput(this);
+            });
+        });
+
+        function updateKeywordInput(tag) {
+            const keyword = tag.dataset.keyword;
+            const inputId = tag.parentElement.previousElementSibling.id;
+            const input = document.getElementById(inputId);
+            const keywords = input.value.split(',').map(k => k.trim()).filter(k => k);
+
+            if (tag.classList.contains('active')) {
+                if (!keywords.includes(keyword)) {
+                    keywords.push(keyword);
+                }
+            } else {
+                const index = keywords.indexOf(keyword);
+                if (index > -1) {
+                    keywords.splice(index, 1);
+                }
+            }
+
+            input.value = keywords.join(', ');
+        }
+
+        async function startSearch() {
+            const name = document.getElementById('searchName').value;
+            const include = document.getElementById('includeKeywords').value.split(',').map(k => k.trim()).filter(k => k);
+            const exclude = document.getElementById('excludeKeywords').value.split(',').map(k => k.trim()).filter(k => k);
+            const maxResults = document.getElementById('maxResults').value;
+
+            if (include.length === 0) {
+                alert('Please enter at least one inclusion keyword');
+                return;
+            }
+
+            const params = {
+                name: name || undefined,
+                inclusionKeywords: include,
+                exclusionKeywords: exclude,
+                maxResults: maxResults ? parseInt(maxResults) : undefined
+            };
+
+            try {
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('progressSection').classList.add('active');
+
+                const response = await fetch('/api/search/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentSessionId = data.sessionId;
+                    subscribeToSession(data.sessionId);
+                } else {
+                    alert('Error: ' + data.error);
+                    document.getElementById('startBtn').disabled = false;
+                }
+            } catch (error) {
+                alert('Error starting search: ' + error.message);
+                document.getElementById('startBtn').disabled = false;
+            }
+        }
+
+        function subscribeToSession(sessionId) {
+            socket.emit('subscribe', sessionId);
+
+            socket.on(`progress:${sessionId}`, (progress) => {
+                updateProgress(progress);
+            });
+
+            socket.on(`paper:${sessionId}`, (paper) => {
+                papers.push(paper);
+                addPaperToList(paper);
+            });
+
+            socket.on(`outputs:${sessionId}`, (outputs) => {
+                showOutputs(outputs);
+            });
+
+            socket.on(`error:${sessionId}`, (error) => {
+                alert('Error: ' + error.message);
+            });
+        }
+
+        function updateProgress(progress) {
+            document.getElementById('statusText').textContent = progress.currentTask;
+            document.getElementById('nextTask').textContent = 'Next: ' + progress.nextTask;
+            document.getElementById('progressBar').style.width = progress.progress + '%';
+            document.getElementById('progressBar').textContent = Math.round(progress.progress) + '%';
+            document.getElementById('totalPapers').textContent = progress.totalPapers;
+            document.getElementById('includedPapers').textContent = progress.includedPapers;
+            document.getElementById('excludedPapers').textContent = progress.excludedPapers;
+            document.getElementById('timeElapsed').textContent = Math.round(progress.timeElapsed / 1000) + 's';
+
+            if (progress.screenshot) {
+                const container = document.getElementById('screenshotContainer');
+                container.innerHTML = `<img src="data:image/png;base64,${progress.screenshot}" class="screenshot" alt="Browser screenshot">`;
+            }
+
+            if (progress.status === 'completed') {
+                document.getElementById('startBtn').disabled = false;
+            }
+        }
+
+        function addPaperToList(paper) {
+            const list = document.getElementById('papersList');
+            const item = document.createElement('div');
+            item.className = 'paper-item';
+            item.innerHTML = `
+                <div class="paper-title">${paper.title}</div>
+                <div class="paper-meta">${paper.authors.join(', ')} (${paper.year})</div>
+            `;
+            list.insertBefore(item, list.firstChild);
+        }
+
+        function showOutputs(outputs) {
+            const section = document.getElementById('outputsSection');
+            const buttons = document.getElementById('downloadButtons');
+
+            section.style.display = 'block';
+            buttons.innerHTML = `
+                <button class="download-btn" onclick="downloadFile('csv')">📄 Download CSV</button>
+                <button class="download-btn" onclick="downloadFile('bibtex')">📚 Download BibTeX</button>
+                <button class="download-btn" onclick="downloadFile('latex')">📝 Download LaTeX</button>
+                <button class="download-btn" onclick="downloadFile('zip')">📦 Download ZIP</button>
+            `;
+        }
+
+        function downloadFile(type) {
+            window.location.href = `/api/sessions/${currentSessionId}/download/${type}`;
+        }
+    </script>
+</body>
+</html>
