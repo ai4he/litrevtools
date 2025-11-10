@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SearchForm } from '../components/SearchForm';
 import { ProgressDashboard } from '../components/ProgressDashboard';
-import { ScreenshotViewer } from '../components/ScreenshotViewer';
 import { PaperList } from '../components/PaperList';
 import { OutputDownloads } from '../components/OutputDownloads';
 import { useSocket } from '../hooks/useSocket';
@@ -122,18 +121,8 @@ export const SearchPage: React.FC = () => {
               onStop={handleStop}
             />
 
-            {/* Two Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Left Column: Screenshot */}
-              <div>
-                <ScreenshotViewer screenshot={progress.screenshot} />
-              </div>
-
-              {/* Right Column: Outputs */}
-              <div>
-                <OutputDownloads sessionId={sessionId} />
-              </div>
-            </div>
+            {/* Output Downloads */}
+            <OutputDownloads sessionId={sessionId} />
 
             {/* Papers List */}
             <PaperList papers={papers} />
