@@ -16,6 +16,18 @@ export const SearchPage: React.FC = () => {
   const { progress, papers, error, clearError } = useProgress(socket, sessionId);
 
   useEffect(() => {
+    console.log('[SearchPage] State:', {
+      sessionId,
+      isSearching,
+      isConnected,
+      hasProgress: !!progress,
+      progressStatus: progress?.status,
+      papersCount: papers.length,
+      error
+    });
+  }, [sessionId, isSearching, isConnected, progress, papers, error]);
+
+  useEffect(() => {
     if (error) {
       alert(`Error: ${error}`);
       clearError();

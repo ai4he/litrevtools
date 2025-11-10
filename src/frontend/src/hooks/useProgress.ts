@@ -9,42 +9,61 @@ export const useProgress = (socket: Socket | null, sessionId: string | null) => 
 
   useEffect(() => {
     if (!socket || !sessionId) {
+      console.log('[useProgress] Skipping setup - socket:', !!socket, 'sessionId:', sessionId);
       return;
     }
+
+    console.log('[useProgress] Setting up listeners for session:', sessionId);
 
     // Subscribe to session updates
     socket.emit('subscribe', sessionId);
 
     // Listen for progress updates
     const progressHandler = (data: ProgressUpdate) => {
+      console.log('[useProgress] Received progress update:', data);
       setProgress(data);
     };
 
     // Listen for new papers
     const paperHandler = (paper: Paper) => {
+      console.log('[useProgress] Received paper:', paper.title);
       setPapers((prev) => [...prev, paper]);
     };
 
     // Listen for errors
     const errorHandler = (err: { message: string }) => {
+      console.log('[useProgress] Received error:', err);
       setError(err.message);
     };
 
     // Listen for outputs
     const outputsHandler = (data: any) => {
-      console.log('Outputs generated:', data);
+      console.log('[useProgress] Outputs generated:', data);
     };
 
-    socket.on(`progress:${sessionId}`, progressHandler);
-    socket.on(`paper:${sessionId}`, paperHandler);
-    socket.on(`error:${sessionId}`, errorHandler);
-    socket.on(`outputs:${sessionId}`, outputsHandler);
+    const progressEvent = `progress:${sessionId}`;
+    const paperEvent = `paper:${sessionId}`;
+    const errorEvent = `error:${sessionId}`;
+    const outputsEvent = `outputs:${sessionId}`;
+
+    console.log('[useProgress] Registering listeners:', {
+      progress: progressEvent,
+      paper: paperEvent,
+      error: errorEvent,
+      outputs: outputsEvent
+    });
+
+    socket.on(progressEvent, progressHandler);
+    socket.on(paperEvent, paperHandler);
+    socket.on(errorEvent, errorHandler);
+    socket.on(outputsEvent, outputsHandler);
 
     return () => {
-      socket.off(`progress:${sessionId}`, progressHandler);
-      socket.off(`paper:${sessionId}`, paperHandler);
-      socket.off(`error:${sessionId}`, errorHandler);
-      socket.off(`outputs:${sessionId}`, outputsHandler);
+      console.log('[useProgress] Cleaning up listeners for:', sessionId);
+      socket.off(progressEvent, progressHandler);
+      socket.off(paperEvent, paperHandler);
+      socket.off(errorEvent, errorHandler);
+      socket.off(outputsEvent, outputsHandler);
       socket.emit('unsubscribe', sessionId);
     };
   }, [socket, sessionId]);

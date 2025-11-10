@@ -1,0 +1,65 @@
+@article{yan2024surveymathematical,
+  title={A Survey of Mathematical Reasoning in the Era of Multimodal Large Language Model: Benchmark, Method \& Challenges},
+  author={Yibo Yan and Jiamin Su and Jianxiang He and Fangteng Fu and Xu Zheng and Yuanhuiyi Lyu and Kun Wang and Shen Wang and Qingsong Wen and Xuming Hu},
+  year={2024},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2412.11936},
+  url={https://www.semanticscholar.org/paper/9272146b77e6aa6756984e54ab4edebb2f96a7d6},
+  abstract={Mathematical reasoning, a core aspect of human cognition, is vital across many domains, from educational problem-solving to scientific advancements. As artificial general intelligence (AGI) progresses, integrating large language models (LLMs) with mathematical reasoning tasks is becoming increasingly significant. This survey provides the first comprehensive analysis of mathematical reasoning in the era of multimodal large language models (MLLMs). We review over 200 studies published since 2021, and examine the state-of-the-art developments in Math-LLMs, with a focus on multimodal settings. We categorize the field into three dimensions: benchmarks, methodologies, and challenges. In particular, we explore multimodal mathematical reasoning pipeline, as well as the role of (M)LLMs and the associated methodologies. Finally, we identify five major challenges hindering the realization of AGI in this domain, offering insights into the future direction for enhancing multimodal reasoning capabilities. This survey serves as a critical resource for the research community in advancing the capabilities of LLMs to tackle complex multimodal reasoning tasks.},
+  keywords={arxiv:2412.11936}
+}
+
+@article{li2024finegrainedhallucination,
+  title={Fine-grained Hallucination Detection and Mitigation in Language Model Mathematical Reasoning},
+  author={Ruosen Li and Ziming Luo and Xinya Du},
+  year={2024},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2410.06304},
+  url={https://www.semanticscholar.org/paper/fcdf9c0c77c31f14d2bb80abe431b3f3b62b8602},
+  abstract={Hallucinations in large language models (LLMs) pose significant challenges in tasks requiring complex multi-step reasoning, such as mathematical problem-solving. Existing approaches primarily detect the presence of hallucinations but lack a nuanced understanding of their types and manifestations. In this paper, we first introduce a comprehensive taxonomy that categorizes the common hallucinations in mathematical reasoning tasks into six types. We then propose FG-PRM (Fine-Grained Process Reward Model), an augmented model designed to detect and mitigate hallucinations in a fine-grained, step-level manner. To address the limitations of manually labeling training data, we propose an automated method for generating fine-grained hallucination data using LLMs. Our FG-PRM demonstrates superior performance across two key tasks: 1) Fine-grained hallucination detection: classifying hallucination types for each reasoning step; and 2) Verification: ranking multiple LLM-generated outputs to select the most accurate solution. Our experiments show that FG-PRM excels in fine-grained hallucination detection and substantially boosts the performance of LLMs on GSM8K and MATH benchmarks. These results highlight the benefits of fine-grained supervision in enhancing the reliability and interpretability of LLM reasoning processes.},
+  keywords={arxiv:2410.06304}
+}
+
+@article{das2024mathsenseitoolaugmented,
+  title={MATHSENSEI: A Tool-Augmented Large Language Model for Mathematical Reasoning},
+  author={Debrup Das and Debopriyo Banerjee and Somak Aditya and Ashish Kulkarni},
+  year={2024},
+  booktitle={North American Chapter of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2402.17231},
+  url={https://www.semanticscholar.org/paper/2c4bf56c5b1a1f06ee3ca21ce964ba2c8c66cb2c},
+  abstract={Tool-augmented Large Language Models (TALMs) are known to enhance the skillset of large language models (LLMs), thereby, leading to their improved reasoning abilities across many tasks. While, TALMs have been successfully employed in different question-answering benchmarks, their efficacy on complex mathematical reasoning benchmarks, and the potential complementary benefits offered by tools for knowledge retrieval and mathematical equation solving are open research questions. In this work, we present MathSensei, a tool-augmented large language model for mathematical reasoning. We study the complementary benefits of the tools - knowledge retriever (Bing Web Search), program generator + executor (Python), and symbolic equation solver (Wolfram-Alpha API) through evaluations on mathematical reasoning datasets. We perform exhaustive ablations on MATH, a popular dataset for evaluating mathematical reasoning on diverse mathematical disciplines. We also conduct experiments involving well-known tool planners to study the impact of tool sequencing on the model performance. MathSensei achieves 13.5\% better accuracy over gpt-3.5-turbo with Chain-of-Thought on the MATH dataset. We further observe that TALMs are not as effective for simpler math word problems (in GSM-8K), and the benefit increases as the complexity and required knowledge increases (progressively over AQuA, MMLU-Math, and higher level complex questions in MATH). The code and data are available at https://github.com/Debrup-61/MathSensei.},
+  keywords={arxiv:2402.17231}
+}
+
+@article{liao2023modelingcomplex,
+  title={Modeling Complex Mathematical Reasoning via Large Language Model based MathAgent},
+  author={Haoran Liao and Qinyi Du and Shaohua Hu and Hao He and Yanyan Xu and Jidong Tian and Yaohui Jin},
+  year={2023},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2312.08926},
+  url={https://www.semanticscholar.org/paper/7017c58e19f4db0c38040935cc9fb7b7090a466d},
+  abstract={Large language models (LLMs) face challenges in solving complex mathematical problems that require comprehensive capacities to parse the statements, associate domain knowledge, perform compound logical reasoning, and integrate the intermediate rationales. Tackling all these problems once could be arduous for LLMs, thus leading to confusion in generation. In this work, we explore the potential of enhancing LLMs with agents by meticulous decomposition and modeling of mathematical reasoning process. Specifically, we propose a formal description of the mathematical solving and extend LLMs with an agent-based zero-shot framework named \$\textbackslash\{\}bf\{P\}\$lanner-\$\textbackslash\{\}bf\{R\}\$easoner-\$\textbackslash\{\}bf\{E\}\$xecutor-\$\textbackslash\{\}bf\{R\}\$eflector (PRER). We further provide and implement two MathAgents that define the logical forms and inherent relations via a pool of actions in different grains and orientations: MathAgent-M adapts its actions to LLMs, while MathAgent-H aligns with humankind. Experiments on miniF2F and MATH have demonstrated the effectiveness of PRER and proposed MathAgents, achieving an increase of \$12.3\textbackslash\{\}\%\$(\$53.9\textbackslash\{\}\%\textbackslash\{\}xrightarrow\{\}66.2\textbackslash\{\}\%\$) on the MiniF2F, \$9.2\textbackslash\{\}\%\$ (\$49.8\textbackslash\{\}\%\textbackslash\{\}xrightarrow\{\}59.0\textbackslash\{\}\%\$) on MATH, and \$13.2\textbackslash\{\}\%\$(\$23.2\textbackslash\{\}\%\textbackslash\{\}xrightarrow\{\}35.4\textbackslash\{\}\%\$) for level-5 problems of MATH against GPT-4. Further analytical results provide more insightful perspectives on exploiting the behaviors of LLMs as agents.},
+  keywords={arxiv:2312.08926}
+}
+
+@article{yuan2023scalingrelationship,
+  title={Scaling Relationship on Learning Mathematical Reasoning with Large Language Models},
+  author={Zheng Yuan and Hongyi Yuan and Cheng Li and Guanting Dong and Chuanqi Tan and Chang Zhou},
+  year={2023},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2308.01825},
+  url={https://www.semanticscholar.org/paper/91206346edbe28abb606d7b3425cd455d4019d4f},
+  abstract={Mathematical reasoning is a challenging task for large language models (LLMs), while the scaling relationship of it with respect to LLM capacity is under-explored. In this paper, we investigate how the pre-training loss, supervised data amount, and augmented data amount influence the reasoning performances of a supervised LLM. We find that pre-training loss is a better indicator of the model's performance than the model's parameter count. We apply supervised fine-tuning (SFT) with different amounts of supervised data and empirically find a log-linear relation between data amount and model performance, and we find better models improve less with enlarged supervised datasets. To augment more data samples for improving model performances without any human effort, we propose to apply Rejection sampling Fine-Tuning (RFT). RFT uses supervised models to generate and collect correct reasoning paths as augmented fine-tuning datasets. We find with augmented samples containing more distinct reasoning paths, RFT improves mathematical reasoning performance more for LLMs. We also find RFT brings more improvement for less performant LLMs. Furthermore, we combine rejection samples from multiple models which push LLaMA-7B to an accuracy of 49.3\textbackslash\{\}\% on GSM8K which outperforms the supervised fine-tuning (SFT) accuracy of 35.9\textbackslash\{\}\% significantly.},
+  keywords={arxiv:2308.01825}
+}
+
+@article{luo2023wizardmathempowering,
+  title={WizardMath: Empowering Mathematical Reasoning for Large Language Models via Reinforced Evol-Instruct},
+  author={Haipeng Luo and Qingfeng Sun and Can Xu and Pu Zhao and Jian-Guang Lou and Chongyang Tao and Xiubo Geng and Qingwei Lin and Shifeng Chen and Dongmei Zhang},
+  year={2023},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2308.09583},
+  url={https://www.semanticscholar.org/paper/dd18782960f9ee4c66b79e1518b342ad3f8d19e7},
+  abstract={Large language models (LLMs), such as GPT-4, have shown remarkable performance in natural language processing (NLP) tasks, including challenging mathematical reasoning. However, most existing open-source models are only pre-trained on large-scale internet data and without math-related optimization. In this paper, we present WizardMath, which enhances the mathematical CoT reasoning abilities of LLMs without using external python tools, by applying our proposed Reinforcement Learning from Evol-Instruct Feedback (RLEIF) method to the domain of math. Through extensive experiments on two mathematical reasoning benchmarks, namely GSM8k and MATH, we reveal the extraordinary capabilities of our model. Remarkably, WizardMath-Mistral 7B surpasses top-tier open-source LLMs by a substantial margin with higher data efficiency. Furthermore, WizardMath 70B even outperforms GPT-3.5-Turbo, Claude 2, Gemini Pro and GPT-4-early-version. Additionally, our preliminary exploration highlights the pivotal role of instruction evolution and process supervision in achieving exceptional math performance. For more details refer to https://github.com/nlpxucan/WizardLM},
+  keywords={arxiv:2308.09583}
+}

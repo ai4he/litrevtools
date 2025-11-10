@@ -46,6 +46,9 @@ const litrev = new LitRevTools();
 // Active searches map
 const activeSearches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
 
+// Event buffer to store events until client subscribes
+const eventBuffer: Map<string, Array<{ event: string; data: any }>> = new Map();
+
 // REST API Routes
 
 // Authentication Routes
@@ -132,10 +135,27 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
     // Create a new tools instance for this search
     const tools = new LitRevTools();
 
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        // Client is subscribed, emit directly
+        io.emit(eventName, data);
+      } else {
+        // Client not subscribed yet, buffer the event
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
     // Start search with WebSocket callbacks that receive sessionId as parameter
     const sessionId = await tools.startSearch(params, {
       onProgress: (progress: SearchProgress, sid: string) => {
-        io.emit(`progress:${sid}`, progress);
+        emitOrBuffer(sid, 'progress', progress);
 
         if (progress.status === 'completed' || progress.status === 'error') {
           // Clean up
@@ -144,16 +164,16 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
             // Generate outputs
             tools.generateOutputs(sid).then(() => {
               const session = tools.getSession(sid);
-              io.emit(`outputs:${sid}`, session?.outputs);
+              emitOrBuffer(sid, 'outputs', session?.outputs);
             }).catch(console.error);
           }
         }
       },
       onPaper: (paper: Paper, sid: string) => {
-        io.emit(`paper:${sid}`, paper);
+        emitOrBuffer(sid, 'paper', paper);
       },
       onError: (error: Error, sid: string) => {
-        io.emit(`error:${sid}`, { message: error.message });
+        emitOrBuffer(sid, 'error', { message: error.message });
       }
     });
 
@@ -275,7 +295,22 @@ io.on('connection', (socket) => {
 
   // Subscribe to session updates
   socket.on('subscribe', (sessionId: string) => {
+    console.log(`Client ${socket.id} subscribing to session: ${sessionId}`);
     socket.join(`session:${sessionId}`);
+
+    // Replay buffered events if any
+    if (eventBuffer.has(sessionId)) {
+      const bufferedEvents = eventBuffer.get(sessionId)!;
+      console.log(`Replaying ${bufferedEvents.length} buffered events for session ${sessionId}`);
+
+      // Send each buffered event to the client
+      bufferedEvents.forEach(({ event, data }) => {
+        socket.emit(event, data);
+      });
+
+      // Clear the buffer after replay
+      eventBuffer.delete(sessionId);
+    }
   });
 
   // Unsubscribe from session updates
