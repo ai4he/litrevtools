@@ -43,22 +43,27 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     'Literature reviews of any kind are not allowed.'
   );
   const [apiKey, setApiKey] = useState('');
+  const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
+  const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
+
+  // Use csvSessionId if available (for CSV upload), otherwise use sessionId from Step 1
+  const activeSessionId = csvSessionId || sessionId;
 
   // Listen for semantic filter progress events via WebSocket
   useEffect(() => {
-    if (!socket || !sessionId) {
+    if (!socket || !activeSessionId) {
       return;
     }
 
-    console.log('[Step2] Setting up semantic-filter-progress listener for session:', sessionId);
+    console.log('[Step2] Setting up semantic-filter-progress listener for session:', activeSessionId);
 
     // Subscribe to session updates
-    socket.emit('subscribe', sessionId);
+    socket.emit('subscribe', activeSessionId);
 
     // Listen for progress
-    const progressEvent = `semantic-filter-progress:${sessionId}`;
-    const completeEvent = `semantic-filter-complete:${sessionId}`;
+    const progressEvent = `semantic-filter-progress:${activeSessionId}`;
+    const completeEvent = `semantic-filter-complete:${activeSessionId}`;
 
     const handleProgress = (progressData: SemanticFilteringProgress) => {
       console.log('[Step2] Received progress:', progressData);
@@ -79,8 +84,10 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
       console.log('[Step2] Filtering complete:', data);
       setIsFiltering(false);
       setProgress(null);
-      if (sessionId) {
-        onFilteringComplete(sessionId, data.papers || []);
+      const papers = data.papers || [];
+      setFilteredPapers(papers);
+      if (activeSessionId) {
+        onFilteringComplete(activeSessionId, papers);
       }
     };
 
@@ -91,9 +98,9 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
       console.log('[Step2] Cleaning up semantic-filter-progress listener');
       socket.off(progressEvent, handleProgress);
       socket.off(completeEvent, handleComplete);
-      socket.emit('unsubscribe', sessionId);
+      socket.emit('unsubscribe', activeSessionId);
     };
-  }, [socket, sessionId, onFilteringComplete]);
+  }, [socket, activeSessionId, onFilteringComplete]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -107,11 +114,6 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
   };
 
   const handleStartFiltering = async () => {
-    if (!enabled) {
-      setError('Please complete Step 1 or upload a CSV file first');
-      return;
-    }
-
     if (!apiKey.trim()) {
       setError('Please provide a Gemini API key');
       return;
@@ -122,7 +124,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
       return;
     }
 
-    if (!sessionId && useStep1Data) {
+    if (useStep1Data && !sessionId) {
       setError('No session available. Please complete Step 1 first.');
       return;
     }
@@ -151,9 +153,31 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
           apiKey
         });
       } else if (uploadedFile) {
-        // TODO: Handle CSV upload case
-        // For now, show error
-        throw new Error('CSV upload not yet implemented. Please use Step 1 results.');
+        // Handle CSV upload case
+        console.log('[Step2] Reading CSV file:', uploadedFile.name);
+
+        // Read CSV file content
+        const csvContent = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error('Failed to read CSV file'));
+          reader.readAsText(uploadedFile);
+        });
+
+        console.log('[Step2] Sending CSV to API (length:', csvContent.length, 'chars)');
+
+        // Send CSV to new endpoint
+        const response = await axios.post('/api/semantic-filter/csv', {
+          csvContent,
+          inclusionPrompt,
+          exclusionPrompt,
+          apiKey
+        });
+
+        // Set the temporary session ID returned from the server
+        const tempSessionId = response.data.sessionId;
+        console.log('[Step2] Received temp session ID:', tempSessionId);
+        setCsvSessionId(tempSessionId);
       }
 
       // Progress will come via WebSocket
@@ -166,13 +190,54 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
   };
 
   const handleDownloadLabeledCsv = async () => {
-    if (!sessionId) return;
     try {
-      const blob = await sessionAPI.download(sessionId, 'csv');
-      downloadBlob(blob, 'papers-labeled.csv');
+      if (csvSessionId && filteredPapers.length > 0) {
+        // For CSV upload, download from local state
+        console.log('[Step2] Downloading CSV from local state:', filteredPapers.length, 'papers');
+
+        // Convert papers to CSV
+        const headers = [
+          'ID', 'Title', 'Authors', 'Year', 'Abstract', 'URL', 'Citations', 'DOI', 'Venue',
+          'Systematic Filtering Inclusion', 'Systematic Filtering Inclusion Reasoning',
+          'Systematic Filtering Exclusion', 'Systematic Filtering Exclusion Reasoning',
+          'Included', 'Exclusion Reason'
+        ];
+
+        const rows = filteredPapers.map((paper: any) => [
+          paper.id || '',
+          paper.title || '',
+          (paper.authors || []).join('; '),
+          paper.year || '',
+          paper.abstract || '',
+          paper.url || '',
+          paper.citations || '',
+          paper.doi || '',
+          paper.venue || '',
+          paper.systematic_filtering_inclusion === true ? '1' : paper.systematic_filtering_inclusion === false ? '0' : '',
+          paper.systematic_filtering_inclusion_reasoning || '',
+          paper.systematic_filtering_exclusion === true ? '1' : paper.systematic_filtering_exclusion === false ? '0' : '',
+          paper.systematic_filtering_exclusion_reasoning || '',
+          paper.included ? 'Yes' : 'No',
+          paper.exclusionReason || ''
+        ]);
+
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, 'papers-labeled.csv');
+      } else if (sessionId) {
+        // For Step 1 data, download from server
+        const blob = await sessionAPI.download(sessionId, 'csv');
+        downloadBlob(blob, 'papers-labeled.csv');
+      } else {
+        setError('No data available for download');
+      }
     } catch (err: any) {
       console.error('Download failed:', err);
-      setError(err.response?.data?.message || 'Failed to download labeled CSV file');
+      setError(err.response?.data?.message || err.message || 'Failed to download labeled CSV file');
     }
   };
 
@@ -186,15 +251,17 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     itemsRemaining: progress.totalPapers - progress.processedPapers
   } : undefined;
 
+  const isEnabled = enabled || uploadedFile !== null;
+
   return (
-    <div className={`card ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className={`card ${!isEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
       {/* Step Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
           isComplete ? 'bg-green-100 text-green-600' :
           hasError ? 'bg-red-100 text-red-600' :
           isFiltering ? 'bg-blue-100 text-blue-600' :
-          enabled ? 'bg-yellow-100 text-yellow-600' :
+          isEnabled ? 'bg-yellow-100 text-yellow-600' :
           'bg-gray-100 text-gray-400'
         }`}>
           {isComplete ? <CheckCircle size={24} /> :
@@ -207,7 +274,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
             Apply LLM-based semantic filtering with inclusion and exclusion criteria
           </p>
         </div>
-        {!enabled && (
+        {!isEnabled && (
           <span className="px-3 py-1 bg-gray-200 text-gray-600 text-sm rounded-full">
             Locked
           </span>
@@ -234,7 +301,10 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
                 <input
                   type="radio"
                   checked={useStep1Data}
-                  onChange={() => setUseStep1Data(true)}
+                  onChange={() => {
+                    setUseStep1Data(true);
+                    setUploadedFile(null);
+                  }}
                   disabled={!sessionId}
                   className="w-4 h-4"
                 />
@@ -314,7 +384,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
           {/* Start Button */}
           <button
             onClick={handleStartFiltering}
-            disabled={!enabled || isFiltering}
+            disabled={!isEnabled || isFiltering}
             className="btn-primary w-full flex items-center justify-center gap-2"
           >
             <Play size={18} />
