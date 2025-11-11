@@ -27,7 +27,14 @@ export class LaTeXGenerator {
     searchParams: SearchParameters,
     prismaData: PRISMAData,
     outputPath: string,
-    onBatchProgress?: (currentBatch: number, papersInBatch: number) => void
+    onBatchProgress?: (
+      currentBatch: number,
+      papersInBatch: number,
+      papersProcessed: number,
+      papersRemaining: number,
+      currentDocSize: number,
+      estimatedFinalSize: number
+    ) => void
   ): Promise<string> {
     console.log(`[LaTeXGenerator] Total papers received: ${papers.length}`);
     const includedPapers = papers.filter(p => p.included);
@@ -64,12 +71,21 @@ export class LaTeXGenerator {
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const papersProcessedSoFar = includedPapers.slice(0, (i + 1) * this.batchSize);
+      const papersProcessed = Math.min(papersProcessedSoFar.length, includedPapers.length);
+      const papersRemaining = includedPapers.length - papersProcessed;
 
       console.log(`[LaTeXGenerator] Processing batch ${i + 1}/${batches.length} (${batch.length} papers)`);
-      console.log(`[LaTeXGenerator] Total papers processed so far: ${papersProcessedSoFar.length}/${includedPapers.length}`);
+      console.log(`[LaTeXGenerator] Total papers processed so far: ${papersProcessed}/${includedPapers.length}`);
 
-      // Emit progress
-      onBatchProgress?.(i + 1, batch.length);
+      // Calculate current document size
+      const currentDocSize = currentDraft ? this.estimateDocumentSize(currentDraft) : 0;
+      // Estimate final size based on current progress
+      const estimatedFinalSize = papersProcessed > 0
+        ? Math.round((currentDocSize / papersProcessed) * includedPapers.length)
+        : 0;
+
+      // Emit progress with enhanced metrics
+      onBatchProgress?.(i + 1, batch.length, papersProcessed, papersRemaining, currentDocSize, estimatedFinalSize);
 
       if (i === 0) {
         // First batch: generate initial draft
@@ -312,5 +328,26 @@ ${rows}
       .replace(/\}/g, '\\}')
       .replace(/~/g, '\\textasciitilde{}')
       .replace(/\^/g, '\\textasciicircum{}');
+  }
+
+  /**
+   * Estimate document size in characters
+   */
+  private estimateDocumentSize(draft: {
+    abstract: string;
+    introduction: string;
+    methodology: string;
+    results: string;
+    discussion: string;
+    conclusion: string;
+  }): number {
+    return (
+      draft.abstract.length +
+      draft.introduction.length +
+      draft.methodology.length +
+      draft.results.length +
+      draft.discussion.length +
+      draft.conclusion.length
+    );
   }
 }

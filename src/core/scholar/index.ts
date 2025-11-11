@@ -16,6 +16,8 @@ export class ScholarExtractor {
   private onProgress?: ProgressCallback;
   private onPaper?: PaperCallback;
   private llmService?: LLMService;
+  private parameters?: SearchParameters;
+  private timerInterval?: NodeJS.Timeout;
 
   constructor(database: LitRevDatabase) {
     this.database = database;
@@ -165,11 +167,23 @@ export class ScholarExtractor {
             ? Math.min(maxPerRequest, maxResultsPerYear - fetchedForYear)
             : maxPerRequest;
 
+          const apiCallTime = Date.now();
           const result = await semanticScholar.search({
             query: parameters.inclusionKeywords.join(' '),
             year,
             limit,
             offset
+          });
+
+          // Track this API call in progress
+          this.updateProgress({
+            lastApiCall: {
+              year,
+              recordsRequested: limit,
+              recordsReceived: result.papers.length,
+              offset,
+              timestamp: apiCallTime
+            }
           });
 
           // Filter by month if specified
@@ -452,11 +466,22 @@ export class ScholarExtractor {
         ? Math.min(maxPerRequest, maxResults - totalFetched)
         : maxPerRequest;
 
+      const apiCallTime = Date.now();
       const result = await semanticScholar.search({
         query: parameters.inclusionKeywords.join(' '),
         // No year filter - search all years
         limit,
         offset
+      });
+
+      // Track this API call in progress
+      this.updateProgress({
+        lastApiCall: {
+          recordsRequested: limit,
+          recordsReceived: result.papers.length,
+          offset,
+          timestamp: apiCallTime
+        }
       });
 
       // Filter by month if specified (though this is less meaningful without year context)
@@ -690,5 +715,215 @@ export class ScholarExtractor {
    */
   getLLMUsageStats() {
     return this.llmService?.getUsageStats() || null;
+  }
+
+  /**
+   * Start a search non-blocking - returns sessionId immediately
+   * and allows background execution
+   */
+  async startSearchNonBlocking(
+    parameters: SearchParameters,
+    onProgress?: ProgressCallback,
+    onPaper?: PaperCallback
+  ): Promise<string> {
+    if (this.isRunning) {
+      throw new Error('A search is already running');
+    }
+
+    // Store parameters and callbacks
+    this.parameters = parameters;
+    this.onProgress = onProgress;
+    this.onPaper = onPaper;
+
+    // Create session
+    this.sessionId = this.database.createSession(parameters);
+
+    // Initialize progress with idle state
+    this.updateProgress({
+      status: 'idle',
+      currentTask: 'Waiting to start',
+      nextTask: 'Initializing search',
+      progress: 0
+    });
+
+    return this.sessionId;
+  }
+
+  /**
+   * Execute search in background (called after startSearchNonBlocking)
+   */
+  async executeSearchInBackground(): Promise<void> {
+    if (!this.sessionId || !this.parameters) {
+      throw new Error('Search not initialized - call startSearchNonBlocking first');
+    }
+
+    this.isRunning = true;
+    this.startTime = Date.now();
+
+    // Start the timer that updates elapsed time every second
+    this.startTimer();
+
+    // Update progress
+    this.updateProgress({
+      status: 'running',
+      currentTask: 'Initializing search',
+      nextTask: 'Estimating total papers',
+      progress: 2
+    });
+
+    try {
+      const parameters = this.parameters;
+
+      // Determine year range
+      let years: number[] | undefined;
+
+      if (parameters.startYear !== undefined || parameters.endYear !== undefined) {
+        const currentYear = new Date().getFullYear();
+        const startYear = parameters.startYear || 2000;
+        const endYear = parameters.endYear || currentYear;
+        years = this.generateYearRange(startYear, endYear);
+      }
+
+      // ESTIMATION PHASE: Estimate total papers before starting
+      await this.estimateTotalPapers(parameters, years);
+
+      // Execute parallel search
+      await this.executeParallelSearch(parameters, years);
+
+      // Initialize LLM service if enabled
+      if (parameters.llmConfig?.enabled) {
+        this.updateProgress({
+          currentTask: 'Initializing LLM service',
+          nextTask: 'Applying intelligent filters',
+          progress: 82
+        });
+
+        this.llmService = new LLMService(parameters.llmConfig);
+        await this.llmService.initialize();
+      }
+
+      // Apply exclusion filters (LLM-based or rule-based)
+      await this.applyFilters(parameters);
+
+      // Stop the timer
+      this.stopTimer();
+
+      // Mark as completed
+      this.updateProgress({
+        status: 'completed',
+        currentTask: 'Search completed',
+        nextTask: 'Ready for output generation',
+        progress: 100
+      });
+    } catch (error) {
+      this.stopTimer();
+      this.updateProgress({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        progress: 0
+      });
+      throw error;
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  /**
+   * Estimate total papers that will be found (before actual search)
+   */
+  private async estimateTotalPapers(
+    parameters: SearchParameters,
+    years: number[] | undefined
+  ): Promise<void> {
+    if (!this.sessionId) throw new Error('No active session');
+
+    this.updateProgress({
+      status: 'estimating',
+      isEstimating: true,
+      currentTask: 'Estimating total papers available',
+      nextTask: 'Will begin fetching papers after estimation',
+      progress: 5
+    });
+
+    const semanticScholar = new SemanticScholarService();
+    let estimatedTotal = 0;
+
+    try {
+      if (!years) {
+        // No year filter - get total from a single query
+        const result = await semanticScholar.search({
+          query: parameters.inclusionKeywords.join(' '),
+          limit: 1,
+          offset: 0
+        });
+        estimatedTotal = result.total;
+      } else {
+        // Estimate by sampling a few years
+        const sampleYears = years.length > 5 ? [years[0], years[Math.floor(years.length / 2)], years[years.length - 1]] : years;
+
+        for (const year of sampleYears) {
+          const result = await semanticScholar.search({
+            query: parameters.inclusionKeywords.join(' '),
+            year,
+            limit: 1,
+            offset: 0
+          });
+          estimatedTotal += result.total;
+        }
+
+        // Extrapolate to all years if we sampled
+        if (sampleYears.length < years.length) {
+          estimatedTotal = Math.round((estimatedTotal / sampleYears.length) * years.length);
+        }
+      }
+
+      // Apply maxResults cap if specified
+      if (parameters.maxResults && estimatedTotal > parameters.maxResults) {
+        estimatedTotal = parameters.maxResults;
+      }
+
+      this.updateProgress({
+        status: 'running',
+        isEstimating: false,
+        estimatedTotalPapers: estimatedTotal,
+        currentTask: `Estimation complete: ~${estimatedTotal} papers found`,
+        nextTask: 'Beginning paper extraction',
+        progress: 10
+      });
+
+      console.log(`[Estimator] Estimated ${estimatedTotal} total papers`);
+    } catch (error) {
+      console.error('[Estimator] Failed to estimate, continuing anyway:', error);
+      this.updateProgress({
+        isEstimating: false,
+        currentTask: 'Estimation unavailable, proceeding with search',
+        nextTask: 'Beginning paper extraction',
+        progress: 10
+      });
+    }
+  }
+
+  /**
+   * Start a timer that updates elapsed time every second
+   */
+  private startTimer(): void {
+    this.stopTimer(); // Clear any existing timer
+
+    this.timerInterval = setInterval(() => {
+      if (this.sessionId && this.isRunning) {
+        // Just trigger an update to refresh timeElapsed
+        this.updateProgress({});
+      }
+    }, 1000); // Update every second
+  }
+
+  /**
+   * Stop the running timer
+   */
+  private stopTimer(): void {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = undefined;
+    }
   }
 }

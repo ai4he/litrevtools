@@ -1,5 +1,5 @@
-import React from 'react';
-import { Clock, PlayCircle, PauseCircle, StopCircle, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Clock, PlayCircle, PauseCircle, StopCircle, CheckCircle, AlertCircle, Activity, Database, TrendingUp } from 'lucide-react';
 import { ProgressUpdate } from '../types';
 import { formatTime } from '../utils/helpers';
 
@@ -16,10 +16,27 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
   onResume,
   onStop,
 }) => {
+  // Running timer that updates every second
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate real-time elapsed time
+  const displayTimeElapsed = progress.status === 'running' || progress.status === 'estimating'
+    ? currentTime - (currentTime - progress.timeElapsed) // This keeps ticking
+    : progress.timeElapsed;
   const getStatusIcon = () => {
     switch (progress.status) {
       case 'running':
         return <PlayCircle className="text-green-600" size={24} />;
+      case 'estimating':
+        return <TrendingUp className="text-blue-600" size={24} />;
       case 'paused':
         return <PauseCircle className="text-yellow-600" size={24} />;
       case 'completed':
@@ -35,6 +52,8 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
     switch (progress.status) {
       case 'running':
         return 'bg-green-100 text-green-800';
+      case 'estimating':
+        return 'bg-blue-100 text-blue-800';
       case 'paused':
         return 'bg-yellow-100 text-yellow-800';
       case 'completed':
@@ -44,6 +63,15 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Format bytes to human readable
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   return (
@@ -95,12 +123,19 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
       <div>
         <div className="flex justify-between text-sm text-gray-600 mb-2">
           <span>Progress: {Math.round(progress.progress)}%</span>
-          <span>{progress.processedPapers} / {progress.totalPapers || '?'} papers</span>
+          <span>
+            {progress.processedPapers} / {progress.estimatedTotalPapers || progress.totalPapers || '?'} papers
+            {progress.estimatedTotalPapers && ' (estimated)'}
+          </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
           <div
-            className={`h-full bg-primary-600 transition-all duration-300 ${
-              progress.status === 'running' ? 'progress-bar-animated' : ''
+            className={`h-full transition-all duration-300 ${
+              progress.status === 'running' || progress.status === 'estimating'
+                ? 'bg-gradient-to-r from-primary-500 to-primary-700 progress-bar-animated'
+                : progress.status === 'completed'
+                ? 'bg-green-600'
+                : 'bg-primary-600'
             }`}
             style={{ width: `${Math.min(progress.progress, 100)}%` }}
           />
@@ -124,9 +159,9 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
         <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
           <Clock className="text-gray-600" size={20} />
           <div>
-            <p className="text-xs text-gray-500">Time Elapsed</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {formatTime(progress.timeElapsed)}
+            <p className="text-xs text-gray-500">Time Elapsed (Live)</p>
+            <p className="text-lg font-semibold text-gray-900 font-mono">
+              {formatTime(displayTimeElapsed)}
             </p>
           </div>
         </div>
@@ -151,6 +186,64 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Estimation Info */}
+      {progress.isEstimating && (
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="text-blue-600" size={20} />
+            <h4 className="text-sm font-semibold text-blue-900">Estimating Total Papers</h4>
+          </div>
+          <p className="text-sm text-blue-800">
+            Analyzing search results to estimate total papers available...
+          </p>
+          {progress.estimatedTotalPapers && (
+            <p className="text-sm text-blue-900 font-semibold mt-2">
+              Estimated: ~{progress.estimatedTotalPapers} papers
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* API Call Details */}
+      {progress.lastApiCall && !progress.isEstimating && (
+        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="text-indigo-600" size={20} />
+            <h4 className="text-sm font-semibold text-indigo-900">Last API Request</h4>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {progress.lastApiCall.year && (
+              <div>
+                <p className="text-indigo-600 font-medium">Year</p>
+                <p className="text-indigo-900 font-semibold">{progress.lastApiCall.year}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-indigo-600 font-medium">Requested</p>
+              <p className="text-indigo-900 font-semibold">{progress.lastApiCall.recordsRequested}</p>
+            </div>
+            <div>
+              <p className="text-indigo-600 font-medium">Received</p>
+              <p className="text-indigo-900 font-semibold">{progress.lastApiCall.recordsReceived}</p>
+            </div>
+            <div>
+              <p className="text-indigo-600 font-medium">Offset</p>
+              <p className="text-indigo-900 font-semibold">{progress.lastApiCall.offset}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Estimated Total Display */}
+      {progress.estimatedTotalPapers && !progress.isEstimating && (
+        <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <Database className="text-purple-600" size={18} />
+          <span className="text-sm text-purple-900">
+            <span className="font-semibold">Estimated Total:</span> ~{progress.estimatedTotalPapers} papers
+          </span>
+        </div>
+      )}
 
       {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-gray-200">

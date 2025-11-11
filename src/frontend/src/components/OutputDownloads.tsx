@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Download, FileText, File, Package, Loader2 } from 'lucide-react';
 import { sessionAPI } from '../utils/api';
-import { downloadBlob } from '../utils/helpers';
+import { downloadBlob, formatTime } from '../utils/helpers';
 import { useSocket } from '../hooks/useSocket';
 import { OutputProgress } from '../types';
+
+// Helper function to format bytes
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+};
 
 interface OutputDownloadsProps {
   sessionId: string;
@@ -215,28 +224,71 @@ export const OutputDownloads: React.FC<OutputDownloadsProps> = ({ sessionId, dis
         </button>
       </div>
 
-      {/* Progress Bar */}
+      {/* Enhanced Progress Bar */}
       {outputProgress && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-blue-900">{outputProgress.currentTask}</span>
-            <span className="text-sm text-blue-700">{outputProgress.progress}%</span>
+            <span className="text-sm text-blue-700 font-semibold">{Math.round(outputProgress.progress)}%</span>
           </div>
-          <div className="w-full bg-blue-200 rounded-full h-2.5 mb-2">
+
+          {/* Progress Bar */}
+          <div className="w-full bg-blue-200 rounded-full h-3">
             <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-blue-500 to-blue-700 h-3 rounded-full transition-all duration-300"
               style={{ width: `${outputProgress.progress}%` }}
             ></div>
           </div>
+
+          {/* Stage Info */}
           <div className="flex justify-between text-xs text-blue-700">
-            <span>Stage {outputProgress.completedStages}/{outputProgress.totalStages}: {outputProgress.stage}</span>
-            {outputProgress.latexBatchProgress && (
+            <span className="font-medium">
+              Stage {outputProgress.completedStages}/{outputProgress.totalStages}: {outputProgress.stage.toUpperCase()}
+            </span>
+            {outputProgress.timeElapsed !== undefined && (
               <span>
-                LaTeX Batch {outputProgress.latexBatchProgress.currentBatch}/{outputProgress.latexBatchProgress.totalBatches}
-                ({outputProgress.latexBatchProgress.papersInBatch} papers)
+                Elapsed: {formatTime(outputProgress.timeElapsed)}
+                {outputProgress.estimatedTimeRemaining !== undefined && outputProgress.estimatedTimeRemaining > 0 && (
+                  <> | ETA: {formatTime(outputProgress.estimatedTimeRemaining)}</>
+                )}
               </span>
             )}
           </div>
+
+          {/* LaTeX Generation Details */}
+          {outputProgress.latexBatchProgress && (
+            <div className="pt-3 border-t border-blue-300 space-y-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <p className="text-blue-600 font-medium">Batch</p>
+                  <p className="text-blue-900 font-semibold">
+                    {outputProgress.latexBatchProgress.currentBatch}/{outputProgress.latexBatchProgress.totalBatches}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Papers Processed</p>
+                  <p className="text-blue-900 font-semibold">
+                    {outputProgress.latexBatchProgress.papersProcessed || 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Papers Remaining</p>
+                  <p className="text-blue-900 font-semibold">
+                    {outputProgress.latexBatchProgress.papersRemaining || 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Document Size</p>
+                  <p className="text-blue-900 font-semibold">
+                    {formatBytes(outputProgress.latexBatchProgress.currentDocumentSize || 0)}
+                    {outputProgress.latexBatchProgress.estimatedFinalSize > 0 && (
+                      <span className="text-blue-700"> / ~{formatBytes(outputProgress.latexBatchProgress.estimatedFinalSize)}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
