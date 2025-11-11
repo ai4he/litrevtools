@@ -98,7 +98,11 @@ export class OutputManager {
           latexBatchProgress: {
             currentBatch: 0,
             totalBatches,
-            papersInBatch: 0
+            papersInBatch: 0,
+            papersProcessed: 0,
+            papersRemaining: includedCount,
+            currentDocumentSize: 0,
+            estimatedFinalSize: 0
           },
           progress: Math.round((completedStages / totalStages) * 100)
         });
