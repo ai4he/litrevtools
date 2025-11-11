@@ -32,6 +32,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [fallbackStrategy, setFallbackStrategy] = useState<'rule_based' | 'prompt_user' | 'fail'>('rule_based');
   const [enableKeyRotation, setEnableKeyRotation] = useState(true);
 
+  // Semantic Filtering Prompts
+  const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('');
+  const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('');
+
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();
     if (!trimmed) return;
@@ -124,6 +128,9 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       ...(startDateParsed?.day && { startDay: startDateParsed.day }),
       ...(endDateParsed?.day && { endDay: endDateParsed.day }),
       ...(maxResults && { maxResults: parseInt(maxResults) }),
+      // Semantic filtering prompts (only include if LLM is enabled and prompts are provided)
+      ...(llmEnabled && inclusionCriteriaPrompt.trim() && { inclusionCriteriaPrompt: inclusionCriteriaPrompt.trim() }),
+      ...(llmEnabled && exclusionCriteriaPrompt.trim() && { exclusionCriteriaPrompt: exclusionCriteriaPrompt.trim() }),
       llmConfig: llmEnabled ? {
         enabled: true,
         provider: llmProvider,
@@ -360,6 +367,54 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
 
             {llmEnabled && (
               <>
+                {/* Semantic Filtering Prompts */}
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <Sparkles className="text-blue-600" size={18} />
+                    Semantic Filtering Criteria
+                  </h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Define semantic criteria for the LLM to evaluate each paper. These prompts will be used
+                    to determine inclusion and exclusion flags in the labeled CSV output.
+                  </p>
+
+                  {/* Inclusion Criteria Prompt */}
+                  <div>
+                    <label className="label text-sm">
+                      Inclusion Criteria Prompt
+                    </label>
+                    <textarea
+                      value={inclusionCriteriaPrompt}
+                      onChange={(e) => setInclusionCriteriaPrompt(e.target.value)}
+                      placeholder="Describe the criteria for including papers. Example: The paper must focus on large language models applied to mathematical reasoning tasks, with empirical evaluation and quantitative results."
+                      rows={4}
+                      className="input-field text-sm resize-none"
+                      disabled={disabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Papers meeting this criteria will have systematic_filtering_inclusion = 1
+                    </p>
+                  </div>
+
+                  {/* Exclusion Criteria Prompt */}
+                  <div>
+                    <label className="label text-sm">
+                      Exclusion Criteria Prompt
+                    </label>
+                    <textarea
+                      value={exclusionCriteriaPrompt}
+                      onChange={(e) => setExclusionCriteriaPrompt(e.target.value)}
+                      placeholder="Describe the criteria for excluding papers. Example: Papers that are surveys, literature reviews, or do not include original experimental work should be excluded."
+                      rows={4}
+                      className="input-field text-sm resize-none"
+                      disabled={disabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Papers meeting this criteria will have systematic_filtering_exclusion = 1
+                    </p>
+                  </div>
+                </div>
+
                 {/* Provider Selection */}
                 <div>
                   <label className="label">LLM Provider</label>

@@ -112,6 +112,7 @@ export class LLMService {
   /**
    * Filter papers using semantic understanding (LLM-based)
    * Returns papers with inclusion decisions and reasoning
+   * @deprecated Use semanticFilterSeparate for new implementation with separate inclusion/exclusion flags
    */
   async semanticFilter(
     papers: Paper[],
@@ -155,6 +156,116 @@ export class LLMService {
         llmReasoning: response.result?.reasoning
       };
     });
+  }
+
+  /**
+   * Filter papers using semantic understanding with separate inclusion and exclusion evaluation
+   * Returns papers with separate inclusion and exclusion flags and reasoning
+   */
+  async semanticFilterSeparate(
+    papers: Paper[],
+    inclusionCriteriaPrompt?: string,
+    exclusionCriteriaPrompt?: string
+  ): Promise<Paper[]> {
+    if (!this.isEnabled()) {
+      throw new Error('LLM service is not enabled or initialized');
+    }
+
+    let processedPapers = [...papers];
+
+    // Evaluate inclusion criteria if provided
+    if (inclusionCriteriaPrompt && inclusionCriteriaPrompt.trim()) {
+      const inclusionRequests: LLMRequest[] = papers.map(paper => ({
+        id: `${paper.id}_inclusion`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildInclusionFilteringPrompt(paper, inclusionCriteriaPrompt),
+        context: { paper, criteriaType: 'inclusion' }
+      }));
+
+      const inclusionResponses = await this.processBatchRequests(inclusionRequests);
+
+      processedPapers = processedPapers.map(paper => {
+        const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
+
+        if (!response || response.error) {
+          return {
+            ...paper,
+            systematic_filtering_inclusion: false,
+            systematic_filtering_inclusion_reasoning: response?.error || 'LLM processing failed'
+          };
+        }
+
+        const meetsInclusion = response.result?.decision === 'include' || response.result?.meets_criteria === true;
+        return {
+          ...paper,
+          systematic_filtering_inclusion: meetsInclusion,
+          systematic_filtering_inclusion_reasoning: response.result?.reasoning
+        };
+      });
+    }
+
+    // Evaluate exclusion criteria if provided
+    if (exclusionCriteriaPrompt && exclusionCriteriaPrompt.trim()) {
+      const exclusionRequests: LLMRequest[] = papers.map(paper => ({
+        id: `${paper.id}_exclusion`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildExclusionFilteringPrompt(paper, exclusionCriteriaPrompt),
+        context: { paper, criteriaType: 'exclusion' }
+      }));
+
+      const exclusionResponses = await this.processBatchRequests(exclusionRequests);
+
+      processedPapers = processedPapers.map(paper => {
+        const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
+
+        if (!response || response.error) {
+          return {
+            ...paper,
+            systematic_filtering_exclusion: false,
+            systematic_filtering_exclusion_reasoning: response?.error || 'LLM processing failed'
+          };
+        }
+
+        const meetsExclusion = response.result?.decision === 'exclude' || response.result?.meets_criteria === true;
+        return {
+          ...paper,
+          systematic_filtering_exclusion: meetsExclusion,
+          systematic_filtering_exclusion_reasoning: response.result?.reasoning
+        };
+      });
+    }
+
+    // Update the overall inclusion status based on semantic filtering results
+    // A paper is included if it meets inclusion criteria (or no inclusion criteria provided)
+    // AND does not meet exclusion criteria (or no exclusion criteria provided)
+    processedPapers = processedPapers.map(paper => {
+      const meetsInclusion = inclusionCriteriaPrompt
+        ? (paper.systematic_filtering_inclusion === true)
+        : true; // If no inclusion criteria, consider as meeting inclusion
+
+      const meetsExclusion = exclusionCriteriaPrompt
+        ? (paper.systematic_filtering_exclusion === true)
+        : false; // If no exclusion criteria, consider as not meeting exclusion
+
+      const shouldInclude = meetsInclusion && !meetsExclusion;
+
+      let exclusionReason: string | undefined;
+      if (!shouldInclude) {
+        if (meetsExclusion) {
+          exclusionReason = paper.systematic_filtering_exclusion_reasoning || 'Meets exclusion criteria';
+        } else {
+          exclusionReason = paper.systematic_filtering_inclusion_reasoning || 'Does not meet inclusion criteria';
+        }
+      }
+
+      return {
+        ...paper,
+        included: shouldInclude,
+        exclusionReason: exclusionReason
+      };
+    });
+
+    return processedPapers;
   }
 
   /**
@@ -282,6 +393,68 @@ Provide your response as JSON:
 {
   "decision": "include" or "exclude",
   "reasoning": "Brief explanation of your decision",
+  "confidence": 0.0 to 1.0
+}`;
+  }
+
+  /**
+   * Build inclusion filtering prompt for a paper
+   */
+  private buildInclusionFilteringPrompt(
+    paper: Paper,
+    inclusionCriteriaPrompt: string
+  ): string {
+    return `You are a research assistant helping with a systematic literature review.
+
+**Inclusion Criteria:**
+${inclusionCriteriaPrompt}
+
+**Paper to Review:**
+Title: ${paper.title}
+Authors: ${paper.authors.join(', ')}
+Year: ${paper.year}
+Abstract: ${paper.abstract || 'No abstract available'}
+${paper.venue ? `Venue: ${paper.venue}` : ''}
+
+**Task:**
+Determine if this paper MEETS the inclusion criteria described above.
+
+**Response Format:**
+Provide your response as JSON:
+{
+  "meets_criteria": true or false,
+  "reasoning": "Brief explanation of your decision (2-3 sentences)",
+  "confidence": 0.0 to 1.0
+}`;
+  }
+
+  /**
+   * Build exclusion filtering prompt for a paper
+   */
+  private buildExclusionFilteringPrompt(
+    paper: Paper,
+    exclusionCriteriaPrompt: string
+  ): string {
+    return `You are a research assistant helping with a systematic literature review.
+
+**Exclusion Criteria:**
+${exclusionCriteriaPrompt}
+
+**Paper to Review:**
+Title: ${paper.title}
+Authors: ${paper.authors.join(', ')}
+Year: ${paper.year}
+Abstract: ${paper.abstract || 'No abstract available'}
+${paper.venue ? `Venue: ${paper.venue}` : ''}
+
+**Task:**
+Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).
+
+**Response Format:**
+Provide your response as JSON:
+{
+  "meets_criteria": true or false,
+  "reasoning": "Brief explanation of your decision (2-3 sentences)",
   "confidence": 0.0 to 1.0
 }`;
   }
