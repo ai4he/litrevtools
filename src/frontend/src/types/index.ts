@@ -25,6 +25,9 @@ export interface SearchParameters {
   endDay?: number;
   maxResults?: number;
   llmConfig?: LLMConfig;
+  inclusionCriteriaPrompt?: string;
+  exclusionCriteriaPrompt?: string;
+  latexGenerationPrompt?: string;
 }
 
 export interface Paper {

@@ -130,6 +130,38 @@ export const SEARCH_PARAMETER_SCHEMA: ParameterDefinition[] = [
     cliFlag: '--end-month',
   },
 
+  // Semantic Filtering Prompts
+  {
+    key: 'inclusionCriteriaPrompt',
+    type: 'string',
+    label: 'Inclusion Criteria Prompt',
+    description: 'Semantic criteria for including papers (LLM-based evaluation)',
+    required: false,
+    placeholder: 'e.g., The paper must focus on large language models applied to mathematical reasoning tasks',
+    group: 'advanced',
+    cliFlag: '--inclusion-criteria',
+  },
+  {
+    key: 'exclusionCriteriaPrompt',
+    type: 'string',
+    label: 'Exclusion Criteria Prompt',
+    description: 'Semantic criteria for excluding papers (LLM-based evaluation)',
+    required: false,
+    placeholder: 'e.g., Papers that are surveys, literature reviews, or do not include original experimental work',
+    group: 'advanced',
+    cliFlag: '--exclusion-criteria',
+  },
+  {
+    key: 'latexGenerationPrompt',
+    type: 'string',
+    label: 'Additional Prompt for LaTeX Generation',
+    description: 'Additional instructions for customizing LaTeX document generation',
+    required: false,
+    placeholder: 'e.g., Use a formal academic tone and emphasize methodological rigor',
+    group: 'advanced',
+    cliFlag: '--latex-generation-prompt',
+  },
+
   // LLM Configuration
   {
     key: 'llmConfig',
