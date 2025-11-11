@@ -45,7 +45,7 @@ export interface Paper {
 }
 
 export interface ProgressUpdate {
-  status: 'idle' | 'running' | 'paused' | 'completed' | 'error';
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'error' | 'estimating';
   currentTask: string;
   nextTask: string;
   totalPapers: number;
@@ -58,6 +58,17 @@ export interface ProgressUpdate {
   estimatedTimeRemaining: number;
   progress: number;
   screenshot?: string;
+  // Enhanced API tracking
+  lastApiCall?: {
+    year?: number;
+    recordsRequested: number;
+    recordsReceived: number;
+    offset: number;
+    timestamp: number;
+  };
+  // Estimation phase
+  estimatedTotalPapers?: number;
+  isEstimating?: boolean;
 }
 
 export interface OutputProgress {
@@ -70,9 +81,15 @@ export interface OutputProgress {
     currentBatch: number;
     totalBatches: number;
     papersInBatch: number;
+    papersProcessed: number;
+    papersRemaining: number;
+    currentDocumentSize: number; // in characters
+    estimatedFinalSize: number; // in characters
   };
   error?: string;
   progress: number;
+  timeElapsed?: number;
+  estimatedTimeRemaining?: number;
 }
 
 export interface SearchSession {

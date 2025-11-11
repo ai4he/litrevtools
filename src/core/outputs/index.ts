@@ -106,25 +106,39 @@ export class OutputManager {
         const latexPath = path.join(sessionDir, 'paper.tex');
         const latexGen = new LaTeXGenerator(this.gemini, this.paperBatchSize);
 
+        // Track start time for output generation
+        const outputStartTime = Date.now();
+
         // Pass batch progress callback
         await latexGen.generate(
           session.papers,
           session.parameters,
           session.prismaData,
           latexPath,
-          (currentBatch: number, papersInBatch: number) => {
+          (currentBatch: number, papersInBatch: number, papersProcessed: number, papersRemaining: number, currentDocSize: number, estimatedFinalSize: number) => {
+            const timeElapsed = Date.now() - outputStartTime;
+            const estimatedTimeRemaining = papersProcessed > 0
+              ? Math.round((timeElapsed / papersProcessed) * papersRemaining)
+              : 0;
+
             onProgress?.({
               status: 'running',
               stage: 'latex',
-              currentTask: `Generating LaTeX paper - Batch ${currentBatch}/${totalBatches}...`,
+              currentTask: `Generating LaTeX paper - Batch ${currentBatch}/${totalBatches} (${papersProcessed}/${includedCount} papers)`,
               totalStages,
               completedStages,
               latexBatchProgress: {
                 currentBatch,
                 totalBatches,
-                papersInBatch
+                papersInBatch,
+                papersProcessed,
+                papersRemaining,
+                currentDocumentSize: currentDocSize,
+                estimatedFinalSize
               },
-              progress: Math.round((completedStages / totalStages) * 100)
+              progress: Math.round((completedStages / totalStages) * 100),
+              timeElapsed,
+              estimatedTimeRemaining
             });
           }
         );

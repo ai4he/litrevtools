@@ -40,7 +40,7 @@ export interface Paper {
 }
 
 export interface SearchProgress {
-  status: 'idle' | 'running' | 'paused' | 'completed' | 'error';
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'error' | 'estimating';
   currentTask: string;
   nextTask: string;
   totalPapers: number;
@@ -54,6 +54,17 @@ export interface SearchProgress {
   screenshot?: string; // base64 encoded screenshot
   error?: string;
   progress: number; // 0-100
+  // Enhanced API tracking
+  lastApiCall?: {
+    year?: number;
+    recordsRequested: number;
+    recordsReceived: number;
+    offset: number;
+    timestamp: number;
+  };
+  // Estimation phase
+  estimatedTotalPapers?: number;
+  isEstimating?: boolean;
 }
 
 export interface OutputProgress {
@@ -66,9 +77,15 @@ export interface OutputProgress {
     currentBatch: number;
     totalBatches: number;
     papersInBatch: number;
+    papersProcessed: number;
+    papersRemaining: number;
+    currentDocumentSize: number; // in characters
+    estimatedFinalSize: number; // in characters
   };
   error?: string;
   progress: number; // 0-100
+  timeElapsed?: number; // in milliseconds
+  estimatedTimeRemaining?: number; // in milliseconds
 }
 
 export interface TorCircuit {
