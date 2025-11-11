@@ -1,0 +1,451 @@
+@article{stolfo2022causalframework,
+  title={A Causal Framework to Quantify the Robustness of Mathematical Reasoning with Language Models},
+  author={Alessandro Stolfo and Zhijing Jin and Kumar Shridhar and B. Scholkopf and Mrinmaya Sachan},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2210.12023},
+  url={https://www.semanticscholar.org/paper/9b45af10429681249fafb07c3b6012ea4ce63ffe},
+  abstract={We have recently witnessed a number of impressive results on hard mathematical reasoning problems with language models. At the same time, the robustness of these models has also been called into question; recent works have shown that models can rely on shallow patterns in the problem description when generating a solution.Building on the idea of behavioral testing, we propose a novel framework, which pins down the causal effect of various factors in the input, e.g., the surface form of the problem text, the operands, and math operators on the output solution.By grounding the behavioral analysis in a causal graph describing an intuitive reasoning process, we study the behavior of language models in terms of robustness and sensitivity to direct interventions in the input space. We apply our framework on a test bed of math word problems.Our analysis shows that robustness does not appear to continuously improve as a function of size, but the GPT-3 Davinci models (175B) achieve a dramatic improvement in both robustness and sensitivity compared to all other GPT variants.},
+  keywords={arxiv:2210.12023}
+}
+
+@article{lu2022surveydeep,
+  title={A Survey of Deep Learning for Mathematical Reasoning},
+  author={Pan Lu and Liang Qiu and Wenhao Yu and S. Welleck and Kai-Wei Chang},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2212.10535},
+  url={https://www.semanticscholar.org/paper/2dbec38fe353ab0e495ad09263389dbc9260824d},
+  abstract={Mathematical reasoning is a fundamental aspect of human intelligence and is applicable in various fields, including science, engineering, finance, and everyday life. The development of artificial intelligence (AI) systems capable of solving math problems and proving theorems in language has garnered significant interest in the fields of machine learning and natural language processing. For example, mathematics serves as a testbed for aspects of reasoning that are challenging for powerful deep learning models, driving new algorithmic and modeling advances. On the other hand, recent advances in large-scale neural language models have opened up new benchmarks and opportunities to use deep learning for mathematical reasoning. In this survey paper, we review the key tasks, datasets, and methods at the intersection of mathematical reasoning and deep learning over the past decade. We also evaluate existing benchmarks and methods, and discuss future research directions in this domain.},
+  keywords={arxiv:2212.10535}
+}
+
+@article{zhang2022automaticchain,
+  title={Automatic Chain of Thought Prompting in Large Language Models},
+  author={Zhuosheng Zhang and Aston Zhang and Mu Li and Alexander J. Smola},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  url={https://www.semanticscholar.org/paper/90350aa626bed47b02d0c162462e5b0ca82be6b2},
+  abstract={Large language models (LLMs) can perform complex reasoning by generating intermediate reasoning steps. Providing these steps for prompting demonstrations is called chain-of-thought (CoT) prompting. CoT prompting has two major paradigms. One leverages a simple prompt like"Let's think step by step"to facilitate step-by-step thinking before answering a question. The other uses a few manual demonstrations one by one, each composed of a question and a reasoning chain that leads to an answer. The superior performance of the second paradigm hinges on the hand-crafting of task-specific demonstrations one by one. We show that such manual efforts may be eliminated by leveraging LLMs with the"Let's think step by step"prompt to generate reasoning chains for demonstrations one by one, i.e., let's think not just step by step, but also one by one. However, these generated chains often come with mistakes. To mitigate the effect of such mistakes, we find that diversity matters for automatically constructing demonstrations. We propose an automatic CoT prompting method: Auto-CoT. It samples questions with diversity and generates reasoning chains to construct demonstrations. On ten public benchmark reasoning tasks with GPT-3, Auto-CoT consistently matches or exceeds the performance of the CoT paradigm that requires manual designs of demonstrations. Code is available at https://github.com/amazon-research/auto-cot},
+  keywords={arxiv:2210.03493}
+}
+
+@article{lindstrm2022clevrmathdataset,
+  title={CLEVR-Math: A Dataset for Compositional Language, Visual and Mathematical Reasoning},
+  author={Adam Dahlgren Lindström and Savitha Sam Abraham},
+  year={2022},
+  booktitle={International Workshop on Neural-Symbolic Learning and Reasoning},
+  doi={10.48550/arXiv.2208.05358},
+  url={https://www.semanticscholar.org/paper/74cc3d340039c67bdabaef090d1386fe2c5376ca},
+  abstract={We introduce CLEVR-Math, a multi-modal math word problems dataset consisting of simple math word problems involving addition/subtraction, represented partly by a textual description and partly by an image illustrating the scenario. The text describes actions performed on the scene that is depicted in the image. Since the question posed may not be about the scene in the image, but about the state of the scene before or after the actions are applied, the solver envision or imagine the state changes due to these actions. Solving these word problems requires a combination of language, visual and mathematical reasoning. We apply state-of-the-art neural and neuro-symbolic models for visual question answering on CLEVR-Math and empirically evaluate their performances. Our results show how neither method generalise to chains of operations. We discuss the limitations of the two in addressing the task of multi-modal word problem solving.},
+  keywords={arxiv:2208.05358}
+}
+
+@article{wei2022chainthought,
+  title={Chain of Thought Prompting Elicits Reasoning in Large Language Models},
+  author={Jason Wei and Xuezhi Wang and Dale Schuurmans and Maarten Bosma and Ed H. Chi and F. Xia and Quoc Le and Denny Zhou},
+  year={2022},
+  booktitle={Neural Information Processing Systems},
+  url={https://www.semanticscholar.org/paper/1b6e810ce0afd0dd093f789d2b2742d047e316d5},
+  abstract={We explore how generating a chain of thought -- a series of intermediate reasoning steps -- significantly improves the ability of large language models to perform complex reasoning. In particular, we show how such reasoning abilities emerge naturally in sufficiently large language models via a simple method called chain of thought prompting, where a few chain of thought demonstrations are provided as exemplars in prompting. Experiments on three large language models show that chain of thought prompting improves performance on a range of arithmetic, commonsense, and symbolic reasoning tasks. The empirical gains can be striking. For instance, prompting a 540B-parameter language model with just eight chain of thought exemplars achieves state of the art accuracy on the GSM8K benchmark of math word problems, surpassing even finetuned GPT-3 with a verifier.},
+  keywords={arxiv:2201.11903}
+}
+
+@article{liang2022codepolicies,
+  title={Code as Policies: Language Model Programs for Embodied Control},
+  author={Jacky Liang and Wenlong Huang and F. Xia and Peng Xu and Karol Hausman and Brian Ichter and Peter R. Florence and Andy Zeng},
+  year={2022},
+  booktitle={IEEE International Conference on Robotics and Automation},
+  doi={10.1109/ICRA48891.2023.10160591},
+  url={https://www.semanticscholar.org/paper/91deaf9d324c8feafc189da0da03e60a60287bca},
+  abstract={Large language models (LLMs) trained on code-completion have been shown to be capable of synthesizing simple Python programs from docstrings [1]. We find that these code-writing LLMs can be re-purposed to write robot policy code, given natural language commands. Specifically, policy code can express functions or feedback loops that process perception outputs (e.g., from object detectors [2], [3]) and parameterize control primitive APIs. When provided as input several example language commands (formatted as comments) followed by corresponding policy code (via few-shot prompting), LLMs can take in new commands and autonomously re-compose API calls to generate new policy code respectively. By chaining classic logic structures and referencing third-party libraries (e.g., NumPy, Shapely) to perform arithmetic, LLMs used in this way can write robot policies that (i) exhibit spatial-geometric reasoning, (ii) generalize to new instructions, and (iii) prescribe precise values (e.g., velocities) to ambiguous descriptions (‘faster’) depending on context (i.e., behavioral commonsense). This paper presents Code as Policies: a robot-centric formulation of language model generated programs (LMPs) that can represent reactive policies (e.g., impedance controllers), as well as waypoint-based policies (vision-based pick and place, trajectory-based control), demonstrated across multiple real robot platforms. Central to our approach is prompting hierarchical code-gen (recursively defining undefined functions), which can write more complex code and also improves state-of-the-art to solve 39.8\% of problems on the HumanEval [1] benchmark. Code and videos are available at https://code-as-policies.github.io},
+  keywords={arxiv:2209.07753}
+}
+
+@article{shridhar2022distillingmultistep,
+  title={Distilling Multi-Step Reasoning Capabilities of Large Language Models into Smaller Models via Semantic Decompositions},
+  author={Kumar Shridhar and Alessandro Stolfo and Mrinmaya Sachan},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2212.00193},
+  url={https://www.semanticscholar.org/paper/72123a86eae2cb5c4eae8650f43524039d48875d}
+}
+
+@article{jiang2022draftsketch,
+  title={Draft, Sketch, and Prove: Guiding Formal Theorem Provers with Informal Proofs},
+  author={Albert Qiaochu Jiang and S. Welleck and J. Zhou and Wenda Li and Jiacheng Liu and M. Jamnik and Timothée Lacroix and Yuhuai Wu and Guillaume Lample},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2210.12283},
+  url={https://www.semanticscholar.org/paper/7de36d6b14aadc8cdb6ad1340b9ca64b15375bca},
+  abstract={The formalization of existing mathematical proofs is a notoriously difficult process. Despite decades of research on automation and proof assistants, writing formal proofs remains arduous and only accessible to a few experts. While previous studies to automate formalization focused on powerful search algorithms, no attempts were made to take advantage of available informal proofs. In this work, we introduce Draft, Sketch, and Prove (DSP), a method that maps informal proofs to formal proof sketches, and uses the sketches to guide an automated prover by directing its search to easier sub-problems. We investigate two relevant setups where informal proofs are either written by humans or generated by a language model. Our experiments and ablation studies show that large language models are able to produce well-structured formal sketches that follow the same reasoning steps as the informal proofs. Guiding an automated prover with these sketches enhances its performance from 20.9\% to 39.3\% on a collection of mathematical competition problems.},
+  keywords={arxiv:2210.12283}
+}
+
+@article{lu2022dynamicprompt,
+  title={Dynamic Prompt Learning via Policy Gradient for Semi-structured Mathematical Reasoning},
+  author={Pan Lu and Liang Qiu and Kai-Wei Chang and Y. Wu and Song-Chun Zhu and Tanmay Rajpurohit and Peter Clark and A. Kalyan},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2209.14610},
+  url={https://www.semanticscholar.org/paper/3e565c544a8639cc9c7568833e484d7610f5e5d4},
+  abstract={Mathematical reasoning, a core ability of human intelligence, presents unique challenges for machines in abstract thinking and logical reasoning. Recent large pre-trained language models such as GPT-3 have achieved remarkable progress on mathematical reasoning tasks written in text form, such as math word problems (MWP). However, it is unknown if the models can handle more complex problems that involve math reasoning over heterogeneous information, such as tabular data. To fill the gap, we present Tabular Math Word Problems (TabMWP), a new dataset containing 38,431 open-domain grade-level problems that require mathematical reasoning on both textual and tabular data. Each question in TabMWP is aligned with a tabular context, which is presented as an image, semi-structured text, and a structured table. There are two types of questions: free-text and multi-choice, and each problem is annotated with gold solutions to reveal the multi-step reasoning process. We evaluate different pre-trained models on TabMWP, including the GPT-3 model in a few-shot setting. As earlier studies suggest, since few-shot GPT-3 relies on the selection of in-context examples, its performance is unstable and can degrade to near chance. The unstable issue is more severe when handling complex problems like TabMWP. To mitigate this, we further propose a novel approach, PromptPG, which utilizes policy gradient to learn to select in-context examples from a small amount of training data and then constructs the corresponding prompt for the test example. Experimental results show that our method outperforms the best baseline by 5.31\% on the accuracy metric and reduces the prediction variance significantly compared to random selection, which verifies its effectiveness in selecting in-context examples.},
+  keywords={arxiv:2209.14610}
+}
+
+@article{webb2022emergentanalogical,
+  title={Emergent analogical reasoning in large language models},
+  author={Taylor W. Webb and K. Holyoak and Hongjing Lu},
+  year={2022},
+  booktitle={Nature Human Behaviour},
+  doi={10.1038/s41562-023-01659-w},
+  url={https://www.semanticscholar.org/paper/3cbffab9d7981da6662d474aaa056dcbd3c1701e},
+  abstract={The recent advent of large language models has reinvigorated debate over whether human cognitive capacities might emerge in such generic models given sufficient training data. Of particular interest is the ability of these models to reason about novel problems zero-shot, without any direct training. In human cognition, this capacity is closely tied to an ability to reason by analogy. Here we performed a direct comparison between human reasoners and a large language model (the text-davinci-003 variant of Generative Pre-trained Transformer (GPT)-3) on a range of analogical tasks, including a non-visual matrix reasoning task based on the rule structure of Raven’s Standard Progressive Matrices. We found that GPT-3 displayed a surprisingly strong capacity for abstract pattern induction, matching or even surpassing human capabilities in most settings; preliminary tests of GPT-4 indicated even better performance. Our results indicate that large language models such as GPT-3 have acquired an emergent ability to find zero-shot solutions to a broad range of analogy problems. Webb et al. show that new artificial intelligence language models, such as Generative Pre-trained Transformer 3, are able to solve analogical reasoning problems at a human-like level of performance.},
+  keywords={arxiv:2212.09196}
+}
+
+@article{li2022explanationsfrom,
+  title={Explanations from Large Language Models Make Small Reasoners Better},
+  author={SHIYANG LI and Jianshu Chen and Yelong Shen and Zhiyu Chen and Xinlu Zhang and Zekun Li and Hong Wang and Jingu Qian and Baolin Peng and Yi Mao and Wenhu Chen and Xifeng Yan},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2210.06726},
+  url={https://www.semanticscholar.org/paper/7d29a84a589aa5655e5d3fed8d725ea472816599},
+  abstract={Integrating free-text explanations to in-context learning of large language models (LLM) is shown to elicit strong reasoning capabilities along with reasonable explanations. In this paper, we consider the problem of leveraging the explanations generated by LLM to improve the training of small reasoners, which are more favorable in real-production deployment due to their low cost. We systematically explore three explanation generation approaches from LLM and utilize a multi-task learning framework to facilitate small models to acquire strong reasoning power together with explanation generation capabilities. Experiments on multiple reasoning tasks show that our method can consistently and significantly outperform finetuning baselines across different settings, and even perform better than finetuning/prompting a 60x larger GPT-3 (175B) model by up to 9.5\% in accuracy. As a side benefit, human evaluation further shows that our method can generate high-quality explanations to justify its predictions, moving towards the goal of explainable AI.},
+  keywords={arxiv:2210.06726}
+}
+
+@article{anil2022exploringlength,
+  title={Exploring Length Generalization in Large Language Models},
+  author={Cem Anil and Yuhuai Wu and Anders Andreassen and Aitor Lewkowycz and Vedant Misra and V. Ramasesh and Ambrose Slone and Guy Gur-Ari and Ethan Dyer and Behnam Neyshabur},
+  year={2022},
+  booktitle={Neural Information Processing Systems},
+  doi={10.48550/arXiv.2207.04901},
+  url={https://www.semanticscholar.org/paper/f843233f76a5dff07bfa93a71a1cf13d8aa6a94a},
+  abstract={The ability to extrapolate from short problem instances to longer ones is an important form of out-of-distribution generalization in reasoning tasks, and is crucial when learning from datasets where longer problem instances are rare. These include theorem proving, solving quantitative mathematics problems, and reading/summarizing novels. In this paper, we run careful empirical studies exploring the length generalization capabilities of transformer-based language models. We first establish that naively finetuning transformers on length generalization tasks shows significant generalization deficiencies independent of model scale. We then show that combining pretrained large language models' in-context learning abilities with scratchpad prompting (asking the model to output solution steps before producing an answer) results in a dramatic improvement in length generalization. We run careful failure analyses on each of the learning modalities and identify common sources of mistakes that highlight opportunities in equipping language models with the ability to generalize to longer problems.},
+  keywords={arxiv:2207.04901}
+}
+
+@article{creswell2022faithfulreasoning,
+  title={Faithful Reasoning Using Large Language Models},
+  author={Antonia Creswell and M. Shanahan},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/f0a0e8b6e84207f50db4d24cc4016e40601214ef},
+  abstract={Although contemporary large language models (LMs) demonstrate impressive question-answering capabilities, their answers are typically the product of a single call to the model. This entails an unwelcome degree of opacity and compromises performance, especially on problems that are inherently multi-step. To address these limitations, we show how LMs can be made to perform faithful multi-step reasoning via a process whose causal structure mirrors the underlying logical structure of the problem. Our approach works by chaining together reasoning steps, where each step results from calls to two fine-tuned LMs, one for selection and one for inference, to produce a valid reasoning trace. Our method carries out a beam search through the space of reasoning traces to improve reasoning quality. We demonstrate the effectiveness of our model on multi-step logical deduction and scientific question-answering, showing that it outperforms baselines on final answer accuracy, and generates humanly interpretable reasoning traces whose validity can be checked by the user.},
+  keywords={arxiv:2208.14271}
+}
+
+@article{taylor2022galacticalarge,
+  title={Galactica: A Large Language Model for Science},
+  author={Ross Taylor and Marcin Kardas and Guillem Cucurull and Thomas Scialom and A. Hartshorn and Elvis Saravia and Andrew Poulton and Viktor Kerkez and Robert Stojnic},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/7d645a3fd276918374fd9483fd675c28e46506d1},
+  abstract={Information overload is a major obstacle to scientific progress. The explosive growth in scientific literature and data has made it ever harder to discover useful insights in a large mass of information. Today scientific knowledge is accessed through search engines, but they are unable to organize scientific knowledge alone. In this paper we introduce Galactica: a large language model that can store, combine and reason about scientific knowledge. We train on a large scientific corpus of papers, reference material, knowledge bases and many other sources. We outperform existing models on a range of scientific tasks. On technical knowledge probes such as LaTeX equations, Galactica outperforms the latest GPT-3 by 68.2\% versus 49.0\%. Galactica also performs well on reasoning, outperforming Chinchilla on mathematical MMLU by 41.3\% to 35.7\%, and PaLM 540B on MATH with a score of 20.4\% versus 8.8\%. It also sets a new state-of-the-art on downstream tasks such as PubMedQA and MedMCQA dev of 77.6\% and 52.9\%. And despite not being trained on a general corpus, Galactica outperforms BLOOM and OPT-175B on BIG-bench. We believe these results demonstrate the potential for language models as a new interface for science. We open source the model for the benefit of the scientific community.},
+  keywords={arxiv:2211.09085}
+}
+
+@article{hagendorff2022humanlikeintuitive,
+  title={Human-like intuitive behavior and reasoning biases emerged in large language models but disappeared in ChatGPT},
+  author={Thilo Hagendorff and Sarah Fabi and Michal Kosinski},
+  year={2022},
+  booktitle={Nature Computational Science},
+  doi={10.1038/s43588-023-00527-x},
+  url={https://www.semanticscholar.org/paper/0bfc05adcddd4fe5d1335d96cc313c41526d4558},
+  abstract={We design a battery of semantic illusions and cognitive reflection tests, aimed to elicit intuitive yet erroneous responses. We administer these tasks, traditionally used to study reasoning and decision-making in humans, to OpenAI’s generative pre-trained transformer model family. The results show that as the models expand in size and linguistic proficiency they increasingly display human-like intuitive system 1 thinking and associated cognitive errors. This pattern shifts notably with the introduction of ChatGPT models, which tend to respond correctly, avoiding the traps embedded in the tasks. Both ChatGPT-3.5 and 4 utilize the input–output context window to engage in chain-of-thought reasoning, reminiscent of how people use notepads to support their system 2 thinking. Yet, they remain accurate even when prevented from engaging in chain-of-thought reasoning, indicating that their system-1-like next-word generation processes are more accurate than those of older models. Our findings highlight the value of applying psychological methodologies to study large language models, as this can uncover previously undetected emergent characteristics. The reasoning capabilities of OpenAI’s generative pre-trained transformer family were tested using semantic illusions and cognitive reflection tests that are typically used in human studies. While early models were prone to human-like cognitive errors, ChatGPT decisively outperformed humans, avoiding the cognitive traps embedded in the tasks.},
+  keywords={arxiv:2306.07622}
+}
+
+@article{mishra2022lilaunified,
+  title={LILA: A Unified Benchmark for Mathematical Reasoning},
+  author={Swaroop Mishra and Matthew Finlayson and Pan Lu and Leonard Tang and S. Welleck and Chitta Baral and Tanmay Rajpurohit and Oyvind Tafjord and Ashish Sabharwal and Peter Clark and A. Kalyan},
+  year={2022},
+  booktitle={Conference on Empirical Methods in Natural Language Processing},
+  doi={10.48550/arXiv.2210.17517},
+  url={https://www.semanticscholar.org/paper/52fb239ea5cea1e9a2636f8f7922c8ede3e50ba7},
+  abstract={Mathematical reasoning skills are essential for general-purpose intelligentsystems to perform tasks from grocery shopping to climate modeling.Towards evaluating and improving AI systems in this domain, we proposeLILA, a unified mathematical reasoning benchmark consisting of 23 diversetasks along four dimensions:(i) mathematical abilities e.g., arithmetic, calculus (ii) language format e.g., question-answering, fill-in-the-blanks (iii) language diversity e.g., no language, simple language (iv) external knowledge e.g., commonsense, physics. We construct our benchmark by extending 20 datasets benchmark by collecting task instructions and solutions in the form of Python programs,thereby obtaining explainable solutions in addition to the correct answer.We additionally introduce two evaluation datasets to measure out-of-distribution performance and robustness to language perturbation.Finally, we introduce BHASKARA,a general-purpose mathematical reasoning model trained on LILA. Importantly, we find that multi-tasking leads to significant improvements (average relative improvement of 21.83\% F1 score vs. single-task models),while the best performing model only obtains 60.40\%,indicating the room for improvement in general mathematical reasoning and understanding.}
+}
+
+@article{saparov2022languagemodels,
+  title={Language Models Are Greedy Reasoners: A Systematic Formal Analysis of Chain-of-Thought},
+  author={Abulhair Saparov and He He},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2210.01240},
+  url={https://www.semanticscholar.org/paper/e7028cd7ea838ab8294ecf26d5a2c0dbb8cfa81a},
+  abstract={Large language models (LLMs) have shown remarkable reasoning capabilities given chain-of-thought prompts (examples with intermediate reasoning steps). Existing benchmarks measure reasoning ability indirectly, by evaluating accuracy on downstream tasks such as mathematical reasoning. However, it is unclear how these models obtain the answers and whether they rely on simple heuristics rather than the generated chain-of-thought. To enable systematic exploration of the reasoning ability of LLMs, we present a new synthetic question-answering dataset called PrOntoQA, where each example is generated from a synthetic world model represented in first-order logic. This allows us to parse the generated chain-of-thought into symbolic proofs for formal analysis. Our analysis on InstructGPT and GPT-3 shows that LLMs are quite capable of making correct individual deduction steps, and so are generally capable of reasoning, even in fictional contexts. However, they have difficulty with proof planning: When multiple valid deduction steps are available, they are not able to systematically explore the different options.},
+  keywords={arxiv:2210.01240}
+}
+
+@article{huang2022largelanguage,
+  title={Large Language Models Can Self-Improve},
+  author={Jiaxin Huang and S. Gu and Le Hou and Yuexin Wu and Xuezhi Wang and Hongkun Yu and Jiawei Han},
+  year={2022},
+  booktitle={Conference on Empirical Methods in Natural Language Processing},
+  doi={10.48550/arXiv.2210.11610},
+  url={https://www.semanticscholar.org/paper/3fa70115248377c3d1517c9f978791a296fbc1dd},
+  abstract={Large Language Models (LLMs) have achieved excellent performances in various tasks. However, fine-tuning an LLM requires extensive supervision. Human, on the other hand, may improve their reasoning abilities by self-thinking without external inputs. In this work, we demonstrate that an LLM is also capable of self-improving with only unlabeled datasets. We use a pre-trained LLM to generate"high-confidence"rationale-augmented answers for unlabeled questions using Chain-of-Thought prompting and self-consistency, and fine-tune the LLM using those self-generated solutions as target outputs. We show that our approach improves the general reasoning ability of a 540B-parameter LLM (74.4\%->82.1\% on GSM8K, 78.2\%->83.0\% on DROP, 90.0\%->94.4\% on OpenBookQA, and 63.4\%->67.9\% on ANLI-A3) and achieves state-of-the-art-level performance, without any ground truth label. We conduct ablation studies and show that fine-tuning on reasoning is critical for self-improvement.},
+  keywords={arxiv:2210.11610}
+}
+
+@article{weng2022largelanguage,
+  title={Large Language Models are reasoners with Self-Verification},
+  author={Yixuan Weng and Minjun Zhu and Bin Li and Shizhu He and Kang Liu and Jun Zhao},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2212.09561},
+  url={https://www.semanticscholar.org/paper/f02e8f1c9b5ab12ddfb1977570f9f5445a99a973}
+}
+
+@article{singhal2022largelanguage,
+  title={Large language models encode clinical knowledge},
+  author={K. Singhal and Shekoofeh Azizi and T. Tu and S. Mahdavi and Jason Wei and Hyung Won Chung and Nathan Scales and A. Tanwani and H. Cole-Lewis and S. Pfohl and P. Payne and Martin G. Seneviratne and P. Gamble and C. Kelly and Nathaneal Scharli and A. Chowdhery and P. A. Mansfield and B. A. Y. Arcas and D. Webster and Greg S. Corrado and Yossi Matias and K. Chou and Juraj Gottweis and Nenad Tomašev and Yun Liu and A. Rajkomar and J. Barral and Christopher Semturs and A. Karthikesalingam and Vivek Natarajan},
+  year={2022},
+  booktitle={Nature},
+  doi={10.1038/s41586-023-06291-2},
+  url={https://www.semanticscholar.org/paper/6052486bc9144dc1730c12bf35323af3792a1fd0},
+  abstract={Med-PaLM, a state-of-the-art large language model for medicine, is introduced and evaluated across several medical question answering tasks, demonstrating the promise of these models in this domain. Large language models (LLMs) have demonstrated impressive capabilities, but the bar for clinical applications is high. Attempts to assess the clinical knowledge of models typically rely on automated evaluations based on limited benchmarks. Here, to address these limitations, we present MultiMedQA, a benchmark combining six existing medical question answering datasets spanning professional medicine, research and consumer queries and a new dataset of medical questions searched online, HealthSearchQA. We propose a human evaluation framework for model answers along multiple axes including factuality, comprehension, reasoning, possible harm and bias. In addition, we evaluate Pathways Language Model\^{} 1 (PaLM, a 540-billion parameter LLM) and its instruction-tuned variant, Flan-PaLM\^{} 2 on MultiMedQA. Using a combination of prompting strategies, Flan-PaLM achieves state-of-the-art accuracy on every MultiMedQA multiple-choice dataset (MedQA\^{} 3 , MedMCQA\^{} 4 , PubMedQA\^{} 5 and Measuring Massive Multitask Language Understanding (MMLU) clinical topics\^{} 6 ), including 67.6\% accuracy on MedQA (US Medical Licensing Exam-style questions), surpassing the prior state of the art by more than 17\%. However, human evaluation reveals key gaps. To resolve this, we introduce instruction prompt tuning, a parameter-efficient approach for aligning LLMs to new domains using a few exemplars. The resulting model, Med-PaLM, performs encouragingly, but remains inferior to clinicians. We show that comprehension, knowledge recall and reasoning improve with model scale and instruction prompt tuning, suggesting the potential utility of LLMs in medicine. Our human evaluations reveal limitations of today’s models, reinforcing the importance of both evaluation frameworks and method development in creating safe, helpful LLMs for clinical applications.},
+  keywords={arxiv:2212.13138}
+}
+
+@article{nam2022learningreason,
+  title={Learning to Reason With Relational Abstractions},
+  author={A. Nam and Mengye Ren and Chelsea Finn and James L. McClelland},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2210.02615},
+  url={https://www.semanticscholar.org/paper/6d5555348f453bac901c5b57e8a4eeb3074b4071},
+  abstract={Large language models have recently shown promising progress in mathematical reasoning when fine-tuned with human-generated sequences walking through a sequence of solution steps. However, the solution sequences are not formally structured and the resulting model-generated sequences may not reflect the kind of systematic reasoning we might expect an expert human to produce. In this paper, we study how to build stronger reasoning capability in language models using the idea of relational abstractions. We introduce new types of sequences that more explicitly provide an abstract characterization of the transitions through intermediate solution steps to the goal state. We find that models that are supplied with such sequences as prompts can solve tasks with a significantly higher accuracy, and models that are trained to produce such sequences solve problems better than those that are trained with previously used human-generated sequences and other baselines. Our work thus takes several steps toward elucidating and improving how language models perform on tasks requiring multi-step mathematical reasoning.},
+  keywords={arxiv:2210.02615}
+}
+
+@article{zhou2022leasttomostprompting,
+  title={Least-to-Most Prompting Enables Complex Reasoning in Large Language Models},
+  author={Denny Zhou and Nathanael Scharli and Le Hou and Jason Wei and Nathan Scales and Xuezhi Wang and D. Schuurmans and O. Bousquet and Quoc Le and Ed H. Chi},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2205.10625},
+  url={https://www.semanticscholar.org/paper/5437e8adab596d7294124c0e798708e050e25321},
+  abstract={Chain-of-thought prompting has demonstrated remarkable performance on various natural language reasoning tasks. However, it tends to perform poorly on tasks which requires solving problems harder than the exemplars shown in the prompts. To overcome this challenge of easy-to-hard generalization, we propose a novel prompting strategy, least-to-most prompting. The key idea in this strategy is to break down a complex problem into a series of simpler subproblems and then solve them in sequence. Solving each subproblem is facilitated by the answers to previously solved subproblems. Our experimental results on tasks related to symbolic manipulation, compositional generalization, and math reasoning reveal that least-to-most prompting is capable of generalizing to more difficult problems than those seen in the prompts. A notable finding is that when the GPT-3 code-davinci-002 model is used with least-to-most prompting, it can solve the compositional generalization benchmark SCAN in any split (including length split) with an accuracy of at least 99\% using just 14 exemplars, compared to only 16\% accuracy with chain-of-thought prompting. This is particularly noteworthy because neural-symbolic models in the literature that specialize in solving SCAN are trained on the entire training set containing over 15,000 examples. We have included prompts for all the tasks in the Appendix.},
+  keywords={arxiv:2205.10625}
+}
+
+@article{yu2022legalprompting,
+  title={Legal Prompting: Teaching a Language Model to Think Like a Lawyer},
+  author={Fang Yu and Lee Quartey and Frank Schilder},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2212.01326},
+  url={https://www.semanticscholar.org/paper/cc43306e22dbfd5bc35251ab8c8ba37e4fc2a1b3},
+  abstract={Large language models that are capable of zero or few-shot prompting approaches have given rise to the new research area of prompt engineering. Recent advances showed that for example Chain-of-Thought (CoT) prompts can improve arithmetic or common sense tasks significantly. We explore how such approaches fare with legal reasoning tasks and take the COLIEE entailment task based on the Japanese Bar exam for testing zero-shot/few-shot and fine-tuning approaches. Our findings show that while CoT prompting and fine-tuning with explanations approaches show improvements, the best results are produced by prompts that are derived from specific legal reasoning techniques such as IRAC (Issue, Rule, Application, Conclusion). Based on our experiments we improve the 2021 best result from 0.7037 accuracy to 0.8148 accuracy and beat the 2022 best system of 0.6789 accuracy with an accuracy of 0.7431.},
+  keywords={arxiv:2212.01326}
+}
+
+@article{karpas2022mrklsystems,
+  title={MRKL Systems: A modular, neuro-symbolic architecture that combines large language models, external knowledge sources and discrete reasoning},
+  author={Ehud Karpas and Omri Abend and Yonatan Belinkov and Barak Lenz and Opher Lieber and Nir Ratner and Y. Shoham and Hofit Bata and Yoav Levine and Kevin Leyton-Brown and Dor Muhlgay and N. Rozen and Erez Schwartz and Gal Shachaf and Shai Shalev-Shwartz and A. Shashua and Moshe Tenenholtz},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2205.00445},
+  url={https://www.semanticscholar.org/paper/1bcde55995a957b3e8a595d536b816cb8989cf1d},
+  abstract={Huge language models (LMs) have ushered in a new era for AI, serving as a gateway to natural-language-based knowledge tasks. Although an essential element of modern AI, LMs are also inherently limited in a number of ways. We discuss these limitations and how they can be avoided by adopting a systems approach. Conceptualizing the challenge as one that involves knowledge and reasoning in addition to linguistic processing, we define a flexible architecture with multiple neural models, complemented by discrete knowledge and reasoning modules. We describe this neuro-symbolic architecture, dubbed the Modular Reasoning, Knowledge and Language (MRKL, pronounced"miracle") system, some of the technical challenges in implementing it, and Jurassic-X, AI21 Labs' MRKL system implementation.},
+  keywords={arxiv:2205.00445}
+}
+
+@article{liu2022mindsgrounded,
+  title={Mind's Eye: Grounded Language Model Reasoning through Simulation},
+  author={Ruibo Liu and Jason Wei and S. Gu and Te-Yen Wu and Soroush Vosoughi and Claire Cui and Denny Zhou and Andrew M. Dai},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  doi={10.48550/arXiv.2210.05359},
+  url={https://www.semanticscholar.org/paper/2cb97b2bb6ab2eb17add9ffe69d5cbeaca2b29c8},
+  abstract={Successful and effective communication between humans and AI relies on a shared experience of the world. By training solely on written text, current language models (LMs) miss the grounded experience of humans in the real-world -- their failure to relate language to the physical world causes knowledge to be misrepresented and obvious mistakes in their reasoning. We present Mind's Eye, a paradigm to ground language model reasoning in the physical world. Given a physical reasoning question, we use a computational physics engine (DeepMind's MuJoCo) to simulate the possible outcomes, and then use the simulation results as part of the input, which enables language models to perform reasoning. Experiments on 39 tasks in a physics alignment benchmark demonstrate that Mind's Eye can improve reasoning ability by a large margin (27.9\% zero-shot, and 46.0\% few-shot absolute accuracy improvement on average). Smaller language models armed with Mind's Eye can obtain similar performance to models that are 100x larger. Finally, we confirm the robustness of Mind's Eye through ablation studies.},
+  keywords={arxiv:2210.05359}
+}
+
+@article{welleck2022naturalprovergrounded,
+  title={NaturalProver: Grounded Mathematical Proof Generation with Language Models},
+  author={S. Welleck and Jiacheng Liu and Ximing Lu and Hannaneh Hajishirzi and Yejin Choi},
+  year={2022},
+  booktitle={Neural Information Processing Systems},
+  doi={10.48550/arXiv.2205.12910},
+  url={https://www.semanticscholar.org/paper/d593b9b8d63426f0d6a795dd7f2294619bc03610},
+  abstract={Theorem proving in natural mathematical language - the mixture of symbolic and natural language used by humans - plays a central role in mathematical advances and education, and tests aspects of reasoning that are core to intelligence. Yet it has remained underexplored with modern generative models. We study large-scale language models on two new generation tasks: suggesting the next step in a mathematical proof, and full proof generation. We develop NaturalProver, a language model that generates proofs by conditioning on background references (e.g. theorems and definitions that are either retrieved or human-provided), and optionally enforces their presence with constrained decoding. On theorems from the NaturalProofs benchmark, NaturalProver improves the quality of next-step suggestions and generated proofs over fine-tuned GPT-3, according to human evaluations from university-level mathematics students. NaturalProver is capable of proving some theorems that require short (2-6 step) proofs, and providing next-step suggestions that are rated as correct and useful over 40\% of the time, which is to our knowledge the first demonstration of these capabilities using neural language models.},
+  keywords={arxiv:2205.12910}
+}
+
+@article{mishra2022numgluesuite,
+  title={NumGLUE: A Suite of Fundamental yet Challenging Mathematical Reasoning Tasks},
+  author={Swaroop Mishra and Arindam Mitra and Neeraj Varshney and Bhavdeep Singh Sachdeva and Peter Clark and Chitta Baral and A. Kalyan},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2204.05660},
+  url={https://www.semanticscholar.org/paper/39238a92de090c104936a4f78375b95600e42ce5},
+  abstract={Given the ubiquitous nature of numbers in text, reasoning with numbers to perform simple calculations is an important skill of AI systems. While many datasets and models have been developed to this end, state-of-the-art AI systems are brittle; failing to perform the underlying mathematical reasoning when they appear in a slightly different scenario. Drawing inspiration from GLUE that was proposed in the context of natural language understanding, we propose NumGLUE, a multi-task benchmark that evaluates the performance of AI systems on eight different tasks, that at their core require simple arithmetic understanding. We show that this benchmark is far from being solved with neural models including state-of-the-art large-scale language models performing significantly worse than humans (lower by 46.4 \%). Further, NumGLUE promotes sharing knowledge across tasks, especially those with limited training data as evidenced by the superior performance (average gain of 3.4 \% on each task) when a model is jointly trained on all the tasks as opposed to task-specific modeling. Finally, we hope that NumGLUE will encourage systems that perform robust and general arithmetic reasoning within language, a first step towards being able to perform more complex mathematical reasoning.},
+  keywords={arxiv:2204.05660}
+}
+
+@article{iyer2022optimlscaling,
+  title={OPT-IML: Scaling Language Model Instruction Meta Learning through the Lens of Generalization},
+  author={S. Iyer and Xi Victoria Lin and Ramakanth Pasunuru and Todor Mihaylov and Daniel Simig and Ping Yu and Kurt Shuster and Tianlu Wang and Qing Liu and Punit Singh Koura and Xian Li and Brian O'Horo and Gabriel Pereyra and Jeff Wang and Christopher Dewan and Asli Celikyilmaz and Luke S. Zettlemoyer and Veselin Stoyanov},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/e965e93e76a9e6c4e4863d145b5c007b540d575d},
+  abstract={Recent work has shown that fine-tuning large pre-trained language models on a collection of tasks described via instructions, a.k.a. instruction-tuning, improves their zero and few-shot generalization to unseen tasks. However, there is a limited understanding of the performance trade-offs of different decisions made during the instruction-tuning process. These decisions include the scale and diversity of the instruction-tuning benchmark, different task sampling strategies, fine-tuning with and without demonstrations, training using specialized datasets for reasoning and dialogue, and finally, the fine-tuning objectives themselves. In this paper, we characterize the effect of instruction-tuning decisions on downstream task performance when scaling both model and benchmark sizes. To this end, we create OPT-IML Bench: a large benchmark for Instruction Meta-Learning (IML) of 2000 NLP tasks consolidated into task categories from 8 existing benchmarks, and prepare an evaluation framework to measure three types of model generalizations: to tasks from fully held-out categories, to held-out tasks from seen categories, and to held-out instances from seen tasks. Through the lens of this framework, we first present insights about instruction-tuning decisions as applied to OPT-30B and further exploit these insights to train OPT-IML 30B and 175B, which are instruction-tuned versions of OPT. OPT-IML demonstrates all three generalization abilities at both scales on four different evaluation benchmarks with diverse tasks and input formats -- PromptSource, FLAN, Super-NaturalInstructions, and UnifiedSKG. Not only does it significantly outperform OPT on all benchmarks but is also highly competitive with existing models fine-tuned on each specific benchmark. We release OPT-IML at both scales, together with the OPT-IML Bench evaluation framework.},
+  keywords={arxiv:2212.12017}
+}
+
+@article{sharma2022overcomingbarriers,
+  title={Overcoming Barriers to Skill Injection in Language Modeling: Case Study in Arithmetic},
+  author={Mandar Sharma and N. Muralidhar and Naren Ramakrishnan},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2211.02098},
+  url={https://www.semanticscholar.org/paper/1ec4ae64ded99846bcd8a1a3b16fe2875f55c7c1},
+  abstract={Through their transfer learning abilities, highly-parameterized large pre-trained language models have dominated the NLP landscape for a multitude of downstream language tasks. Though linguistically proficient, the inability of these models to incorporate the learning of non-linguistic entities (numerals and arithmetic reasoning) limits their usage for tasks that require numeric comprehension or strict mathematical reasoning. However, as we illustrate in this paper, building a general purpose language model that also happens to be proficient in mathematical reasoning is not as straight-forward as training it on a numeric dataset. In this work, we develop a novel framework that enables language models to be mathematically proficient while retaining their linguistic prowess. Specifically, we offer information-theoretic interventions to overcome the catastrophic forgetting of linguistic skills that occurs while injecting non-linguistic skills into language models.},
+  keywords={arxiv:2211.02098}
+}
+
+@article{valmeekam2022planbenchextensible,
+  title={PlanBench: An Extensible Benchmark for Evaluating Large Language Models on Planning and Reasoning about Change},
+  author={Karthik Valmeekam and Alberto Olmo and S. Sreedharan and Subbarao Kambhampati},
+  year={2022},
+  booktitle={Neural Information Processing Systems},
+  url={https://www.semanticscholar.org/paper/e850d4c0dad3aee3b8b40be5e5d5e5c31354d8cc},
+  abstract={Generating plans of action, and reasoning about change have long been considered a core competence of intelligent agents. It is thus no surprise that evaluating the planning and reasoning capabilities of large language models (LLMs) has become a hot topic of research. Most claims about LLM planning capabilities are however based on common sense tasks-where it becomes hard to tell whether LLMs are planning or merely retrieving from their vast world knowledge. There is a strong need for systematic and extensible planning benchmarks with sufficient diversity to evaluate whether LLMs have innate planning capabilities. Motivated by this, we propose PlanBench, an extensible benchmark suite based on the kinds of domains used in the automated planning community, especially in the International Planning Competition, to test the capabilities of LLMs in planning or reasoning about actions and change. PlanBench provides sufficient diversity in both the task domains and the specific planning capabilities. Our studies also show that on many critical capabilities-including plan generation-LLM performance falls quite short, even with the SOTA models. PlanBench can thus function as a useful marker of progress of LLMs in planning and reasoning.},
+  keywords={arxiv:2206.10498}
+}
+
+@article{yao2022reactsynergizing,
+  title={ReAct: Synergizing Reasoning and Acting in Language Models},
+  author={Shunyu Yao and Jeffrey Zhao and Dian Yu and Nan Du and Izhak Shafran and Karthik Narasimhan and Yuan Cao},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  url={https://www.semanticscholar.org/paper/99832586d55f540f603637e458a292406a0ed75d},
+  abstract={While large language models (LLMs) have demonstrated impressive capabilities across tasks in language understanding and interactive decision making, their abilities for reasoning (e.g. chain-of-thought prompting) and acting (e.g. action plan generation) have primarily been studied as separate topics. In this paper, we explore the use of LLMs to generate both reasoning traces and task-specific actions in an interleaved manner, allowing for greater synergy between the two: reasoning traces help the model induce, track, and update action plans as well as handle exceptions, while actions allow it to interface with external sources, such as knowledge bases or environments, to gather additional information. We apply our approach, named ReAct, to a diverse set of language and decision making tasks and demonstrate its effectiveness over state-of-the-art baselines, as well as improved human interpretability and trustworthiness over methods without reasoning or acting components. Concretely, on question answering (HotpotQA) and fact verification (Fever), ReAct overcomes issues of hallucination and error propagation prevalent in chain-of-thought reasoning by interacting with a simple Wikipedia API, and generates human-like task-solving trajectories that are more interpretable than baselines without reasoning traces. On two interactive decision making benchmarks (ALFWorld and WebShop), ReAct outperforms imitation and reinforcement learning methods by an absolute success rate of 34\% and 10\% respectively, while being prompted with only one or two in-context examples. Project site with code: https://react-lm.github.io},
+  keywords={arxiv:2210.03629}
+}
+
+@misc{jha2022responsiblereasoning,
+  title={Responsible Reasoning with Large Language Models and the Impact of Proper Nouns},
+  author={Sumit Kumar Jha},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/a70fcd82d8d26bf4c8b0bdde88e96b6ce2c80ecf}
+}
+
+@article{he2022rethinkingwith,
+  title={Rethinking with Retrieval: Faithful Large Language Model Inference},
+  author={Hangfeng He and Hongming Zhang and D. Roth},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2301.00303},
+  url={https://www.semanticscholar.org/paper/490d8006851b1562cfd9ec1f057471f2868289d1},
+  abstract={Despite the success of large language models (LLMs) in various natural language processing (NLP) tasks, the stored knowledge in these models may inevitably be incomplete, out-of-date, or incorrect. This motivates the need to utilize external knowledge to assist LLMs. Unfortunately, current methods for incorporating external knowledge often require additional training or fine-tuning, which can be costly and may not be feasible for LLMs. To address this issue, we propose a novel post-processing approach, rethinking with retrieval (RR), which retrieves relevant external knowledge based on the decomposed reasoning steps obtained from the chain-of-thought (CoT) prompting. This lightweight approach does not require additional training or fine-tuning and is not limited by the input length of LLMs. We evaluate the effectiveness of RR through extensive experiments with GPT-3 on three complex reasoning tasks: commonsense reasoning, temporal reasoning, and tabular reasoning. Our results show that RR can produce more faithful explanations and improve the performance of LLMs.},
+  keywords={arxiv:2301.00303}
+}
+
+@article{creswell2022selectioninferenceexploiting,
+  title={Selection-Inference: Exploiting Large Language Models for Interpretable Logical Reasoning},
+  author={Antonia Creswell and M. Shanahan and I. Higgins},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  url={https://www.semanticscholar.org/paper/d48b29889241551e1ee6622fa78c3fa4159255dd},
+  abstract={Large language models (LLMs) have been shown to be capable of impressive few-shot generalisation to new tasks. However, they still tend to perform poorly on multi-step logical reasoning problems. Here we carry out a comprehensive evaluation of LLMs on 50 tasks that probe different aspects of logical reasoning. We show that language models tend to perform fairly well at single step inference or entailment tasks, but struggle to chain together multiple reasoning steps to solve more complex problems. In light of this, we propose a Selection-Inference (SI) framework that exploits pre-trained LLMs as general processing modules, and alternates between selection and inference to generate a series of interpretable, casual reasoning steps leading to the final answer. We show that a 7B parameter LLM used within the SI framework in a 5-shot generalisation setting, with no fine-tuning, yields a performance improvement of over 100\% compared to an equivalent vanilla baseline on a suite of 10 logical reasoning tasks. The same model in the same setting even outperforms a significantly larger 280B parameter baseline on the same suite of tasks. Moreover, answers produced by the SI framework are accompanied by a causal natural-language-based reasoning trace, which has important implications for the safety and trustworthiness of the system.},
+  keywords={arxiv:2205.09712}
+}
+
+@article{wang2022selfconsistencyimproves,
+  title={Self-Consistency Improves Chain of Thought Reasoning in Language Models},
+  author={Xuezhi Wang and Jason Wei and D. Schuurmans and Quoc Le and Ed H. Chi and Denny Zhou},
+  year={2022},
+  booktitle={International Conference on Learning Representations},
+  url={https://www.semanticscholar.org/paper/5f19ae1135a9500940978104ec15a5b8751bc7d2},
+  abstract={Chain-of-thought prompting combined with pre-trained large language models has achieved encouraging results on complex reasoning tasks. In this paper, we propose a new decoding strategy, self-consistency, to replace the naive greedy decoding used in chain-of-thought prompting. It first samples a diverse set of reasoning paths instead of only taking the greedy one, and then selects the most consistent answer by marginalizing out the sampled reasoning paths. Self-consistency leverages the intuition that a complex reasoning problem typically admits multiple different ways of thinking leading to its unique correct answer. Our extensive empirical evaluation shows that self-consistency boosts the performance of chain-of-thought prompting with a striking margin on a range of popular arithmetic and commonsense reasoning benchmarks, including GSM8K (+17.9\%), SVAMP (+11.0\%), AQuA (+12.2\%), StrategyQA (+6.4\%) and ARC-challenge (+3.9\%).},
+  keywords={arxiv:2203.11171}
+}
+
+@article{lewkowycz2022solvingquantitative,
+  title={Solving Quantitative Reasoning Problems with Language Models},
+  author={Aitor Lewkowycz and Anders Andreassen and David Dohan and Ethan Dyer and H. Michalewski and V. Ramasesh and Ambrose Slone and Cem Anil and Imanol Schlag and Theo Gutman-Solo and Yuhuai Wu and Behnam Neyshabur and Guy Gur-Ari and Vedant Misra},
+  year={2022},
+  booktitle={Neural Information Processing Systems},
+  doi={10.48550/arXiv.2206.14858},
+  url={https://www.semanticscholar.org/paper/ab0e3d3e4d42369de5933a3b4c237780b41c0d77},
+  abstract={Language models have achieved remarkable performance on a wide range of tasks that require natural language understanding. Nevertheless, state-of-the-art models have generally struggled with tasks that require quantitative reasoning, such as solving mathematics, science, and engineering problems at the college level. To help close this gap, we introduce Minerva, a large language model pretrained on general natural language data and further trained on technical content. The model achieves state-of-the-art performance on technical benchmarks without the use of external tools. We also evaluate our model on over two hundred undergraduate-level problems in physics, biology, chemistry, economics, and other sciences that require quantitative reasoning, and find that the model can correctly answer nearly a third of them.},
+  keywords={arxiv:2206.14858}
+}
+
+@article{collins2022structuredflexible,
+  title={Structured, flexible, and robust: benchmarking and improving large language models towards more human-like behavior in out-of-distribution reasoning tasks},
+  author={K. M. Collins and Catherine Wong and Jiahai Feng and Megan Wei and J. Tenenbaum},
+  year={2022},
+  booktitle={Annual Meeting of the Cognitive Science Society},
+  doi={10.48550/arXiv.2205.05718},
+  url={https://www.semanticscholar.org/paper/7ef9aafc68511afab5b287e62b754576ea37b4ce},
+  abstract={Human language offers a powerful window into our thoughts -- we tell stories, give explanations, and express our beliefs and goals through words. Abundant evidence also suggests that language plays a developmental role in structuring our learning. Here, we ask: how much of human-like thinking can be captured by learning statistical patterns in language alone? We first contribute a new challenge benchmark for comparing humans and distributional large language models (LLMs). Our benchmark contains two problem-solving domains (planning and explanation generation) and is designed to require generalization to new, out-of-distribution problems expressed in language. We find that humans are far more robust than LLMs on this benchmark. Next, we propose a hybrid Parse-and-Solve model, which augments distributional LLMs with a structured symbolic reasoning module. We find that this model shows more robust adaptation to out-of-distribution planning problems, demonstrating the promise of hybrid AI models for more human-like reasoning.},
+  keywords={arxiv:2205.05718}
+}
+
+@article{valentino2022textgraphs2022,
+  title={TextGraphs 2022 Shared Task on Natural Language Premise Selection},
+  author={Marco Valentino and Deborah Ferreira and Mokanarangan Thayaparan and André Freitas and Dmitry Ustalov},
+  year={2022},
+  booktitle={Workshop on Graph-based Methods for Natural Language Processing},
+  url={https://www.semanticscholar.org/paper/43845c54af0246baab17d572953e671487e1dcd1}
+}
+
+@article{ozturkler2022thinksumprobabilistic,
+  title={ThinkSum: Probabilistic reasoning over sets using large language models},
+  author={Batu Mehmet Ozturkler and Nikolay Malkin and Zhen Wang and N. Jojic},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2210.01293},
+  url={https://www.semanticscholar.org/paper/370cea8b4220917f45a69358c0303df71f5063c7},
+  abstract={Large language models (LLMs) have a substantial capacity for high-level analogical reasoning: reproducing patterns in linear text that occur in their training data (zero-shot evaluation) or in the provided context (few-shot in-context learning). However, recent studies show that even the more advanced LLMs fail in scenarios that require reasoning over multiple objects or facts and making sequences of logical deductions. We propose a two-stage probabilistic inference paradigm, ThinkSum, which reasons over sets of objects or facts in a structured manner. In the first stage (Think – retrieval of associations), a LLM is queried in parallel over a set of phrases extracted from the prompt or an auxiliary model call. In the second stage (Sum – probabilistic inference or reasoning), the results of these queries are aggregated to make the final prediction. We demonstrate the possibilities and advantages of ThinkSum on the BIG-bench suite of LLM evaluation tasks, achieving improvements over the state of the art using GPT-family models on thirteen difficult tasks, often with far smaller model variants. We also compare and contrast ThinkSum with other proposed modifications to direct prompting of LLMs, such as variants of chain-of-thought prompting. Our results suggest that because the probabilistic inference in ThinkSum is performed outside of calls to the LLM, ThinkSum is less sensitive to prompt design, yields more interpretable predictions, and can be flexibly combined with latent variable models to extract structured knowledge from LLMs. Overall, our proposed paradigm represents a promising approach for enhancing the reasoning capabilities of LLMs.},
+  keywords={arxiv:2210.01293}
+}
+
+@article{huang2022towardsreasoning,
+  title={Towards Reasoning in Large Language Models: A Survey},
+  author={Jie Huang and K. Chang},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2212.10403},
+  url={https://www.semanticscholar.org/paper/db4ab91d5675c37795e719e997a2827d3d83cd45},
+  abstract={Reasoning is a fundamental aspect of human intelligence that plays a crucial role in activities such as problem solving, decision making, and critical thinking. In recent years, large language models (LLMs) have made significant progress in natural language processing, and there is observation that these models may exhibit reasoning abilities when they are sufficiently large. However, it is not yet clear to what extent LLMs are capable of reasoning. This paper provides a comprehensive overview of the current state of knowledge on reasoning in LLMs, including techniques for improving and eliciting reasoning in these models, methods and benchmarks for evaluating reasoning abilities, findings and implications of previous research in this field, and suggestions on future directions. Our aim is to provide a detailed and up-to-date review of this topic and stimulate meaningful discussion and future work.},
+  keywords={arxiv:2212.10403}
+}
+
+@article{agrawal2022towardsmathematics,
+  title={Towards a Mathematics Formalisation Assistant using Large Language Models},
+  author={Ayush Agrawal and Siddhartha Gadgil and Navin Goyal and Ashvni Narayanan and Anand Tadipatri},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2211.07524},
+  url={https://www.semanticscholar.org/paper/b1eebb2df3b9ff7ff2b00fb1a786f6ada2caebce},
+  abstract={Mathematics formalisation is the task of writing mathematics (i.e., definitions, theorem statements, proofs) in natural language, as found in books and papers, into a formal language that can then be checked for correctness by a program. It is a thriving activity today, however formalisation remains cumbersome. In this paper, we explore the abilities of a large language model (Codex) to help with formalisation in the Lean theorem prover. We find that with careful inputdependent prompt selection and postprocessing, Codex is able to formalise short mathematical statements at undergrad level with nearly 75\% accuracy for 120 theorem statements. For proofs quantitative analysis is infeasible and we undertake a detailed case study. We choose a diverse set of 13 theorems at undergrad level with proofs that fit in two-three paragraphs. We show that with a new prompting strategy Codex can formalise these proofs in natural language with at least one out of twelve Codex completion being easy to repair into a complete proof. This is surprising as essentially no aligned data exists for formalised mathematics, particularly for proofs. These results suggest that large language models are a promising avenue towards fully or partially automating formalisation.},
+  keywords={arxiv:2211.07524}
+}
+
+@article{chen2022unigeounifying,
+  title={UniGeo: Unifying Geometry Logical Reasoning via Reformulating Mathematical Expression},
+  author={Jiaqi Chen and Tong Li and Jinghui Qin and Pan Lu and Liang Lin and Chongyu Chen and Xiaodan Liang},
+  year={2022},
+  booktitle={Conference on Empirical Methods in Natural Language Processing},
+  doi={10.48550/arXiv.2212.02746},
+  url={https://www.semanticscholar.org/paper/72fce949725b20428e5f56247fef5c6bd1ce6154},
+  abstract={Geometry problem solving is a well-recognized testbed for evaluating the high-level multi-modal reasoning capability of deep models. In most existing works, two main geometry problems: calculation and proving, are usually treated as two specific tasks, hindering a deep model to unify its reasoning capability on multiple math tasks. However, in essence, these two tasks have similar problem representations and overlapped math knowledge which can improve the understanding and reasoning ability of a deep model on both two tasks. Therefore, we construct a large-scale Unified Geometry problem benchmark, UniGeo, which contains 4,998 calculation problems and 9,543 proving problems. Each proving problem is annotated with a multi-step proof with reasons and mathematical expressions. The proof can be easily reformulated as a proving sequence that shares the same formats with the annotated program sequence for calculation problems. Naturally, we also present a unified multi-task Geometric Transformer framework, Geoformer, to tackle calculation and proving problems simultaneously in the form of sequence generation, which finally shows the reasoning ability can be improved on both two tasks by unifying formulation. Furthermore, we propose a Mathematical Expression Pretraining (MEP) method that aims to predict the mathematical expressions in the problem solution, thus improving the Geoformer model. Experiments on the UniGeo demonstrate that our proposed Geoformer obtains state-of-the-art performance by outperforming task-specific model NGS with over 5.6\% and 3.2\% accuracies on calculation and proving problems, respectively.},
+  keywords={arxiv:2212.02746}
+}
+
+@article{sahu2022unpackinglarge,
+  title={Unpacking Large Language Models with Conceptual Consistency},
+  author={Pritish Sahu and Michael Cogswell and Yunye Gong and Ajay Divakaran},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2209.15093},
+  url={https://www.semanticscholar.org/paper/4f4a80148cb8f328aeaee68b34f9797cfb5ea150},
+  abstract={If a Large Language Model (LLM) answers"yes"to the question"Are mountains tall?"then does it know what a mountain is? Can you rely on it responding correctly or incorrectly to other questions about mountains? The success of Large Language Models (LLMs) indicates they are increasingly able to answer queries like these accurately, but that ability does not necessarily imply a general understanding of concepts relevant to the anchor query. We propose conceptual consistency to measure a LLM's understanding of relevant concepts. This novel metric measures how well a model can be characterized by finding out how consistent its responses to queries about conceptually relevant background knowledge are. To compute it we extract background knowledge by traversing paths between concepts in a knowledge base and then try to predict the model's response to the anchor query from the background knowledge. We investigate the performance of current LLMs in a commonsense reasoning setting using the CSQA dataset and the ConceptNet knowledge base. While conceptual consistency, like other metrics, does increase with the scale of the LLM used, we find that popular models do not necessarily have high conceptual consistency. Our analysis also shows significant variation in conceptual consistency across different kinds of relations, concepts, and prompts. This serves as a step toward building models that humans can apply a theory of mind to, and thus interact with intuitively.},
+  keywords={arxiv:2209.15093}
+}

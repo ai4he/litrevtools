@@ -1,0 +1,627 @@
+
+You are an expert in writing PRISMA systematic literature reviews for academic publication.
+
+CRITICAL REQUIREMENT: You MUST cite ALL papers (existing AND new) using LaTeX \cite{} commands throughout the regenerated paper.
+
+=== ALL BIBTEX ENTRIES (INCLUDING NEW PAPERS) ===
+@article{cohen2022thisunicorn,
+  title={"This is my unicorn, Fluffy": Personalizing frozen vision-language representations},
+  author={Niv Cohen and Rinon Gal and E. Meirom and Gal Chechik and Y. Atzmon},
+  year={2022},
+  booktitle={European Conference on Computer Vision},
+  doi={10.48550/arXiv.2204.01694},
+  url={https://www.semanticscholar.org/paper/0791a0441e1f672c43aecb2d6708fbc8725c8cad},
+  abstract={Large Vision&Language models pretrained on web-scale data provide representations that are invaluable for numerous V&L problems. However, it is unclear how they can be used for reasoning about user-specific visual concepts in unstructured language. This problem arises in multiple domains, from personalized image retrieval to personalized interaction with smart devices. We introduce a new learning setup called Personalized Vision&Language (PerVL) with two new benchmark datasets for retrieving and segmenting user-specific"personalized"concepts"in the wild". In PerVL, one should learn personalized concepts (1) independently of the downstream task (2) allowing a pretrained model to reason about them with free language, and (3) does not require personalized negative examples. We propose an architecture for solving PerVL that operates by extending the input vocabulary of a pretrained model with new word embeddings for the new personalized concepts. The model can then reason about them by simply using them in a sentence. We demonstrate that our approach learns personalized visual concepts from a few examples and can effectively apply them in image retrieval and semantic segmentation using rich textual queries.}
+}
+
+@article{stolfo2022causalframework,
+  title={A Causal Framework to Quantify the Robustness of Mathematical Reasoning with Language Models},
+  author={Alessandro Stolfo and Zhijing Jin and Kumar Shridhar and B. Scholkopf and Mrinmaya Sachan},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2210.12023},
+  url={https://www.semanticscholar.org/paper/9b45af10429681249fafb07c3b6012ea4ce63ffe},
+  abstract={We have recently witnessed a number of impressive results on hard mathematical reasoning problems with language models. At the same time, the robustness of these models has also been called into question; recent works have shown that models can rely on shallow patterns in the problem description when generating a solution.Building on the idea of behavioral testing, we propose a novel framework, which pins down the causal effect of various factors in the input, e.g., the surface form of the problem text, the operands, and math operators on the output solution.By grounding the behavioral analysis in a causal graph describing an intuitive reasoning process, we study the behavior of language models in terms of robustness and sensitivity to direct interventions in the input space. We apply our framework on a test bed of math word problems.Our analysis shows that robustness does not appear to continuously improve as a function of size, but the GPT-3 Davinci models (175B) achieve a dramatic improvement in both robustness and sensitivity compared to all other GPT variants.}
+}
+
+@article{snchez2022clusteringapproach,
+  title={A Clustering Approach for the Optimal Siting of Recharging Stations in the Electric Vehicle Routing Problem with Time Windows},
+  author={Danny García Sánchez and Alejandra Tabares and L. Faria and Juan Carlos Rivera and J. Franco},
+  year={2022},
+  booktitle={Energies},
+  doi={10.3390/en15072372},
+  url={https://www.semanticscholar.org/paper/f1164514c7180331c3b059c19eab5169c9c921a7},
+  abstract={Transportation has been incorporating electric vehicles (EVs) progressively. EVs do not produce air or noise pollution, and they have high energy efficiency and low maintenance costs. In this context, the development of efficient techniques to overcome the vehicle routing problem becomes crucial with the proliferation of EVs. The vehicle routing problem concerns the freight capacity and battery autonomy limitations in different delivery-service scenarios, and the challenge of best locating recharging stations. This work proposes a mixed-integer linear programming model to solve the electric location routing problem with time windows (E-LRPTW) considering the state of charge, freight and battery capacities, and customer time windows in the decision model. A clustering strategy based on the k-means algorithm is proposed to divide the set of vertices (EVs) into small areas and define potential sites for recharging stations, while reducing the number of binary variables. The proposed model for E-LRPTW was implemented in Python and solved using mathematical modeling language AMPL together with CPLEX. Performed tests on instances with 5 and 10 clients showed a large reduction in the time required to find the solution (by about 60 times in one instance). It is concluded that the strategy of dividing customers by sectors has the potential to be applied and generate solutions for larger geographical areas and numbers of recharging stations, and determine recharging station locations as part of planning decisions in more realistic scenarios.}
+}
+
+@misc{desogus2022contributionrelationship,
+  title={A Contribution on Relationship Banking. Economic, Anthropological and Mathematical Reasoning, Empirical Evidence from Italy},
+  author={Marco Desogus and Elisa Casu},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/dd88cc9b1f6d71ef82631b4e1c98c077ccdf291a}
+}
+
+@article{wang2022hybridgenetic,
+  title={A Hybrid Genetic Algorithm for Flexible Job Shop Scheduling Problem},
+  author={Xianglong Wang and Changyi Liu},
+  year={2022},
+  booktitle={2022 5th World Conference on Mechanical Engineering and Intelligent Manufacturing (WCMEIM)},
+  doi={10.1109/WCMEIM56910.2022.10021523},
+  url={https://www.semanticscholar.org/paper/3cff420b5a41a06291b68f5b6600935c090f8ad8},
+  abstract={Partially flexible job shop scheduling problem (P-FJSP) is a NP Hard problem more complex than fully flexi-ble job shop scheduling problem (T -FJSP). In this paper, the mathematical model of flexible job shop scheduling is established with the goal of minimizing the maximum completion time (makespan). It combines the local search ability of simu-lated annealing algorithm and the global search ability of ge-netic algorithm. In the process of chromosome decoding, greedy decoding method is used to get a better scheduling solution as far as possible. The hybrid scheduling algorithm is implemented based on Visual Studio and C # language. Finally, 8×8 classic scheduling instance are used for simulation scheduling experiments to verify that the hybrid genetic algorithm proposed in this paper is effective in solving large-scale FJSP.}
+}
+
+@article{zhang2022multilayerattention,
+  title={A Multi-Layer Attention Network for Visual Commonsense Reasoning},
+  author={Wenqi Zhang and Yongchao Gao and Heng Qian and Hongli Lyu},
+  year={2022},
+  booktitle={International Conference on Data Science and Information Technology},
+  doi={10.1109/DSIT55514.2022.9943834},
+  url={https://www.semanticscholar.org/paper/0e0f20f3af3650b5a97b0ec3f046ba8160b45279},
+  abstract={Visual Commonsense Reasoning (VCR) is a challenging multimodal task involving several research fields such as vision, cognition, and reasoning, which combines images and natural language for reasoning. Existing VCR methods focus on global attention or use pre-training models, but these methods lack attention to local features of visual and language. In this paper, a multi-layer attention network is proposed for the VCR task, including an intra-modal attention module and an inter-modal attention module. The intra-modal attention module complements important features of visual and language modalities with fine-grained visual attention to improve the relevance of visual and language. The inter-modal attention module captures the internal dependencies between visual and language. Finally, the two modules are integrated into an end-to-end reasoning framework. Experiments on the VCR large-scale dataset show that the proposed method exhibits a decent improvement in the VCR task and illustrates the effectiveness of the method on three subtasks.}
+}
+
+@article{ricci2022petrinetbasedapproach,
+  title={A Petri-Net-Based Approach for Enhancing Clinical Reasoning in Medical Education},
+  author={F. Ricci and F. Consorti and F. Pecoraro and D. Luzi and Oscar Tamburis},
+  year={2022},
+  journal={IEEE Transactions on Learning Technologies},
+  doi={10.1109/tlt.2022.3157391},
+  url={https://www.semanticscholar.org/paper/98b0fb67a6fb222998e3449621f3f5eecaed758e},
+  abstract={Medical students are called to acquire competence to manage disease in its dynamic evolution over time, learning to analyze how clinical conditions evolve in a patient's history and how each condition interferes with the evolution of the other coexisting conditions. In this article, the health issue network (HIN) approach is introduced as a formal language based on Petri nets (PNs) to model properties that are particularly apposite for the graphical representation of HIN evolutionary paths. Moreover, the PNs’ underlying mathematical model allows users to draw coherent and well-formed graphs representing rather complex clinical cases. Finally, HIN can be easily integrated into a simulation environment to support case-based learning activities and assessment. The examples of the exercises provided in this article show, on the one hand, the ways the introduced methodology is figured out and implemented; on the other hand, they outline the variety of learning questions that users may deal with when deploying the HIN approach.}
+}
+
+@article{ekong2022ratiocinativestudy,
+  title={A Ratiocinative Study and Assessment of W. V. O. Quine’s “Criterion of Ontological Commitment”},
+  author={Joseph T. Ekong},
+  year={2022},
+  journal={International Journal of Philosophy},
+  doi={10.47941/ijp.1052},
+  url={https://www.semanticscholar.org/paper/7b6955111d3bd91b13e7a9c7fbdfd75d43825c36},
+  abstract={Purpose: This work has three main objectives: Firstly, it offers an elucidation of the notion of ontological commitment. Secondly, it assesses the adequacy of the criterion of ontological commitment for different languages. Thirdly, it offers some speculative and evaluative remarks regarding the significance of Quine’s criterion of ontological commitment. Many ontologists, within the analytic tradition, often appeal to Quine's criterion of ontological commitment, when debating whether an assertion or theory implies the existence of a certain entity. Regarding his goal in formulating this criterion, he says that the criterion does not aim to help us discover what it is that there is, but only what a theory says there is: “I look to variables and quantification for evidence as to what a theory says that there is, not for evidence as to what there is” (Quine, 1960: 225). Its most popular formulation, using textual evidence from Quine's oeuvre, is: “To be is to be the value of a bound variable,” (Quine, 1961: 15). However, this formulation is susceptible to gross misunderstanding, especially if one is influenced by the formalities and technical maneuvers of model theory. In mathematical logic, model theory is the study of the relationship between formal theories (a collection of sentences in a formal language expressing statements about a mathematical structure), and their models (those structures in which the statements of the theory hold). Model theory is a branch of mathematical logic where we study mathematical structures by considering the first-order sentences true in those structures and the sets definable by first-order formulas. Model theory studies the relations between sentences of a formal language and the interpretations (or ‘structures’) which make these sentences true or false. It offers precise definitions of truth, logical truth and consequence, meanings and modalities. 
+Methodology: This work is expository, analytic, critical and evaluative in its methodology. Of course, there are familiar philosophical problems which are within the discursive framework of ‘ontology,’ often phrased by asking if something or some category of things are “real,” or whether “they exist,” concretely. An outstanding example is provided by the traditional problem of universals, which issues in the nominalist-realist controversy, as to the real existence of universals, or of abstract entities such as classes (in the mathematical sense) or propositions (in the abstract sense, referring to the content of an assertion in abstraction from the particular words used to convey it). 
+Results: In as much as one might agree with Quine’s Criterion of Ontological Commitment, one might also opine that it is nonetheless a feature of first-order language (i.e. the language embodied in first-order logic; a symbolized reasoning process comprising relations, functions and constants, in which each sentence or statement is broken down into a subject and a predicate. In this regard, the predicate modifies or defines the properties of the subject) that there should be an exact correspondence between the ontological commitments carried by a sentence and the objects that must be counted among the values of the variables in order for the sentence to be true. However, this in itself is not a reason for thinking that such a feature will generalize beyond first-order languages. It is possible for Quine’s Criterion to degenerate, when the language contains atomic predicates expressing extrinsic properties. 
+Unique Contribution to theory, practice and policy: Based on Quine’s analysis, a theory is committed to those and only those entities that in the last analysis serve as the values of its bound variables. Thus, ordinary first-order theory commits one to an ontology only of individuals (particulars), whereas higher order logic commits one to the existence of sets, i.e. of collections of definite and distinct entities (or, alternatively, of properties and relations). Likewise, if bound first-order variables are assumed to range over sets (as they do in set theory), a commitment to the existence of these sets is incurred. Admittedly, the precise import of Quine’s criterion of ontological commitment, however, is not completely clear, nor is it clear in what other sense one is perhaps committed by a theory to those entities that are named or otherwise referred to in it, but not quantified over in it. However, it despite its limitations, it has made is possible for one to measure the ontological cost of theories, an important component in deciding which theories to accept, thus offering a partial foundation for theory choice.}
+}
+
+@article{li2022scenariobasedexploration,
+  title={A Scenario-based Exploration of Expected Usefulness, Privacy Concerns, and Adoption Likelihood of Learning Analytics},
+  author={X. Li and M. Rosson and Jenay Robert},
+  year={2022},
+  booktitle={ACM Conference on Learning @ Scale},
+  doi={10.1145/3491140.3528271},
+  url={https://www.semanticscholar.org/paper/067b8489b028d931b751cb9413225b761e51dcf3},
+  abstract={Learning analytics has become a robust research area in the last decade, as innovative analytic models of learning data have been created with the goal of enhancing teaching and learning. However, barriers to large scale adoption of such technologies in higher education still exist. In recent years, a strand of research has begun to investigate stakeholders' expectations of learning analytics, hoping to find ways to integrate the innovations into everyday teaching practices. For instance, studies have investigated instructors' ideas about how learning analytics might be helpful, as well as concerns about student data privacy. However, most studies have taken a general approach rather than considering instructors' day-to-day experiences. Using survey methods, we presented instructors with hypothetical scenarios of learning analytics in use across disciplines, class sizes, teaching activities, and types of student data. We asked for ratings of both usefulness and privacy concerns for each proposed teaching situation. Our respondents considered scenarios involving learning outcomes-related data (e.g. grades) to be more useful than those that involve student interactions (e.g. language, social activity). In contrast, privacy concerns were lower for outcomes-oriented scenarios than interactions-focused scenarios. An interesting new finding was a negative correlation of usefulness and privacy; we discuss this in the context of instructors' possible cost-benefit reasoning. We reflect on our findings with respect to future efforts in developing and fielding learning analytics tools.}
+}
+
+@article{lu2022surveydeep,
+  title={A Survey of Deep Learning for Mathematical Reasoning},
+  author={Pan Lu and Liang Qiu and Wenhao Yu and S. Welleck and Kai-Wei Chang},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2212.10535},
+  url={https://www.semanticscholar.org/paper/2dbec38fe353ab0e495ad09263389dbc9260824d},
+  abstract={Mathematical reasoning is a fundamental aspect of human intelligence and is applicable in various fields, including science, engineering, finance, and everyday life. The development of artificial intelligence (AI) systems capable of solving math problems and proving theorems in language has garnered significant interest in the fields of machine learning and natural language processing. For example, mathematics serves as a testbed for aspects of reasoning that are challenging for powerful deep learning models, driving new algorithmic and modeling advances. On the other hand, recent advances in large-scale neural language models have opened up new benchmarks and opportunities to use deep learning for mathematical reasoning. In this survey paper, we review the key tasks, datasets, and methods at the intersection of mathematical reasoning and deep learning over the past decade. We also evaluate existing benchmarks and methods, and discuss future research directions in this domain.}
+}
+
+@article{hu2022surveyknowledge,
+  title={A Survey of Knowledge Enhanced Pre-Trained Language Models},
+  author={Linmei Hu and Zeyi Liu and Ziwang Zhao and Lei Hou and Liqiang Nie and Juanzi Li},
+  year={2022},
+  journal={IEEE Transactions on Knowledge and Data Engineering},
+  doi={10.1109/TKDE.2023.3310002},
+  url={https://www.semanticscholar.org/paper/a26623d52d24e03044a158cddad931ec5ab7304c},
+  abstract={Pre-trained Language Models (PLMs) which are trained on large text corpus via self-supervised learning method, have yielded promising performance on various tasks in Natural Language Processing (NLP). However, though PLMs with huge parameters can effectively possess rich knowledge learned from massive training text and benefit downstream tasks at the fine-tuning stage, they still have some limitations such as poor reasoning ability due to the lack of external knowledge. Research has been dedicated to incorporating knowledge into PLMs to tackle these issues. In this paper, we present a comprehensive review of Knowledge Enhanced Pre-trained Language Models (KE-PLMs) to provide a clear insight into this thriving field. We introduce appropriate taxonomies respectively for Natural Language Understanding (NLU) and Natural Language Generation (NLG) to highlight these two main tasks of NLP. For NLU, we divide the types of knowledge into four categories: linguistic knowledge, text knowledge, knowledge graph (KG), and rule knowledge. The KE-PLMs for NLG are categorized into KG-based and retrieval-based methods. Finally, we point out some promising future directions of KE-PLMs.}
+}
+
+@article{zhou2022surveyneural,
+  title={A Survey on Neural Open Information Extraction: Current Status and Future Directions},
+  author={Shaowen Zhou and Yu Bowen and Aixin Sun and Cheng Long and Jingyang Li and Haiyang Yu and Jianguo Sun},
+  year={2022},
+  booktitle={International Joint Conference on Artificial Intelligence},
+  doi={10.48550/arXiv.2205.11725},
+  url={https://www.semanticscholar.org/paper/5de6ecf62f14c9263882f9f30d6448df9efd34e0},
+  abstract={Open Information Extraction (OpenIE) facilitates domain-independent discovery of relational facts from large corpora. The technique well suits many open-world natural language understanding scenarios, such as automatic knowledge base construction, open-domain question answering, and explicit reasoning. Thanks to the rapid development in deep learning technologies, numerous neural OpenIE architectures have been proposed and achieve considerable performance improvement. In this survey, we provide an extensive overview of the state-of-the-art neural OpenIE models, their key design decisions, strengths and weakness. Then, we discuss limitations of current solutions and the open issues in OpenIE problem itself. Finally we list recent trends that could help expand its scope and applicability, setting up promising directions for future research in OpenIE. To our best knowledge, this paper is the first review on neural OpenIE.}
+}
+
+@article{wankmller2022comparisonapproaches,
+  title={A comparison of approaches for imbalanced classification problems in the context of retrieving relevant documents for an analysis},
+  author={Sandra Wankmüller},
+  year={2022},
+  journal={Journal of Computational Social Science},
+  doi={10.1007/s42001-022-00191-7},
+  url={https://www.semanticscholar.org/paper/a12e9a6863c8453787575172599389d2ddcd9f62},
+  abstract={One of the first steps in many text-based social science studies is to retrieve documents that are relevant for an analysis from large corpora of otherwise irrelevant documents. The conventional approach in social science to address this retrieval task is to apply a set of keywords and to consider those documents to be relevant that contain at least one of the keywords. But the application of incomplete keyword lists has a high risk of drawing biased inferences. More complex and costly methods such as query expansion techniques, topic model-based classification rules, and active as well as passive supervised learning could have the potential to more accurately separate relevant from irrelevant documents and thereby reduce the potential size of bias. Yet, whether applying these more expensive approaches increases retrieval performance compared to keyword lists at all, and if so, by how much, is unclear as a comparison of these approaches is lacking. This study closes this gap by comparing these methods across three retrieval tasks associated with a data set of German tweets (Linder in SSRN, 2017. https://doi.org/10.2139/ssrn.3026393 ), the Social Bias Inference Corpus (SBIC) (Sap et al. in Social bias frames: reasoning about social and power implications of language. In: Jurafsky et al. (eds) Proceedings of the 58th annual meeting of the association for computational linguistics. Association for Computational Linguistics, p 5477–5490, 2020. https://doi.org/10.18653/v1/2020.aclmain.486 ), and the Reuters-21578 corpus (Lewis in Reuters-21578 (Distribution 1.0). [Data set], 1997. http://www.daviddlewis.com/resources/testcollections/reuters21578/ ). Results show that query expansion techniques and topic model-based classification rules in most studied settings tend to decrease rather than increase retrieval performance. Active supervised learning, however, if applied on a not too small set of labeled training instances (e.g. 1000 documents), reaches a substantially higher retrieval performance than keyword lists.}
+}
+
+@article{wang2022comparisonthree,
+  title={A comparison of three approaches to covariate effects on latent factors},
+  author={Ze Wang},
+  year={2022},
+  booktitle={Large-scale Assessments in Education},
+  doi={10.1186/s40536-022-00148-2},
+  url={https://www.semanticscholar.org/paper/c40412109167ae57baab6505edf9b628efca6d3a},
+  abstract={In educational and psychological research, it is common to use latent factors to represent constructs and then to examine covariate effects on these latent factors. Using empirical data, this study applied three approaches to covariate effects on latent factors: the multiple-indicator multiple-cause (MIMIC) approach, multiple group confirmatory factor analysis (MG-CFA) approach, and the structural equation model trees (SEM Trees) approach. The MIMIC approach directly models covariate effects on latent factors. The MG-CFA approach allows testing of measurement invariance before latent factor means could be compared. The more recently developed SEM Trees approach partitions the sample into homogenous subsets based on the covariate space; model parameters are estimated separately for each subgroup. We applied the three approaches using an empirical dataset extracted from the eighth-grade U.S. data from the Trends in International Mathematics and Science Study 2019 database. All approaches suggested differences among mathematics achievement categories for the latent factor of mathematics self-concept. In addition, language spoken at home did not seem to affect students’ mathematics self-concept. Despite these general findings, the three approaches provided different pieces of information regarding covariate effects. For all models, we appropriately considered the complex data structure and sampling weights following recent recommendations for analyzing large-scale assessment data.}
+}
+
+@misc{alemany2022methodologycharacterize,
+  title={A methodology to characterize bias and harmful stereotypes in natural language processing in Latin America},
+  author={L. A. Alemany and Luciana Benotti and Hernán Maina and Luc'ia M. Gonz'alez and Mariela Rajngewerc and Lautaro Mart'inez and Jos'e L. S'anchez and M. Schilman and Guido Ivetta and Alexia Halvorsen and Amanda Rojo and M. Bordone and Beatriz Busaniche},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/a82a08b5e6a11f4d6fdff95dd30177957ed7855e},
+  abstract={Automated decision-making systems, especially those based on natural language processing, are pervasive in our lives. They are not only behind the internet search engines we use daily, but also take more critical roles: selecting candidates for a job, determining suspects of a crime, diagnosing autism and more. Such automated systems make errors, which may be harmful in many ways, be it because of the severity of the consequences (as in health issues) or because of the sheer number of people they affect. When errors made by an automated system affect a population more than others, we call the system \textit{biased}. Most modern natural language technologies are based on artifacts obtained from enormous volumes of text using machine learning, namely language models and word embeddings. Since they are created by applying subsymbolic machine learning, mostly artificial neural networks, they are opaque and practically uninterpretable by direct inspection, thus making it very difficult to audit them. In this paper, we present a methodology that spells out how social scientists, domain experts, and machine learning experts can collaboratively explore biases and harmful stereotypes in word embeddings and large language models. Our methodology is based on the following principles: * focus on the linguistic manifestations of discrimination on word embeddings and language models, not on the mathematical properties of the models * reduce the technical barrier for discrimination experts%, be it social scientists, domain experts or other * characterize through a qualitative exploratory process in addition to a metric-based approach * address mitigation as part of the training process, not as an afterthought}
+}
+
+@article{kim2022novelmodular,
+  title={A novel modular modeling approach for understanding different electromechanics between left and right heart in rat},
+  author={Nari Kim and Julius D. Pronto and D. Nickerson and A. Taberner and Peter J. Hunter},
+  year={2022},
+  booktitle={Frontiers in Physiology},
+  doi={10.3389/fphys.2022.965054},
+  url={https://www.semanticscholar.org/paper/2fba0d7b1293e4b13180fb3bccf86ed52ddcaf70},
+  abstract={While ion channels and transporters involved in excitation-contraction coupling have been linked and constructed as comprehensive computational models, validation of whether each individual component of a model can be reused has not been previously attempted. Here we address this issue while using a novel modular modeling approach to investigate the underlying mechanism for the differences between left ventricle (LV) and right ventricle (RV). Our model was developed from modules constructed using the module assembly principles of the CellML model markup language. The components of three existing separate models of cardiac function were disassembled as to create smaller modules, validated individually, and then the component parts were combined into a new integrative model of a rat ventricular myocyte. The model was implemented in OpenCOR using the CellML standard in order to ensure reproducibility. Simulated action potential (AP), Ca2+ transient, and tension were in close agreement with our experimental measurements: LV AP showed a prolonged duration and a more prominent plateau compared with RV AP; Ca2+ transient showed prolonged duration and slow decay in LV compared to RV; the peak value and relaxation of tension were larger and slower, respectively, in LV compared to RV. Our novel approach of module-based mathematical modeling has established that the ionic mechanisms underlying the APs and Ca2+ handling play a role in the variation in force production between ventricles. This simulation process also provides a useful way to reuse and elaborate upon existing models in order to develop a new model.}
+}
+
+@article{mi2022reviewdevelopment,
+  title={A review: development of named entity recognition (NER) technology for aeronautical information intelligence},
+  author={Baigang Mi and Fan Yi},
+  year={2022},
+  booktitle={Artificial Intelligence Review},
+  doi={10.1007/s10462-022-10197-2},
+  url={https://www.semanticscholar.org/paper/ca2da2420fd25c8633641542730d3f0867c50f60}
+}
+
+@article{poythress2022semioticanalysis,
+  title={A semiotic analysis of multiple systems of logic: using tagmemic theory to assess the usefulness and limitations of formal logics, and to produce a mathematical lattice model including multiple systems of logic},
+  author={V. Poythress},
+  year={2022},
+  journal={Semiotica: Journal of the International Association for Semiotic Studies},
+  doi={10.1515/sem-2020-0051},
+  url={https://www.semanticscholar.org/paper/606db29a9d5cad5cd06b8eeb1f8beee390c87ca4},
+  abstract={Abstract Tagmemic theory as a semiotic theory can be used to analyze multiple systems of logic and to assess their strengths and weaknesses. This analysis constitutes an application of semiotics and also a contribution to understanding of the nature of logic within the context of human meaning. Each system of logic is best adapted to represent one portion of human rationality. Acknowledging this correlation between systems and their targets helps explain the usefulness of more than one system. Among these systems, the two-valued system of classical logic takes its place. All the systems of logic can be incorporated into a complex mathematical model that has a place for each system and that represents a larger whole in human reasoning. The model can represent why tight formal systems of logic can be applied in some contexts with great success, but in other contexts are not directly applicable. The result suggests that human reasoning is innately richer than any one formal system of logic.}
+}
+
+@misc{song2022thesissubmitted,
+  title={A thesis submitted to the Faculty of Graduate and Postdoctoral Affairs in partial fulfillment of the requirements for the degree of Master of Arts},
+  author={Charlene Song},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/25be22274b72f1337e977d94d0c94026d13a67d0}
+}
+
+@article{markta2022accuracypupils,
+  title={ACCURACY OF PUPILS´ SELF-ASSESSMENT},
+  author={Švamberk Šauerová Markéta and Smetáčková Irena},
+  year={2022},
+  booktitle={EduPort},
+  doi={10.21062/edp.2022.009},
+  url={https://www.semanticscholar.org/paper/fcfabc1d551304cde28a4f0658ed20e36559e05f},
+  abstract={In this study, we investigated the accuracy of pupils´ self-assessment in two main school domains – mathematics and Czech language. The analysis explores whether pupils are able to evaluate adequately their own results in the didactic tests and then use some individual parameters to explain the level of self-assessment. The aim of the study was to analyze whether groups of pupils with different self-assessments of school tasks in the Czech language and mathematics (significant underestimation, adequate self-assessment, significant overestimation) differ in some of the cognitive skills studied. Our study questions were as follows: (1) Do pupils assess their achievements in particular school tasks accurately, or inaccurately? (2) Do pupils´ self-assessments differ in mathematics and language? (3) Do the pupil´s self-assessment correlate with individual parameters? The main tool used in the study was a didactic test on mathematics and a didactic test on the Czech language based on the Czech National Curricula Document and created by an expert team. In addition, Raven's Color Progressive Matrices (CPM), Similarities from the Wechsler Intelligence (WISC-SIM), and the Rey-Osterrieth Complex Figure (ROCF) were used. Considering the nature of the data, the non-parametric Kruskal-Wallis ANOVA was used. The present study is a part of the larger research project, involving 29 primary school classes, 657 pupils in total. Based on the data obtained, it can be concluded that the accuracy of pupils' self-assessments is low, while the accuracy of pupils' self-assessments in mathematics and Czech language differs (in mathematics there are more children with more accurate estimates and more pupils who underestimate themselves, in Czech language there are more pupils who overestimate their performance. Statistically significant differences were observed in the domains of Raven's Color Progressive Matrices and Rey-Osterrieth Figure, and in terms of the focus of each test, it could be concluded that there are significant differences between the groups in the domain of non-verbal reasoning skills and in the domain of analytical and organizational perceptual activity and memory. In the area of verbal intellectual abilities, there were no significant differences between the groups.}
+}
+
+@article{ji2022afrbertattentionbased,
+  title={AFR-BERT: Attention-based mechanism feature relevance fusion multimodal sentiment analysis model},
+  author={Mingyu Ji and Jiawei Zhou and Wei Ning},
+  year={2022},
+  booktitle={PLoS ONE},
+  doi={10.1371/journal.pone.0273936},
+  url={https://www.semanticscholar.org/paper/918f34bd4274316d684dd6c267b13fe010a74a6e},
+  abstract={Multimodal sentiment analysis is an essential task in natural language processing which refers to the fact that machines can analyze and recognize emotions through logical reasoning and mathematical operations after learning multimodal emotional features. For the problem of how to consider the effective fusion of multimodal data and the relevance of multimodal data in multimodal sentiment analysis, we propose an attention-based mechanism feature relevance fusion multimodal sentiment analysis model (AFR-BERT). In the data pre-processing stage, text features are extracted using the pre-trained language model BERT (Bi-directional Encoder Representation from Transformers), and the BiLSTM (Bi-directional Long Short-Term Memory) is used to obtain the internal information of the audio. In the data fusion phase, the multimodal data fusion network effectively fuses multimodal features through the interaction of text and audio information. During the data analysis phase, the multimodal data association network analyzes the data by exploring the correlation of fused information between text and audio. In the data output phase, the model outputs the results of multimodal sentiment analysis. We conducted extensive comparative experiments on the publicly available sentiment analysis datasets CMU-MOSI and CMU-MOSEI. The experimental results show that AFR-BERT improves on the classical multimodal sentiment analysis model in terms of relevant performance metrics. In addition, ablation experiments and example analysis show that the multimodal data analysis network in AFR-BERT can effectively capture and analyze the sentiment features in text and audio.}
+}
+
+@article{gulwani2022aiassistedprogramming,
+  title={AI-assisted programming: applications, user experiences, and neuro-symbolic techniques (keynote)},
+  author={Sumit Gulwani},
+  year={2022},
+  booktitle={ESEC/SIGSOFT FSE},
+  doi={10.1145/3540250.3569444},
+  url={https://www.semanticscholar.org/paper/11230f03465d8ab073815397717d8afa3f3dae1c}
+}
+
+@article{yu2022alertadapt,
+  title={ALERT: Adapt Language Models to Reasoning Tasks},
+  author={Ping Yu and Tianlu Wang and O. Yu. Golovneva and Badr AlKhamissi and Gargi Ghosh and Mona T. Diab and Asli Celikyilmaz},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2212.08286},
+  url={https://www.semanticscholar.org/paper/95c11cc5820ba32c60d5f2671f6567b9914a4978},
+  abstract={Recent advancements in large language models have enabled them to perform well on complex tasks that require step-by-step reasoning with few-shot learning. However, it is unclear whether these models are applying reasoning skills they have learnt during pre-training , or if they are simply memorizing their training corpus at finer granularity and have learnt to better understand their context.To address this question, we introduce {pasted macro ‘OUR’}model, a benchmark and suite of analyses for evaluating reasoning skills of language models. {pasted macro ‘OUR’}model enables comparing pre-trained and finetuned models on complex tasks that require reasoning skills to solve. Our benchmark provides a test bed to asses any language model on fine-grained reasoning skills, which spans over 20 datasets and covers 10 different reasoning skills. By using {pasted macro ‘OUR’}model we further investigate the role of finetuning. Our extensive empirical analysis shows that language models learn more reasoning skills such as textual entailment, abductive reasoning, and analogical reasoning during the finetuning stage compared to pretraining stage. However, we also find that when language models are finetuned they tend to overfit to the prompt template, which hurts the robustness of models causing generalization problems.}
+}
+
+@article{2022algorithmmethod,
+  title={ALGORITHM METHOD IN TEACHING RUSSIAN AT SECONDARY SCHOOL},
+  author={Юлия Владимировна Подкина},
+  year={2022},
+  booktitle={Tomsk state pedagogical university bulletin},
+  doi={10.23951/1609-624x-2022-6-80-87},
+  url={https://www.semanticscholar.org/paper/ded393f5b3432f3d0b9258fff2b9db33b204bf84},
+  abstract={Введение. Обучение русскому языку в средней школе, развитие речи и формирование орфографических и пунктуационных навыков – важная задача, которая сопряжена с рядом трудностей. Эффективному изучению русского языка в общеобразовательной школе зачастую препятствуют такие факторы, как плохая усидчивость, отсутствие интереса к предмету, билингвизм и другое. Метод алгоритмизированного представления правил русской орфографии и пунктуации способствует наилучшему усвоению учебного материала и позволяет повысить качество обучения русскому языку школьников среднего и старшего звена. Цель − обоснование эффективности метода алгоритма в обучении русскому языку детей общеобразовательных средних школ, рассмотрение примерных моделей обучающих алгоритмов. Материал и методы. В работе применялись теоретические методы (моделирование, анализ, синтез); эмпирические методы (наблюдение, сравнение, эксперимент). Результаты и обсуждение. Простое заучивание правил не всегда приводит к повышению грамотности учащихся. Метод алгоритма предусматривает совместное с учениками составление алгоритмизированных схем различных видов, которые иллюстрируют изучаемое правило, позволяют пошагово отработать механизм рассуждения при выполнении орфографических и пунктуационных заданий. Такой подход способствует достижению высокого качества знаний путем систематической отработки практических навыков с помощью схем, адаптируемых под потребности каждого ребенка. Обучающий алгоритм может иметь разные виды: от четко сформулированной схемы (похожей на математический пример) до красочной иллюстрации, которая будет понятна детям с творческими способностями. Заключение. Метод алгоритма применяют для изучения практически любого правила русской орфографии и пунктуации. В созданной совместно с учащимися схеме должно быть отведено место для исключений и для примеров, которые ребенок впишет самостоятельно. При создании обучающей схемы школьник является активным соавтором. Схема никогда не является замкнутой системой. Она дорабатывается и совершенствуется в процессе практической деятельности учащихся. У детей из одного класса схемы могут быть совершенно различны, так как усовершенствованы и доработаны самостоятельно под руководством учителя.
+ Introduction. Teaching Russian in secondary school, speech development and the formation of spelling and punctuation skills is an important task that involves a number of difficulties. Effective study of the Russian language in a secondary school is often hindered by factors such as poor perseverance, lack of interest in the subject, bilingualism, and more. Russian Russian spelling rules algorithmized representation method is considered in this paper, which allows to improve the quality of teaching Russian to middle and senior school students. The purpose is to substantiate the effectiveness of the algorithm method in teaching the Russian language to children of secondary schools, to consider approximate models of training algorithms. Material and methods. Theoretical methods (modeling, analysis, synthesis) were used in the work; empirical methods (observation, comparison, experiment). Results and discussion. Simple memorizing of the rules does not always lead to increased literacy of students. The algorithm method provides for the joint compilation of algorithmic schemes of various types with students, which illustrate the rule being studied, allow you to work out the mechanism of reasoning step by step when performing spelling and punctuation tasks. This approach contributes to the achievement of a high quality of knowledge through the systematic development of practical skills with the help of schemes adapted to the needs of each child. The training algorithm can have different types: from a clearly formulated scheme (similar to a mathematical example) up to a colorful illustration that will be understandable to children with creative abilities. Conclusion. The algorithm method can be applied to study almost any rule of Russian spelling and punctuation. In the scheme created jointly with the students, there should be a place for exceptions and for examples that the child will enter independently. When creating a training scheme, the student is an active co-author. A circuit is never a closed system. It is being refined and improved in the process of practical activity of students. For children from the same class, the schemes can be completely different, as they have been improved and finalized independently.}
+}
+
+@article{mare2022updatethermal,
+  title={AN UPDATE OF THERMAL ERROR COMPENSATION MODEL VIA ON-MACHINE MEASUREMENT},
+  author={M. Mareš and O. Horejš and Michal Straka and J. Švéda and Tomáš Kozlok},
+  year={2022},
+  journal={MM Science Journal},
+  doi={10.17973/mmsj.2022_12_2022150},
+  url={https://www.semanticscholar.org/paper/796f47a4059604f27ad57c3760cc7ebea9f6a020},
+  abstract={Software compensation is state-of-the-art technology used to reduce CNC machine tool thermal errors, and it belongs to a key intelligent functions of modern machine tools. However, a pretrained and nonadaptive model may not be accurate and robust enough for long-term application. This research presents a transfer function based thermal error compensation model updated via on-machine measurement. A mathematical model is implemented into the machine management software of a large horizontal machining centre to compensate for thermal errors in real time using C#/C++ programming language. The results show that after the thermal error compensation model is updated via on-machine measurement, the prediction accuracy, measured as peak-to-peak values, and the normalized root mean squared error are significantly improved. The prediction accuracy of the compensation model updated via on-machine measurement strongly depends on the sampling interval of the on machine measurements.}
+}
+
+@misc{nam2022achievingunderstanding,
+  title={Achieving and Understanding Out-of-Distribution Generalization in Systematic Reasoning in Small-Scale Transformers},
+  author={A. Nam and Mustafa Abdool and Trevor Maxfield and James L. McClelland},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/8283064365ae7594d891e8b7daf36fd37ca809b0},
+  abstract={Out-of-distribution generalization (OODG) is a longstanding challenge for neural networks. This challenge is quite apparent in tasks with well-defined variables and rules, where explicit use of the rules could solve problems independently of the particular values of the variables, but networks tend to be tied to the range of values sampled in their training data. Large transformer-based language models have pushed the boundaries on how well neural networks can solve previously unseen problems, but their complexity and lack of clarity about the relevant content in their training data obfuscates how they achieve such robustness. As a step toward understanding how transformer-based systems generalize, we explore the question of OODG in small scale transformers trained with examples from a known distribution. Using a reasoning task based on the puzzle Sudoku, we show that OODG can occur on a complex problem if the training set includes examples sampled from the whole distribution of simpler component tasks. Successful generalization depends on carefully managing positional alignment when absolute position encoding is used, but we find that suppressing sensitivity to absolute positions overcomes this limitation. Taken together our results represent a small step toward understanding and promoting systematic generalization in transformers.}
+}
+
+@article{hppner2022advantagesdisadvantages,
+  title={Advantages and disadvantages of (dedicated) model transformation languages},
+  author={S. Höppner and Yves Haas and Matthias Tichy and Katharina Juhnke},
+  year={2022},
+  booktitle={Empirical Software Engineering},
+  doi={10.1007/s10664-022-10194-7},
+  url={https://www.semanticscholar.org/paper/d96fa397010fa107aadcedbff577feead334e3be},
+  abstract={Model driven development envisages the use of model transformations to evolve models. Model transformation languages, developed for this task, are touted with many benefits over general purpose programming languages. However, a large number of these claims have not yet been substantiated. They are also made without the context necessary to be able to critically assess their merit or built meaningful empirical studies around them. The objective of our work is to elicit the reasoning, influences and background knowledge that lead people to assume benefits or drawbacks of model transformation languages. We conducted a large-scale interview study involving 56 participants from research and industry. Interviewees were presented with claims about model transformation languages and were asked to provide reasons for their assessment thereof. We qualitatively analysed the responses to find factors that influence the properties of model transformation languages as well as explanations as to how exactly they do so. Our interviews show, that general purpose expressiveness of GPLs, domain specific capabilities of MTLs as well as tooling all have strong influences on how people view properties of model transformation languages. Moreover, the Choice of MTL, the Use Case for which a transformation should be developed as well as the Skill s of involved stakeholders have a moderating effect on the influences, by changing the context to consider. There is a broad body of experience, that suggests positive and negative influences for properties of MTLs. Our data suggests, that much needs to be done in order to convey the viability of model transformation languages. Efforts to provide more empirical substance need to be undergone and lacklustre language capabilities and tooling need to be improved upon. We suggest several approaches for this that can be based on the results of the presented study.}
+}
+
+@article{abramson2022applicationpseudologlikelihoods,
+  title={An Application of Pseudo-Log-Likelihoods to Natural Language Scoring},
+  author={Darren Abramson and Ali Emami},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/16bf88a6d172699cb9a26a6936efb4941e3f3c13},
+  abstract={Language models built using semi-supervised machine learning on large corpora of natural language have very quickly enveloped the fields of natural language generation and understanding. In this paper we apply a zero-shot approach independently developed by a number of researchers now gaining recognition as a significant alternative to fine-tuning for evaluation on common sense tasks. A language model with relatively few parameters and training steps compared to a more recent language model (T5) can outperform it on a recent large data set (TimeDial), while displaying robustness in its performance across a similar class of language tasks. Surprisingly, this result is achieved by using a hyperparameter-free zero-shot method with the smaller model, compared to fine-tuning to the larger model. We argue that robustness of the smaller model ought to be understood in terms of compositionality, in a sense that we draw from recent literature on a class of similar models. We identify a practical cost for our method and model: high GPU-time for natural language evaluation. The zero-shot measurement technique that produces remarkable stability, both for ALBERT and other BERT variants, is an application of pseudo-log-likelihoods to masked language models for the relative measurement of probability for substitution alternatives in forced choice language tasks such as the Winograd Schema Challenge, Winogrande, and others. One contribution of this paper is to bring together a number of similar, but independent strands of research. We produce some absolute state-of-the-art results for common sense reasoning in binary choice tasks, performing better than any published result in the literature, including fine-tuned efforts. We show a remarkable consistency of the model's performance under adversarial settings, which we argue is best explained by the model's compositionality of representations.}
+}
+
+@article{zhang2022empiricalinvestigation,
+  title={An Empirical Investigation of Commonsense Self-Supervision with Knowledge Graphs},
+  author={Jiarui Zhang and Filip Ilievski and Kaixin Ma and Jonathan M Francis and A. Oltramari},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2205.10661},
+  url={https://www.semanticscholar.org/paper/651ae53112e73b02440773727b68cedbf8322705},
+  abstract={Self-supervision based on the information extracted from large knowledge graphs has been shown to improve the generalization of language models, in zero-shot evaluation on various downstream language reasoning tasks. Since these improvements are reported in aggregate, however, little is known about (i) how to select the appropriate knowledge for solid performance across tasks, (ii) how to combine this knowledge with neural language models, and (iii) how these pairings affect granular task performance. In this paper, we study the effect of knowledge sampling strategies and sizes that can be used to generate synthetic data for adapting language models. We study the effect of different synthetic datasets on language models with various architectures and sizes. The resulting models are evaluated against four task properties: domain overlap, answer similarity, vocabulary overlap, and answer length. Our experiments show that encoder-decoder models benefit from more data to learn from, whereas sampling strategies that balance across different aspects yield best performance. Most of the improvement occurs on questions with short answers and dissimilar answer candidates, which corresponds to the characteristics of the data used for pre-training.}
+}
+
+@article{khan2022executableformal,
+  title={An Executable Formal Model of the VHDL in Isabelle/HOL},
+  author={Wilayat Khan and Zhé Hóu and David Sanán and J. Nebhen and Yang Liu and Alwen Tiu},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/37b0b6db785f8c37460e2bb80da138c1443af5b4},
+  abstract={In the hardware design process, hardware components are usually described in a hardware description language. Most of the hardware description languages, such as Verilog and VHDL, do not have mathematical foundation and hence are not fit for formal reasoning about the design. To enable formal reasoning in one of the most commonly used description language VHDL, we define a formal model of the VHDL language in Isabelle/HOL. Our model targets the functional part of VHDL designs used in industry, specifically the design of the LEON3 processor's integer unit. We cover a wide range of features in the VHDL language that are usually not modelled in the literature and define a novel operational semantics for it. Furthermore, our model can be exported to OCaml code for execution, turning the formal model into a VHDL simulator. We have tested our simulator against simple designs used in the literature, as well as the div32 module in the LEON3 design. The Isabelle/HOL code is publicly available: https://zhehou.github.io/apps/VHDLModel.zip}
+}
+
+=== END BIBTEX ENTRIES ===
+
+=== NEW PAPERS BEING ADDED THIS ITERATION ===
+@article{kim2022novelmodular,
+  title={A novel modular modeling approach for understanding different electromechanics between left and right heart in rat},
+  author={Nari Kim and Julius D. Pronto and D. Nickerson and A. Taberner and Peter J. Hunter},
+  year={2022},
+  booktitle={Frontiers in Physiology},
+  doi={10.3389/fphys.2022.965054},
+  url={https://www.semanticscholar.org/paper/2fba0d7b1293e4b13180fb3bccf86ed52ddcaf70},
+  abstract={While ion channels and transporters involved in excitation-contraction coupling have been linked and constructed as comprehensive computational models, validation of whether each individual component of a model can be reused has not been previously attempted. Here we address this issue while using a novel modular modeling approach to investigate the underlying mechanism for the differences between left ventricle (LV) and right ventricle (RV). Our model was developed from modules constructed using the module assembly principles of the CellML model markup language. The components of three existing separate models of cardiac function were disassembled as to create smaller modules, validated individually, and then the component parts were combined into a new integrative model of a rat ventricular myocyte. The model was implemented in OpenCOR using the CellML standard in order to ensure reproducibility. Simulated action potential (AP), Ca2+ transient, and tension were in close agreement with our experimental measurements: LV AP showed a prolonged duration and a more prominent plateau compared with RV AP; Ca2+ transient showed prolonged duration and slow decay in LV compared to RV; the peak value and relaxation of tension were larger and slower, respectively, in LV compared to RV. Our novel approach of module-based mathematical modeling has established that the ionic mechanisms underlying the APs and Ca2+ handling play a role in the variation in force production between ventricles. This simulation process also provides a useful way to reuse and elaborate upon existing models in order to develop a new model.}
+}
+
+@article{mi2022reviewdevelopment,
+  title={A review: development of named entity recognition (NER) technology for aeronautical information intelligence},
+  author={Baigang Mi and Fan Yi},
+  year={2022},
+  booktitle={Artificial Intelligence Review},
+  doi={10.1007/s10462-022-10197-2},
+  url={https://www.semanticscholar.org/paper/ca2da2420fd25c8633641542730d3f0867c50f60}
+}
+
+@article{poythress2022semioticanalysis,
+  title={A semiotic analysis of multiple systems of logic: using tagmemic theory to assess the usefulness and limitations of formal logics, and to produce a mathematical lattice model including multiple systems of logic},
+  author={V. Poythress},
+  year={2022},
+  journal={Semiotica: Journal of the International Association for Semiotic Studies},
+  doi={10.1515/sem-2020-0051},
+  url={https://www.semanticscholar.org/paper/606db29a9d5cad5cd06b8eeb1f8beee390c87ca4},
+  abstract={Abstract Tagmemic theory as a semiotic theory can be used to analyze multiple systems of logic and to assess their strengths and weaknesses. This analysis constitutes an application of semiotics and also a contribution to understanding of the nature of logic within the context of human meaning. Each system of logic is best adapted to represent one portion of human rationality. Acknowledging this correlation between systems and their targets helps explain the usefulness of more than one system. Among these systems, the two-valued system of classical logic takes its place. All the systems of logic can be incorporated into a complex mathematical model that has a place for each system and that represents a larger whole in human reasoning. The model can represent why tight formal systems of logic can be applied in some contexts with great success, but in other contexts are not directly applicable. The result suggests that human reasoning is innately richer than any one formal system of logic.}
+}
+
+@misc{song2022thesissubmitted,
+  title={A thesis submitted to the Faculty of Graduate and Postdoctoral Affairs in partial fulfillment of the requirements for the degree of Master of Arts},
+  author={Charlene Song},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/25be22274b72f1337e977d94d0c94026d13a67d0}
+}
+
+@article{markta2022accuracypupils,
+  title={ACCURACY OF PUPILS´ SELF-ASSESSMENT},
+  author={Švamberk Šauerová Markéta and Smetáčková Irena},
+  year={2022},
+  booktitle={EduPort},
+  doi={10.21062/edp.2022.009},
+  url={https://www.semanticscholar.org/paper/fcfabc1d551304cde28a4f0658ed20e36559e05f},
+  abstract={In this study, we investigated the accuracy of pupils´ self-assessment in two main school domains – mathematics and Czech language. The analysis explores whether pupils are able to evaluate adequately their own results in the didactic tests and then use some individual parameters to explain the level of self-assessment. The aim of the study was to analyze whether groups of pupils with different self-assessments of school tasks in the Czech language and mathematics (significant underestimation, adequate self-assessment, significant overestimation) differ in some of the cognitive skills studied. Our study questions were as follows: (1) Do pupils assess their achievements in particular school tasks accurately, or inaccurately? (2) Do pupils´ self-assessments differ in mathematics and language? (3) Do the pupil´s self-assessment correlate with individual parameters? The main tool used in the study was a didactic test on mathematics and a didactic test on the Czech language based on the Czech National Curricula Document and created by an expert team. In addition, Raven's Color Progressive Matrices (CPM), Similarities from the Wechsler Intelligence (WISC-SIM), and the Rey-Osterrieth Complex Figure (ROCF) were used. Considering the nature of the data, the non-parametric Kruskal-Wallis ANOVA was used. The present study is a part of the larger research project, involving 29 primary school classes, 657 pupils in total. Based on the data obtained, it can be concluded that the accuracy of pupils' self-assessments is low, while the accuracy of pupils' self-assessments in mathematics and Czech language differs (in mathematics there are more children with more accurate estimates and more pupils who underestimate themselves, in Czech language there are more pupils who overestimate their performance. Statistically significant differences were observed in the domains of Raven's Color Progressive Matrices and Rey-Osterrieth Figure, and in terms of the focus of each test, it could be concluded that there are significant differences between the groups in the domain of non-verbal reasoning skills and in the domain of analytical and organizational perceptual activity and memory. In the area of verbal intellectual abilities, there were no significant differences between the groups.}
+}
+
+@article{ji2022afrbertattentionbased,
+  title={AFR-BERT: Attention-based mechanism feature relevance fusion multimodal sentiment analysis model},
+  author={Mingyu Ji and Jiawei Zhou and Wei Ning},
+  year={2022},
+  booktitle={PLoS ONE},
+  doi={10.1371/journal.pone.0273936},
+  url={https://www.semanticscholar.org/paper/918f34bd4274316d684dd6c267b13fe010a74a6e},
+  abstract={Multimodal sentiment analysis is an essential task in natural language processing which refers to the fact that machines can analyze and recognize emotions through logical reasoning and mathematical operations after learning multimodal emotional features. For the problem of how to consider the effective fusion of multimodal data and the relevance of multimodal data in multimodal sentiment analysis, we propose an attention-based mechanism feature relevance fusion multimodal sentiment analysis model (AFR-BERT). In the data pre-processing stage, text features are extracted using the pre-trained language model BERT (Bi-directional Encoder Representation from Transformers), and the BiLSTM (Bi-directional Long Short-Term Memory) is used to obtain the internal information of the audio. In the data fusion phase, the multimodal data fusion network effectively fuses multimodal features through the interaction of text and audio information. During the data analysis phase, the multimodal data association network analyzes the data by exploring the correlation of fused information between text and audio. In the data output phase, the model outputs the results of multimodal sentiment analysis. We conducted extensive comparative experiments on the publicly available sentiment analysis datasets CMU-MOSI and CMU-MOSEI. The experimental results show that AFR-BERT improves on the classical multimodal sentiment analysis model in terms of relevant performance metrics. In addition, ablation experiments and example analysis show that the multimodal data analysis network in AFR-BERT can effectively capture and analyze the sentiment features in text and audio.}
+}
+
+@article{gulwani2022aiassistedprogramming,
+  title={AI-assisted programming: applications, user experiences, and neuro-symbolic techniques (keynote)},
+  author={Sumit Gulwani},
+  year={2022},
+  booktitle={ESEC/SIGSOFT FSE},
+  doi={10.1145/3540250.3569444},
+  url={https://www.semanticscholar.org/paper/11230f03465d8ab073815397717d8afa3f3dae1c}
+}
+
+@article{yu2022alertadapt,
+  title={ALERT: Adapt Language Models to Reasoning Tasks},
+  author={Ping Yu and Tianlu Wang and O. Yu. Golovneva and Badr AlKhamissi and Gargi Ghosh and Mona T. Diab and Asli Celikyilmaz},
+  year={2022},
+  booktitle={Annual Meeting of the Association for Computational Linguistics},
+  doi={10.48550/arXiv.2212.08286},
+  url={https://www.semanticscholar.org/paper/95c11cc5820ba32c60d5f2671f6567b9914a4978},
+  abstract={Recent advancements in large language models have enabled them to perform well on complex tasks that require step-by-step reasoning with few-shot learning. However, it is unclear whether these models are applying reasoning skills they have learnt during pre-training , or if they are simply memorizing their training corpus at finer granularity and have learnt to better understand their context.To address this question, we introduce {pasted macro ‘OUR’}model, a benchmark and suite of analyses for evaluating reasoning skills of language models. {pasted macro ‘OUR’}model enables comparing pre-trained and finetuned models on complex tasks that require reasoning skills to solve. Our benchmark provides a test bed to asses any language model on fine-grained reasoning skills, which spans over 20 datasets and covers 10 different reasoning skills. By using {pasted macro ‘OUR’}model we further investigate the role of finetuning. Our extensive empirical analysis shows that language models learn more reasoning skills such as textual entailment, abductive reasoning, and analogical reasoning during the finetuning stage compared to pretraining stage. However, we also find that when language models are finetuned they tend to overfit to the prompt template, which hurts the robustness of models causing generalization problems.}
+}
+
+@article{2022algorithmmethod,
+  title={ALGORITHM METHOD IN TEACHING RUSSIAN AT SECONDARY SCHOOL},
+  author={Юлия Владимировна Подкина},
+  year={2022},
+  booktitle={Tomsk state pedagogical university bulletin},
+  doi={10.23951/1609-624x-2022-6-80-87},
+  url={https://www.semanticscholar.org/paper/ded393f5b3432f3d0b9258fff2b9db33b204bf84},
+  abstract={Введение. Обучение русскому языку в средней школе, развитие речи и формирование орфографических и пунктуационных навыков – важная задача, которая сопряжена с рядом трудностей. Эффективному изучению русского языка в общеобразовательной школе зачастую препятствуют такие факторы, как плохая усидчивость, отсутствие интереса к предмету, билингвизм и другое. Метод алгоритмизированного представления правил русской орфографии и пунктуации способствует наилучшему усвоению учебного материала и позволяет повысить качество обучения русскому языку школьников среднего и старшего звена. Цель − обоснование эффективности метода алгоритма в обучении русскому языку детей общеобразовательных средних школ, рассмотрение примерных моделей обучающих алгоритмов. Материал и методы. В работе применялись теоретические методы (моделирование, анализ, синтез); эмпирические методы (наблюдение, сравнение, эксперимент). Результаты и обсуждение. Простое заучивание правил не всегда приводит к повышению грамотности учащихся. Метод алгоритма предусматривает совместное с учениками составление алгоритмизированных схем различных видов, которые иллюстрируют изучаемое правило, позволяют пошагово отработать механизм рассуждения при выполнении орфографических и пунктуационных заданий. Такой подход способствует достижению высокого качества знаний путем систематической отработки практических навыков с помощью схем, адаптируемых под потребности каждого ребенка. Обучающий алгоритм может иметь разные виды: от четко сформулированной схемы (похожей на математический пример) до красочной иллюстрации, которая будет понятна детям с творческими способностями. Заключение. Метод алгоритма применяют для изучения практически любого правила русской орфографии и пунктуации. В созданной совместно с учащимися схеме должно быть отведено место для исключений и для примеров, которые ребенок впишет самостоятельно. При создании обучающей схемы школьник является активным соавтором. Схема никогда не является замкнутой системой. Она дорабатывается и совершенствуется в процессе практической деятельности учащихся. У детей из одного класса схемы могут быть совершенно различны, так как усовершенствованы и доработаны самостоятельно под руководством учителя.
+ Introduction. Teaching Russian in secondary school, speech development and the formation of spelling and punctuation skills is an important task that involves a number of difficulties. Effective study of the Russian language in a secondary school is often hindered by factors such as poor perseverance, lack of interest in the subject, bilingualism, and more. Russian Russian spelling rules algorithmized representation method is considered in this paper, which allows to improve the quality of teaching Russian to middle and senior school students. The purpose is to substantiate the effectiveness of the algorithm method in teaching the Russian language to children of secondary schools, to consider approximate models of training algorithms. Material and methods. Theoretical methods (modeling, analysis, synthesis) were used in the work; empirical methods (observation, comparison, experiment). Results and discussion. Simple memorizing of the rules does not always lead to increased literacy of students. The algorithm method provides for the joint compilation of algorithmic schemes of various types with students, which illustrate the rule being studied, allow you to work out the mechanism of reasoning step by step when performing spelling and punctuation tasks. This approach contributes to the achievement of a high quality of knowledge through the systematic development of practical skills with the help of schemes adapted to the needs of each child. The training algorithm can have different types: from a clearly formulated scheme (similar to a mathematical example) up to a colorful illustration that will be understandable to children with creative abilities. Conclusion. The algorithm method can be applied to study almost any rule of Russian spelling and punctuation. In the scheme created jointly with the students, there should be a place for exceptions and for examples that the child will enter independently. When creating a training scheme, the student is an active co-author. A circuit is never a closed system. It is being refined and improved in the process of practical activity of students. For children from the same class, the schemes can be completely different, as they have been improved and finalized independently.}
+}
+
+@article{mare2022updatethermal,
+  title={AN UPDATE OF THERMAL ERROR COMPENSATION MODEL VIA ON-MACHINE MEASUREMENT},
+  author={M. Mareš and O. Horejš and Michal Straka and J. Švéda and Tomáš Kozlok},
+  year={2022},
+  journal={MM Science Journal},
+  doi={10.17973/mmsj.2022_12_2022150},
+  url={https://www.semanticscholar.org/paper/796f47a4059604f27ad57c3760cc7ebea9f6a020},
+  abstract={Software compensation is state-of-the-art technology used to reduce CNC machine tool thermal errors, and it belongs to a key intelligent functions of modern machine tools. However, a pretrained and nonadaptive model may not be accurate and robust enough for long-term application. This research presents a transfer function based thermal error compensation model updated via on-machine measurement. A mathematical model is implemented into the machine management software of a large horizontal machining centre to compensate for thermal errors in real time using C#/C++ programming language. The results show that after the thermal error compensation model is updated via on-machine measurement, the prediction accuracy, measured as peak-to-peak values, and the normalized root mean squared error are significantly improved. The prediction accuracy of the compensation model updated via on-machine measurement strongly depends on the sampling interval of the on machine measurements.}
+}
+
+@misc{nam2022achievingunderstanding,
+  title={Achieving and Understanding Out-of-Distribution Generalization in Systematic Reasoning in Small-Scale Transformers},
+  author={A. Nam and Mustafa Abdool and Trevor Maxfield and James L. McClelland},
+  year={2022},
+  url={https://www.semanticscholar.org/paper/8283064365ae7594d891e8b7daf36fd37ca809b0},
+  abstract={Out-of-distribution generalization (OODG) is a longstanding challenge for neural networks. This challenge is quite apparent in tasks with well-defined variables and rules, where explicit use of the rules could solve problems independently of the particular values of the variables, but networks tend to be tied to the range of values sampled in their training data. Large transformer-based language models have pushed the boundaries on how well neural networks can solve previously unseen problems, but their complexity and lack of clarity about the relevant content in their training data obfuscates how they achieve such robustness. As a step toward understanding how transformer-based systems generalize, we explore the question of OODG in small scale transformers trained with examples from a known distribution. Using a reasoning task based on the puzzle Sudoku, we show that OODG can occur on a complex problem if the training set includes examples sampled from the whole distribution of simpler component tasks. Successful generalization depends on carefully managing positional alignment when absolute position encoding is used, but we find that suppressing sensitivity to absolute positions overcomes this limitation. Taken together our results represent a small step toward understanding and promoting systematic generalization in transformers.}
+}
+
+@article{hppner2022advantagesdisadvantages,
+  title={Advantages and disadvantages of (dedicated) model transformation languages},
+  author={S. Höppner and Yves Haas and Matthias Tichy and Katharina Juhnke},
+  year={2022},
+  booktitle={Empirical Software Engineering},
+  doi={10.1007/s10664-022-10194-7},
+  url={https://www.semanticscholar.org/paper/d96fa397010fa107aadcedbff577feead334e3be},
+  abstract={Model driven development envisages the use of model transformations to evolve models. Model transformation languages, developed for this task, are touted with many benefits over general purpose programming languages. However, a large number of these claims have not yet been substantiated. They are also made without the context necessary to be able to critically assess their merit or built meaningful empirical studies around them. The objective of our work is to elicit the reasoning, influences and background knowledge that lead people to assume benefits or drawbacks of model transformation languages. We conducted a large-scale interview study involving 56 participants from research and industry. Interviewees were presented with claims about model transformation languages and were asked to provide reasons for their assessment thereof. We qualitatively analysed the responses to find factors that influence the properties of model transformation languages as well as explanations as to how exactly they do so. Our interviews show, that general purpose expressiveness of GPLs, domain specific capabilities of MTLs as well as tooling all have strong influences on how people view properties of model transformation languages. Moreover, the Choice of MTL, the Use Case for which a transformation should be developed as well as the Skill s of involved stakeholders have a moderating effect on the influences, by changing the context to consider. There is a broad body of experience, that suggests positive and negative influences for properties of MTLs. Our data suggests, that much needs to be done in order to convey the viability of model transformation languages. Efforts to provide more empirical substance need to be undergone and lacklustre language capabilities and tooling need to be improved upon. We suggest several approaches for this that can be based on the results of the presented study.}
+}
+
+@article{abramson2022applicationpseudologlikelihoods,
+  title={An Application of Pseudo-Log-Likelihoods to Natural Language Scoring},
+  author={Darren Abramson and Ali Emami},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/16bf88a6d172699cb9a26a6936efb4941e3f3c13},
+  abstract={Language models built using semi-supervised machine learning on large corpora of natural language have very quickly enveloped the fields of natural language generation and understanding. In this paper we apply a zero-shot approach independently developed by a number of researchers now gaining recognition as a significant alternative to fine-tuning for evaluation on common sense tasks. A language model with relatively few parameters and training steps compared to a more recent language model (T5) can outperform it on a recent large data set (TimeDial), while displaying robustness in its performance across a similar class of language tasks. Surprisingly, this result is achieved by using a hyperparameter-free zero-shot method with the smaller model, compared to fine-tuning to the larger model. We argue that robustness of the smaller model ought to be understood in terms of compositionality, in a sense that we draw from recent literature on a class of similar models. We identify a practical cost for our method and model: high GPU-time for natural language evaluation. The zero-shot measurement technique that produces remarkable stability, both for ALBERT and other BERT variants, is an application of pseudo-log-likelihoods to masked language models for the relative measurement of probability for substitution alternatives in forced choice language tasks such as the Winograd Schema Challenge, Winogrande, and others. One contribution of this paper is to bring together a number of similar, but independent strands of research. We produce some absolute state-of-the-art results for common sense reasoning in binary choice tasks, performing better than any published result in the literature, including fine-tuned efforts. We show a remarkable consistency of the model's performance under adversarial settings, which we argue is best explained by the model's compositionality of representations.}
+}
+
+@article{zhang2022empiricalinvestigation,
+  title={An Empirical Investigation of Commonsense Self-Supervision with Knowledge Graphs},
+  author={Jiarui Zhang and Filip Ilievski and Kaixin Ma and Jonathan M Francis and A. Oltramari},
+  year={2022},
+  booktitle={arXiv.org},
+  doi={10.48550/arXiv.2205.10661},
+  url={https://www.semanticscholar.org/paper/651ae53112e73b02440773727b68cedbf8322705},
+  abstract={Self-supervision based on the information extracted from large knowledge graphs has been shown to improve the generalization of language models, in zero-shot evaluation on various downstream language reasoning tasks. Since these improvements are reported in aggregate, however, little is known about (i) how to select the appropriate knowledge for solid performance across tasks, (ii) how to combine this knowledge with neural language models, and (iii) how these pairings affect granular task performance. In this paper, we study the effect of knowledge sampling strategies and sizes that can be used to generate synthetic data for adapting language models. We study the effect of different synthetic datasets on language models with various architectures and sizes. The resulting models are evaluated against four task properties: domain overlap, answer similarity, vocabulary overlap, and answer length. Our experiments show that encoder-decoder models benefit from more data to learn from, whereas sampling strategies that balance across different aspects yield best performance. Most of the improvement occurs on questions with short answers and dissimilar answer candidates, which corresponds to the characteristics of the data used for pre-training.}
+}
+
+@article{khan2022executableformal,
+  title={An Executable Formal Model of the VHDL in Isabelle/HOL},
+  author={Wilayat Khan and Zhé Hóu and David Sanán and J. Nebhen and Yang Liu and Alwen Tiu},
+  year={2022},
+  booktitle={arXiv.org},
+  url={https://www.semanticscholar.org/paper/37b0b6db785f8c37460e2bb80da138c1443af5b4},
+  abstract={In the hardware design process, hardware components are usually described in a hardware description language. Most of the hardware description languages, such as Verilog and VHDL, do not have mathematical foundation and hence are not fit for formal reasoning about the design. To enable formal reasoning in one of the most commonly used description language VHDL, we define a formal model of the VHDL language in Isabelle/HOL. Our model targets the functional part of VHDL designs used in industry, specifically the design of the LEON3 processor's integer unit. We cover a wide range of features in the VHDL language that are usually not modelled in the literature and define a novel operational semantics for it. Furthermore, our model can be exported to OCaml code for execution, turning the formal model into a VHDL simulator. We have tested our simulator against simple designs used in the literature, as well as the div32 module in the LEON3 design. The Isabelle/HOL code is publicly available: https://zhehou.github.io/apps/VHDLModel.zip}
+}
+
+=== END NEW PAPERS ===
+
+PREVIOUS DRAFT OF THE PAPER:
+=== ABSTRACT ===
+This systematic literature review provides a comprehensive overview of the current landscape of large language models (LLMs) applied to mathematical reasoning. The review synthesizes recent research, highlighting advancements in utilizing LLMs for complex problem-solving and theorem proving. It identifies key methodologies, datasets, and emergent challenges in this rapidly evolving field. The findings underscore the significant potential of LLMs to augment mathematical understanding and application, while also pointing to areas requiring further investigation, such as robustness, interpretability, and ethical considerations.
+
+=== INTRODUCTION ===
+\section{INTRODUCTION}
+
+Mathematical reasoning is a cornerstone of human intelligence, underpinning advancements across science, engineering, finance, and everyday problem-solving. The development of artificial intelligence systems capable of emulating and augmenting this capacity has been a long-standing goal in machine learning and natural language processing (NLP) \cite{lu2022surveydeep}. Recent breakthroughs in large language models (LLMs), powered by massive datasets and sophisticated transformer architectures \cite{vaswani2017attention}, have opened up unprecedented opportunities for tackling complex mathematical reasoning tasks \cite{lu2022surveydeep}. These models have demonstrated remarkable abilities in tasks ranging from solving arithmetic word problems to generating proofs, pushing the boundaries of what AI can achieve in domains traditionally considered exclusive to human intellect \cite{lu2022surveydeep}. However, the robustness and reliability of these models in mathematical reasoning remain active areas of research \cite{stolfo2022causalframework}. Understanding how LLMs process and reason about mathematical information is crucial for their effective and ethical deployment.
+
+Despite the growing interest, a consolidated view of the current state of research in LLMs for mathematical reasoning is lacking. Existing surveys often focus on broader aspects of deep learning for reasoning \cite{lu2022surveydeep} or knowledge-enhanced models \cite{hu2022surveyknowledge}, without a specific focus on the intersection with mathematical reasoning. This review aims to fill this gap by systematically analyzing the literature on the application of LLMs to mathematical reasoning. Our motivation stems from the need to provide researchers and practitioners with a clear understanding of the current methodologies, key findings, and outstanding challenges in this domain. By synthesizing existing work, we aim to identify promising research directions and facilitate further progress.
+
+This systematic literature review addresses the following research questions:
+
+1. What are the primary approaches and methodologies employed in applying large language models to mathematical reasoning tasks?
+2. What are the key advancements and findings reported in the literature regarding LLM performance in mathematical reasoning?
+3. What are the identified limitations, challenges, and future research directions in this domain?
+
+To address these questions, we followed the Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) guidelines \cite{PRISMA}. This ensures a rigorous and transparent approach to literature selection, data extraction, and synthesis. The PRISMA flow diagram, detailing the study selection process, will be presented in the Methodology section.
+
+This paper is structured as follows: Section \ref{sec:methodology} details the methodology employed for this systematic review. Section \ref{sec:results} presents the key findings from the selected studies, organized thematically. Section \ref{sec:discussion} discusses the implications of these findings, identifies research gaps, and outlines future directions. Finally, Section \ref{sec:conclusion} summarizes the review's contributions and offers concluding remarks.
+
+=== METHODOLOGY ===
+\section{METHODOLOGY}
+
+This systematic literature review was conducted following the PRISMA 2020 guidelines \cite{PRISMA} to ensure a comprehensive and reproducible search and selection process. The review aimed to identify and synthesize research that explicitly investigates the application of large language models (LLMs) to mathematical reasoning.
+
+\subsection{Search Strategy}
+
+A systematic search was performed across several major academic databases, including IEEE Xplore, ACM Digital Library, ScienceDirect, SpringerLink, and arXiv. The search strategy combined keywords related to large language models and mathematical reasoning. The core search string was developed as follows:
+
+( "large language model*" OR "LLM*" OR "transformer model*" OR "neural language model*" ) AND ( "mathematical reasoning" OR "math reasoning" OR "mathematical problem solving" OR "arithmetic reasoning" OR "algebraic reasoning" OR "calculus reasoning" OR "theorem proving" OR "logical reasoning" )
+
+The search was limited to publications from 2020 to the present to capture the most recent advancements, given the rapid evolution of LLMs. No language restrictions were applied, though the vast majority of relevant publications were in English.
+
+\subsection{Inclusion and Exclusion Criteria}
+
+Studies were included if they met the following criteria:
+
+*   **Topic:** The study must explicitly focus on the application of large language models (or models with comparable scale and architecture, such as advanced transformers) to mathematical reasoning tasks.
+*   **Methodology:** The study must present original research, including experimental evaluations, theoretical frameworks, or novel model architectures designed for mathematical reasoning with LLMs.
+*   **Publication Type:** Peer-reviewed conference papers, journal articles, and preprints (e.g., from arXiv) were considered.
+
+Studies were excluded if they met any of the following criteria:
+
+*   **Not focused on LLMs:** Studies that did not involve large language models or models of similar scale and architecture.
+*   **Not focused on mathematical reasoning:** Studies that applied LLMs to general NLP tasks without a specific emphasis on mathematical reasoning (e.g., text summarization, sentiment analysis, general question answering).
+*   **Surveys or Reviews:** Papers that primarily summarized existing literature without presenting new empirical results or methodologies, as this review itself serves that purpose.
+*   **Non-English Publications:** While a broad search was performed, only English-language papers were considered for inclusion due to resource constraints.
+*   **Insufficient Detail:** Studies lacking sufficient methodological detail or empirical evidence to assess their contribution.
+
+\subsection{Study Selection and Screening}
+
+The initial search yielded a total of 462 records. After removing duplicates, the remaining 462 records were screened based on their titles and abstracts. All records were initially considered potentially relevant. Following this, full-text articles were retrieved for all 462 records. These full-text articles were then carefully reviewed against the inclusion and exclusion criteria. Any ambiguities were resolved through discussion among the reviewers. The PRISMA flow diagram, though not visually represented here, would detail this iterative process, starting with 'Records identified' (462), 'Records screened' (462), 'Records excluded' (0 based on final full-text review), and 'Studies included' (462). The high number of included studies reflects the extensive research activity in this area.
+
+\subsection{Data Extraction and Synthesis}
+
+For each included study, relevant data were extracted, including:
+
+*   Authors and publication year
+*   Venue (conference/journal)
+*   Specific mathematical reasoning task addressed (e.g., arithmetic, algebra, logic, theorem proving)
+*   LLM architecture or model used
+*   Key methodologies and approaches
+*   Main findings and performance metrics
+*   Identified limitations and future work
+
+The extracted information was synthesized thematically to identify overarching trends, common methodologies, and significant advancements. The results are presented in Section \ref{sec:results}, organized into thematic subsections.
+
+\subsection{Quality Assessment}
+
+A formal quality assessment of each study was not conducted as a separate step. Instead, the rigorous application of inclusion and exclusion criteria, and the focus on studies with sufficient methodological detail and empirical evidence, served as an implicit quality filter. The synthesis process prioritized studies that demonstrated clear experimental setups, well-defined metrics, and insightful analysis of results.
+
+=== RESULTS ===
+\section{RESULTS}
+
+This section presents the key findings from the systematic review of literature concerning large language models (LLMs) applied to mathematical reasoning. The analysis encompasses methodologies, tasks, and reported outcomes. A total of 462 studies met the inclusion criteria, reflecting a vibrant and rapidly expanding research landscape.
+
+\subsection{Publication Trends and Venues}
+
+The majority of the included studies were published between 2020 and 2022, indicating a significant surge in research interest within this timeframe \cite{stolfo2022causalframework, lu2022surveydeep}. This rapid growth is largely attributed to the advancements in LLM architectures and their increasing availability. Prominent venues for this research include major NLP and AI conferences such as the Association for Computational Linguistics (ACL), International Conference on Machine Learning (ICML), Conference on Neural Information Processing Systems (NeurIPS), and the International Conference on Computer Vision (ECCV) \cite{cohen2022thisunicorn}. Journal publications in areas like IEEE Transactions on Knowledge and Data Engineering and Energies also contribute to the corpus \cite{hu2022surveyknowledge, snchez2022clusteringapproach}.
+
+\subsection{Methodological Approaches}
+
+Several key methodological approaches have emerged in the application of LLMs to mathematical reasoning. A prevalent strategy involves fine-tuning pre-trained LLMs on specific mathematical datasets. For instance, models are fine-tuned on datasets designed for arithmetic, algebraic, or logical reasoning tasks \cite{stolfo2022causalframework}. Another significant direction is the development of specialized LLM architectures or modules that enhance reasoning capabilities. Zhang et al. \cite{zhang2022multilayerattention} proposed a multi-layer attention network for visual commonsense reasoning, which, while not purely mathematical, highlights the importance of fine-grained attention mechanisms for complex reasoning tasks. The integration of external knowledge, such as knowledge graphs, into LLMs is also a growing area of research, aiming to improve their reasoning accuracy and robustness \cite{hu2022surveyknowledge}.
+
+Furthermore, researchers are exploring prompt engineering techniques to guide LLMs towards accurate mathematical solutions. This includes zero-shot, few-shot, and chain-of-thought prompting strategies, which have shown considerable success in eliciting reasoning capabilities from LLMs without explicit task-specific training \cite{lu2022surveydeep}. The causal framework proposed by Stolfo et al. \cite{stolfo2022causalframework} is instrumental in understanding the robustness of LLMs to variations in problem descriptions, providing insights into how models arrive at their solutions. This causal analysis is crucial for building trust in LLM-generated mathematical reasoning.
+
+\subsection{Mathematical Reasoning Tasks and Performance}
+
+LLMs are being applied to a wide spectrum of mathematical reasoning tasks. Arithmetic reasoning, including solving word problems, has seen significant progress. Models like GPT-3 have demonstrated impressive performance on benchmarks like GSM8K, often by generating step-by-step reasoning processes \cite{stolfo2022causalframework}. Algebraic reasoning and equation solving also form a substantial part of the literature \cite{lu2022surveydeep}. The ability of LLMs to handle symbolic manipulation and abstract concepts in mathematics is a key focus.
+
+Logical reasoning and theorem proving represent more challenging frontiers. While LLMs are showing promise in generating logical deductions and even assisting in formal theorem proving, this area still requires substantial development \cite{lu2022surveydeep}. Studies have also explored the intersection of visual and mathematical reasoning, where LLMs are tasked with interpreting diagrams or visual representations to solve mathematical problems \cite{cohen2022thisunicorn, zhang2022multilayerattention}. The performance of LLMs is often evaluated using metrics such as accuracy, F1 score, and specific reasoning-focused metrics that assess the coherence and correctness of the generated solution steps \cite{stolfo2022causalframework}.
+
+Some studies focus on specific mathematical domains. For instance, Wankmüller \cite{wankmller2022comparisonapproaches} investigated different approaches for imbalanced classification in document retrieval, which, while not directly mathematical reasoning, highlights the challenges in handling complex data distributions that are also relevant in mathematical contexts. Sánchez et al. \cite{snchez2022clusteringapproach} proposed a clustering approach for the electric vehicle routing problem, showcasing optimization techniques that can be informed by mathematical models and potentially enhanced by LLM-driven reasoning.
+
+\subsection{Challenges and Limitations}
+
+Despite the considerable progress, several challenges persist. A primary concern is the robustness of LLMs to adversarial examples or minor perturbations in the input text \cite{stolfo2022causalframework}. Models can sometimes rely on superficial patterns rather than genuine mathematical understanding. The interpretability of LLM reasoning processes remains a significant hurdle; understanding why a model arrives at a particular solution is often difficult \cite{alemany2022methodologycharacterize}. This lack of transparency hinders debugging and trust. Hallucinations, where models generate plausible but incorrect mathematical statements, are another critical issue \cite{lu2022surveydeep}.
+
+Scalability and computational cost are also factors, especially for very large models and complex reasoning tasks. Furthermore, the ability of LLMs to perform novel reasoning or discover new mathematical theorems is still limited compared to human mathematicians. While LLMs can process and learn from vast amounts of mathematical text \cite{hu2022surveyknowledge}, their capacity for genuine mathematical insight and creativity is an ongoing debate. The ethical implications of using LLMs in high-stakes mathematical applications, such as education or scientific discovery, are also being increasingly considered \cite{li2022scenariobasedexploration, alemany2022methodologycharacterize}. The problem of bias in LLMs, which can manifest in the mathematical content they generate, is also a concern \cite{alemany2022methodologycharacterize}.
+
+=== DISCUSSION ===
+\section{DISCUSSION}
+
+The systematic review of literature on large language models (LLMs) for mathematical reasoning reveals a field characterized by rapid advancements and significant potential, yet also by persistent challenges. The sheer volume of research identified, with 462 included studies, underscores the intense interest in leveraging LLMs for tasks that were previously considered intractable for machines \cite{lu2022surveydeep}.
+
+Our findings indicate a clear trend towards fine-tuning large pre-trained models and employing sophisticated prompting strategies like chain-of-thought to elicit mathematical reasoning capabilities \cite{lu2022surveydeep}. The success in areas like arithmetic and algebraic problem-solving is notable, demonstrating that LLMs can internalize and apply mathematical rules to a certain extent \cite{stolfo2022causalframework}. The development of specialized architectures, such as multi-layer attention networks \cite{zhang2022multilayerattention}, and the integration of external knowledge \cite{hu2022surveyknowledge} are key strategies for enhancing performance. These approaches aim to imbue LLMs with more robust reasoning mechanisms that go beyond surface-level pattern matching.
+
+However, significant research gaps remain. The robustness of LLMs to variations in problem formulation or adversarial attacks is a critical concern \cite{stolfo2022causalframework}. Understanding the causal factors influencing LLM outputs in mathematical contexts is essential for building reliable systems. The interpretability of LLM reasoning is another major area requiring attention; without clear explanations for how solutions are derived, trust and debugging become exceedingly difficult \cite{alemany2022methodologycharacterize}. This echoes similar concerns in other complex AI applications \cite{cohen2022thisunicorn, zhang2022multilayerattention}.
+
+The implication of these findings for various domains is substantial. In education, LLMs could serve as personalized tutors, providing step-by-step explanations and tailored feedback \cite{ricci2022petrinetbasedapproach}. In scientific research, they could assist in hypothesis generation, experimental design, and even the discovery of new mathematical principles \cite{lu2022surveydeep}. However, the risks associated with deploying these models in sensitive areas, such as automated grading or critical problem-solving, necessitate careful consideration of their limitations and potential biases \cite{alemany2022methodologycharacterize, li2022scenariobasedexploration}.
+
+Future research should focus on developing more robust and interpretable LLM architectures for mathematical reasoning. Investigating methods for enhancing causal understanding and reducing susceptibility to spurious correlations \cite{stolfo2022causalframework} is crucial. Furthermore, exploring novel training paradigms that foster genuine mathematical insight, rather than just pattern recognition, is a promising direction. The development of standardized benchmarks that rigorously test the limits of LLMs' mathematical reasoning abilities, particularly in areas requiring abstract thought and creativity, is also needed \cite{lu2022surveydeep}. Addressing ethical considerations, including bias mitigation and responsible deployment strategies, will be paramount as LLMs become more integrated into mathematical workflows \cite{alemany2022methodologycharacterize}.
+
+This review highlights that while LLMs have made impressive strides in mimicking mathematical reasoning, the path towards truly intelligent and reliable mathematical agents is still ongoing. The work by Wang et al. \cite{wang2022hybridgenetic} on hybrid genetic algorithms for complex scheduling problems, and Wang \cite{wang2022comparisonthree} on comparing approaches for covariate effects on latent factors, while from different domains, illustrate the ongoing need for robust and comparative methodological approaches that can be adapted to the nuances of mathematical reasoning.
+
+=== CONCLUSION ===
+\section{CONCLUSION}
+
+This systematic literature review has provided a comprehensive overview of the burgeoning field of large language models (LLMs) applied to mathematical reasoning. Our analysis, encompassing 462 studies, reveals a dynamic research landscape marked by significant advancements in utilizing LLMs for arithmetic, algebraic, and increasingly, logical reasoning tasks \cite{lu2022surveydeep}. The dominant methodologies involve fine-tuning pre-trained models and employing advanced prompting techniques, demonstrating LLMs' growing capacity to process and generate mathematical content \cite{stolfo2022causalframework}.
+
+Key findings highlight the potential of LLMs to revolutionize areas such as education, by acting as personalized learning aids \cite{ricci2022petrinetbasedapproach}, and scientific discovery, by assisting in complex problem-solving. The ability of models to generate step-by-step reasoning pathways, as explored by Stolfo et al. \cite{stolfo2022causalframework}, is a crucial development in making AI-assisted mathematical processes more transparent. However, this review also underscores critical challenges that warrant further investigation. The robustness of these models against input perturbations \cite{stolfo2022causalframework}, their interpretability \cite{zhang2022multilayerattention}, and the mitigation of biases \cite{alemany2022methodologycharacterize} remain significant hurdles.
+
+The contribution of this review lies in its systematic synthesis of current research, identifying convergence in methodologies while also mapping out essential areas for future exploration. The practical implications are far-reaching, promising enhanced tools for mathematicians, educators, and researchers. Nevertheless, the responsible development and deployment of LLMs in mathematical domains necessitate a continued focus on their limitations and ethical considerations \cite{li2022scenariobasedexploration}.
+
+In conclusion, while LLMs have demonstrated remarkable progress in mathematical reasoning, achieving true artificial mathematical intelligence requires sustained research into robustness, interpretability, and novel reasoning capabilities. The insights gained from this review serve as a foundation for future work, guiding efforts towards developing more reliable, trustworthy, and impactful AI systems for mathematics.
+
+=== END PREVIOUS DRAFT ===
+
+UPDATED STATISTICS:
+- Total papers now included: 30
+- Records identified: 462
+- Studies included: 462
+
+TASK: COMPLETELY REGENERATE the paper integrating the new papers.
+
+REGENERATION INSTRUCTIONS:
+1. Read the previous draft to understand existing structure and themes
+2. Review the NEW papers being added (listed in "NEW PAPERS BEING ADDED" section)
+3. Integrate new papers throughout ALL sections where relevant
+4. In Results section:
+   - Add new subsections if new themes emerge from new papers
+   - Reorganize existing subsections for better coherence
+   - CITE every paper discussed using \cite{citationKey}
+5. Update all statistics to reflect new paper count
+6. Maintain academic quality and narrative flow
+7. Ensure EVERY paper (old and new) is cited using \cite{citationKey}
+
+CITATION REQUIREMENTS:
+✓ Use \cite{citationKey} format (e.g., \cite{smith2020deep})
+✓ Cite papers from BOTH previous draft AND new additions
+✓ Introduction: MINIMUM 5-10 citations
+✓ Results: MINIMUM 15-25 citations (more with larger paper count)
+✓ Discussion: MINIMUM 10-15 citations
+✓ Conclusion: MINIMUM 3-5 citations
+✓ Each subsection in Results MUST cite papers relevant to that theme
+
+REGENERATE COMPLETE PAPER:
+1. ABSTRACT: Update with new paper count, refined findings (NO citations)
+2. INTRODUCTION: Integrate relevant new papers, update scope, CITE extensively
+3. METHODOLOGY: Update statistics (cite PRISMA guidelines if needed)
+4. RESULTS: **CRITICAL** - Reorganize with new papers, cite ALL papers discussed
+5. DISCUSSION: Integrate new findings, synthesize across all papers, CITE extensively
+6. CONCLUSION: Update with insights from complete set, CITE key papers
+
+CRITICAL: Return your response as VALID JSON with PROPER ESCAPING:
+
+IMPORTANT JSON ESCAPING RULES:
+- Every single backslash in LaTeX commands MUST be escaped as double backslash
+- \cite{} becomes \\cite{} in JSON
+- \subsection{} becomes \\subsection{} in JSON
+- Example: "introduction": "Recent work \\cite{smith2020} shows..."
+
+Return ONLY valid JSON in this EXACT format:
+{
+  "abstract": "...",
+  "introduction": "text with \\cite{} properly escaped",
+  "methodology": "...",
+  "results": "text with \\subsection{} and \\cite{} properly escaped",
+  "discussion": "text with \\cite{} properly escaped",
+  "conclusion": "text with \\cite{} properly escaped"
+}
+
+VERIFY: Check that ALL backslashes are doubled (\\) in JSON before returning!
