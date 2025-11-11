@@ -157,7 +157,9 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
 
       // Request generation - progress will come via WebSocket
       if (sessionId) {
-        await sessionAPI.generate(sessionId, dataSource);
+        // Map dataSource - 'upload' is not supported yet, use 'current' as fallback
+        const apiDataSource = dataSource === 'upload' ? 'current' : dataSource;
+        await sessionAPI.generate(sessionId, apiDataSource);
       } else {
         // TODO: Handle CSV upload case
         throw new Error('CSV upload not yet implemented');
