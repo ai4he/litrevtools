@@ -21,6 +21,7 @@ data/*.csv
 data/*.bib
 data/*.tex
 data/*.zip
+data/outputs/
 
 # Logs
 logs/
