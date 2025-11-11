@@ -7,6 +7,22 @@ import { LLMProvider } from './base-provider';
 import { GeminiProvider } from './gemini-provider';
 import { APIKeyManager } from './api-key-manager';
 
+/**
+ * Progress callback for LLM filtering operations
+ */
+export interface LLMFilteringProgress {
+  phase: 'inclusion' | 'exclusion' | 'finalizing';
+  totalPapers: number;
+  processedPapers: number;
+  currentBatch: number;
+  totalBatches: number;
+  papersInCurrentBatch: number;
+  timeElapsed: number;
+  estimatedTimeRemaining: number;
+}
+
+export type LLMProgressCallback = (progress: LLMFilteringProgress) => void;
+
 export class LLMService {
   private provider?: LLMProvider;
   private config: LLMConfig;
@@ -15,14 +31,15 @@ export class LLMService {
 
   constructor(config?: Partial<LLMConfig>) {
     // Default configuration with Gemini as default provider
+    // Optimized batch size for efficiency (larger batches = fewer API calls)
     this.config = {
       enabled: config?.enabled ?? true,
       provider: config?.provider || 'gemini',
       model: config?.model,
       apiKey: config?.apiKey,
       apiKeys: config?.apiKeys,
-      batchSize: config?.batchSize || 10,
-      maxConcurrentBatches: config?.maxConcurrentBatches || 3,
+      batchSize: config?.batchSize || 20, // Increased from 10 to 20 for efficiency
+      maxConcurrentBatches: config?.maxConcurrentBatches || 5, // Increased from 3 to 5 for parallel processing
       timeout: config?.timeout || 30000,
       retryAttempts: config?.retryAttempts || 3,
       temperature: config?.temperature || 0.3,
@@ -112,6 +129,7 @@ export class LLMService {
   /**
    * Filter papers using semantic understanding (LLM-based)
    * Returns papers with inclusion decisions and reasoning
+   * @deprecated Use semanticFilterSeparate for new implementation with separate inclusion/exclusion flags
    */
   async semanticFilter(
     papers: Paper[],
@@ -155,6 +173,138 @@ export class LLMService {
         llmReasoning: response.result?.reasoning
       };
     });
+  }
+
+  /**
+   * Filter papers using semantic understanding with separate inclusion and exclusion evaluation
+   * Returns papers with separate inclusion and exclusion flags and reasoning
+   * @param papers Papers to filter
+   * @param inclusionCriteriaPrompt Semantic inclusion criteria
+   * @param exclusionCriteriaPrompt Semantic exclusion criteria
+   * @param progressCallback Optional callback for progress updates
+   */
+  async semanticFilterSeparate(
+    papers: Paper[],
+    inclusionCriteriaPrompt?: string,
+    exclusionCriteriaPrompt?: string,
+    progressCallback?: LLMProgressCallback
+  ): Promise<Paper[]> {
+    if (!this.isEnabled()) {
+      throw new Error('LLM service is not enabled or initialized');
+    }
+
+    let processedPapers = [...papers];
+    const startTime = Date.now();
+
+    // Evaluate inclusion criteria if provided
+    if (inclusionCriteriaPrompt && inclusionCriteriaPrompt.trim()) {
+      const inclusionRequests: LLMRequest[] = papers.map(paper => ({
+        id: `${paper.id}_inclusion`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildInclusionFilteringPrompt(paper, inclusionCriteriaPrompt),
+        context: { paper, criteriaType: 'inclusion' }
+      }));
+
+      const totalBatches = Math.ceil(inclusionRequests.length / this.config.batchSize);
+
+      const inclusionResponses = await this.processBatchRequestsWithProgress(
+        inclusionRequests,
+        'inclusion',
+        papers.length,
+        startTime,
+        progressCallback
+      );
+
+      processedPapers = processedPapers.map(paper => {
+        const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
+
+        if (!response || response.error) {
+          return {
+            ...paper,
+            systematic_filtering_inclusion: false,
+            systematic_filtering_inclusion_reasoning: response?.error || 'LLM processing failed'
+          };
+        }
+
+        const meetsInclusion = response.result?.decision === 'include' || response.result?.meets_criteria === true;
+        return {
+          ...paper,
+          systematic_filtering_inclusion: meetsInclusion,
+          systematic_filtering_inclusion_reasoning: response.result?.reasoning
+        };
+      });
+    }
+
+    // Evaluate exclusion criteria if provided
+    if (exclusionCriteriaPrompt && exclusionCriteriaPrompt.trim()) {
+      const exclusionRequests: LLMRequest[] = papers.map(paper => ({
+        id: `${paper.id}_exclusion`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildExclusionFilteringPrompt(paper, exclusionCriteriaPrompt),
+        context: { paper, criteriaType: 'exclusion' }
+      }));
+
+      const totalBatches = Math.ceil(exclusionRequests.length / this.config.batchSize);
+
+      const exclusionResponses = await this.processBatchRequestsWithProgress(
+        exclusionRequests,
+        'exclusion',
+        papers.length,
+        startTime,
+        progressCallback
+      );
+
+      processedPapers = processedPapers.map(paper => {
+        const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
+
+        if (!response || response.error) {
+          return {
+            ...paper,
+            systematic_filtering_exclusion: false,
+            systematic_filtering_exclusion_reasoning: response?.error || 'LLM processing failed'
+          };
+        }
+
+        const meetsExclusion = response.result?.decision === 'exclude' || response.result?.meets_criteria === true;
+        return {
+          ...paper,
+          systematic_filtering_exclusion: meetsExclusion,
+          systematic_filtering_exclusion_reasoning: response.result?.reasoning
+        };
+      });
+    }
+
+    // Update the overall inclusion status based on semantic filtering results
+    // A paper is included if it meets inclusion criteria (or no inclusion criteria provided)
+    // AND does not meet exclusion criteria (or no exclusion criteria provided)
+    processedPapers = processedPapers.map(paper => {
+      const meetsInclusion = inclusionCriteriaPrompt
+        ? (paper.systematic_filtering_inclusion === true)
+        : true; // If no inclusion criteria, consider as meeting inclusion
+
+      const meetsExclusion = exclusionCriteriaPrompt
+        ? (paper.systematic_filtering_exclusion === true)
+        : false; // If no exclusion criteria, consider as not meeting exclusion
+
+      const shouldInclude = meetsInclusion && !meetsExclusion;
+
+      let exclusionReason: string | undefined;
+      if (!shouldInclude) {
+        if (meetsExclusion) {
+          exclusionReason = paper.systematic_filtering_exclusion_reasoning || 'Meets exclusion criteria';
+        } else {
+          exclusionReason = paper.systematic_filtering_inclusion_reasoning || 'Does not meet inclusion criteria';
+        }
+      }
+
+      return {
+        ...paper,
+        included: shouldInclude,
+        exclusionReason: exclusionReason
+      };
+    });
+
+    return processedPapers;
   }
 
   /**
@@ -253,6 +403,92 @@ export class LLMService {
   }
 
   /**
+   * Process batch requests with progress tracking
+   */
+  private async processBatchRequestsWithProgress(
+    requests: LLMRequest[],
+    phase: 'inclusion' | 'exclusion',
+    totalPapers: number,
+    startTime: number,
+    progressCallback?: LLMProgressCallback
+  ): Promise<LLMResponse[]> {
+    if (!this.provider) {
+      throw new Error('LLM provider not initialized');
+    }
+
+    const allResponses: LLMResponse[] = [];
+    const batchSize = this.config.batchSize;
+    const maxConcurrent = this.config.maxConcurrentBatches;
+
+    // Split into batches
+    const batches: LLMRequest[][] = [];
+    for (let i = 0; i < requests.length; i += batchSize) {
+      batches.push(requests.slice(i, i + batchSize));
+    }
+
+    const totalBatches = batches.length;
+    let processedPapers = 0;
+
+    // Process batches with concurrency control and progress tracking
+    for (let i = 0; i < batches.length; i += maxConcurrent) {
+      const concurrentBatches = batches.slice(i, i + maxConcurrent);
+      const currentBatchIndex = i / maxConcurrent + 1;
+
+      // Calculate progress
+      const timeElapsed = Date.now() - startTime;
+      const papersPerMs = processedPapers > 0 ? processedPapers / timeElapsed : 0;
+      const remainingPapers = totalPapers - processedPapers;
+      const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
+
+      // Report progress before processing
+      if (progressCallback) {
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers,
+          currentBatch: Math.floor(i / maxConcurrent) + 1,
+          totalBatches: Math.ceil(batches.length / maxConcurrent),
+          papersInCurrentBatch: concurrentBatches.reduce((sum, batch) => sum + batch.length, 0),
+          timeElapsed,
+          estimatedTimeRemaining
+        });
+      }
+
+      // Process concurrent batches
+      const batchPromises = concurrentBatches.map(batch =>
+        this.provider!.batchRequest(batch, this.config.temperature)
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+      allResponses.push(...batchResults.flat());
+
+      // Update processed count
+      processedPapers += concurrentBatches.reduce((sum, batch) => sum + batch.length, 0);
+
+      // Report progress after processing
+      if (progressCallback) {
+        const newTimeElapsed = Date.now() - startTime;
+        const newPapersPerMs = processedPapers / newTimeElapsed;
+        const newRemainingPapers = totalPapers - processedPapers;
+        const newEstimatedTimeRemaining = newPapersPerMs > 0 ? Math.round(newRemainingPapers / newPapersPerMs) : 0;
+
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers,
+          currentBatch: Math.floor(i / maxConcurrent) + 1,
+          totalBatches: Math.ceil(batches.length / maxConcurrent),
+          papersInCurrentBatch: 0, // Batch completed
+          timeElapsed: newTimeElapsed,
+          estimatedTimeRemaining: newEstimatedTimeRemaining
+        });
+      }
+    }
+
+    return allResponses;
+  }
+
+  /**
    * Build filtering prompt for a paper
    */
   private buildFilteringPrompt(
@@ -282,6 +518,68 @@ Provide your response as JSON:
 {
   "decision": "include" or "exclude",
   "reasoning": "Brief explanation of your decision",
+  "confidence": 0.0 to 1.0
+}`;
+  }
+
+  /**
+   * Build inclusion filtering prompt for a paper
+   */
+  private buildInclusionFilteringPrompt(
+    paper: Paper,
+    inclusionCriteriaPrompt: string
+  ): string {
+    return `You are a research assistant helping with a systematic literature review.
+
+**Inclusion Criteria:**
+${inclusionCriteriaPrompt}
+
+**Paper to Review:**
+Title: ${paper.title}
+Authors: ${paper.authors.join(', ')}
+Year: ${paper.year}
+Abstract: ${paper.abstract || 'No abstract available'}
+${paper.venue ? `Venue: ${paper.venue}` : ''}
+
+**Task:**
+Determine if this paper MEETS the inclusion criteria described above.
+
+**Response Format:**
+Provide your response as JSON:
+{
+  "meets_criteria": true or false,
+  "reasoning": "Brief explanation of your decision (2-3 sentences)",
+  "confidence": 0.0 to 1.0
+}`;
+  }
+
+  /**
+   * Build exclusion filtering prompt for a paper
+   */
+  private buildExclusionFilteringPrompt(
+    paper: Paper,
+    exclusionCriteriaPrompt: string
+  ): string {
+    return `You are a research assistant helping with a systematic literature review.
+
+**Exclusion Criteria:**
+${exclusionCriteriaPrompt}
+
+**Paper to Review:**
+Title: ${paper.title}
+Authors: ${paper.authors.join(', ')}
+Year: ${paper.year}
+Abstract: ${paper.abstract || 'No abstract available'}
+${paper.venue ? `Venue: ${paper.venue}` : ''}
+
+**Task:**
+Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).
+
+**Response Format:**
+Provide your response as JSON:
+{
+  "meets_criteria": true or false,
+  "reasoning": "Brief explanation of your decision (2-3 sentences)",
   "confidence": 0.0 to 1.0
 }`;
   }

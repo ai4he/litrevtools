@@ -367,43 +367,105 @@ export class ScholarExtractor {
     });
 
     try {
-      // Use LLM for semantic filtering
-      const filteredPapers = await this.llmService.semanticFilter(
-        papers,
-        parameters.inclusionKeywords,
-        parameters.exclusionKeywords
-      );
+      let filteredPapers: Paper[];
+
+      // Check if semantic prompts are provided for new separate evaluation
+      if (parameters.inclusionCriteriaPrompt || parameters.exclusionCriteriaPrompt) {
+        // Create progress callback for real-time updates during Phase 2
+        const llmProgressCallback = (llmProgress: any) => {
+          const phaseLabel = llmProgress.phase === 'inclusion'
+            ? 'Evaluating inclusion criteria'
+            : llmProgress.phase === 'exclusion'
+            ? 'Evaluating exclusion criteria'
+            : 'Finalizing results';
+
+          const progressPercent = 85 + Math.floor((llmProgress.processedPapers / llmProgress.totalPapers) * 10); // 85-95%
+
+          const timeElapsedSec = Math.floor(llmProgress.timeElapsed / 1000);
+          const timeRemainingSec = Math.floor(llmProgress.estimatedTimeRemaining / 1000);
+
+          this.updateProgress({
+            currentTask: `Phase 2: ${phaseLabel} (Batch ${llmProgress.currentBatch}/${llmProgress.totalBatches})`,
+            nextTask: llmProgress.processedPapers < llmProgress.totalPapers
+              ? `Processing ${llmProgress.papersInCurrentBatch} papers - ${timeElapsedSec}s elapsed, ${timeRemainingSec}s remaining`
+              : 'Finalizing semantic filtering results',
+            progress: progressPercent,
+            processedPapers: llmProgress.processedPapers,
+            totalPapers: llmProgress.totalPapers
+          });
+        };
+
+        // Use new separate evaluation method with progress tracking
+        filteredPapers = await this.llmService.semanticFilterSeparate(
+          papers,
+          parameters.inclusionCriteriaPrompt,
+          parameters.exclusionCriteriaPrompt,
+          llmProgressCallback
+        );
+      } else {
+        // Fall back to legacy method using keywords
+        filteredPapers = await this.llmService.semanticFilter(
+          papers,
+          parameters.inclusionKeywords,
+          parameters.exclusionKeywords
+        );
+      }
 
       // Save updated papers to database
       for (const paper of filteredPapers) {
         this.database.addPaper(this.sessionId, paper);
       }
 
-      // Update PRISMA data
-      const exclusionReasons: Record<string, number> = {};
+      // Update PRISMA data with detailed metrics
+      const totalPapers = papers.length;
+      const keywordExcludedCount = papers.filter(p => p.excluded_by_keyword).length;
       const excludedPapers = filteredPapers.filter(p => !p.included);
+      const excludedCount = excludedPapers.length;
+      const includedCount = totalPapers - excludedCount;
 
+      // Collect exclusion reasons
+      const exclusionReasons: Record<string, number> = {};
       for (const paper of excludedPapers) {
         const reason = paper.exclusionReason || 'LLM semantic exclusion';
         exclusionReasons[reason] = (exclusionReasons[reason] || 0) + 1;
       }
 
-      const totalPapers = papers.length;
-      const excludedCount = excludedPapers.length;
-      const includedCount = totalPapers - excludedCount;
+      // Collect eligibility exclusion reasons from semantic filtering
+      const eligibilityReasons: Record<string, number> = {};
+      if (parameters.inclusionCriteriaPrompt || parameters.exclusionCriteriaPrompt) {
+        for (const paper of excludedPapers) {
+          if (paper.systematic_filtering_exclusion) {
+            const reason = paper.systematic_filtering_exclusion_reasoning || 'Meets exclusion criteria';
+            eligibilityReasons[reason] = (eligibilityReasons[reason] || 0) + 1;
+          } else if (!paper.systematic_filtering_inclusion) {
+            const reason = paper.systematic_filtering_inclusion_reasoning || 'Does not meet inclusion criteria';
+            eligibilityReasons[reason] = (eligibilityReasons[reason] || 0) + 1;
+          }
+        }
+      }
 
       this.database.updatePRISMAData(this.sessionId, {
         identification: {
-          recordsIdentified: totalPapers,
-          recordsRemoved: 0
+          recordsIdentifiedPerSource: { 'Semantic Scholar': totalPapers },
+          totalRecordsIdentified: totalPapers,
+          duplicatesRemoved: 0, // TODO: Track actual duplicates
+          recordsMarkedIneligibleByAutomation: keywordExcludedCount,
+          recordsRemovedForOtherReasons: 0,
+          totalRecordsRemoved: keywordExcludedCount
         },
         screening: {
-          recordsScreened: totalPapers,
-          recordsExcluded: excludedCount,
+          recordsScreened: totalPapers - keywordExcludedCount,
+          recordsExcluded: excludedCount - keywordExcludedCount,
           reasonsForExclusion: exclusionReasons
         },
+        eligibility: {
+          reportsAssessed: totalPapers - keywordExcludedCount,
+          reportsExcluded: excludedCount - keywordExcludedCount,
+          reasonsForExclusion: eligibilityReasons
+        },
         included: {
-          studiesIncluded: includedCount
+          studiesIncluded: includedCount,
+          reportsOfIncludedStudies: includedCount // Assuming 1 report per study
         }
       });
 
@@ -437,6 +499,7 @@ export class ScholarExtractor {
     });
 
     const exclusionReasons: Record<string, number> = {};
+    let keywordExcludedCount = 0;
 
     for (const paper of papers) {
       const excluded = this.shouldExcludeByRules(paper, exclusionKeywords);
@@ -444,12 +507,14 @@ export class ScholarExtractor {
       if (excluded) {
         const reason = excluded;
         exclusionReasons[reason] = (exclusionReasons[reason] || 0) + 1;
+        keywordExcludedCount++;
 
-        // Update paper as excluded
+        // Update paper as excluded by keyword
         const updatedPaper: Paper = {
           ...paper,
           included: false,
-          exclusionReason: reason
+          exclusionReason: reason,
+          excluded_by_keyword: true // Mark as excluded by keyword
         };
 
         this.database.addPaper(this.sessionId, updatedPaper);
@@ -458,30 +523,41 @@ export class ScholarExtractor {
         const updatedPaper: Paper = {
           ...paper,
           included: true,
-          exclusionReason: undefined
+          exclusionReason: undefined,
+          excluded_by_keyword: false
         };
 
         this.database.addPaper(this.sessionId, updatedPaper);
       }
     }
 
-    // Update PRISMA data
+    // Update PRISMA data with detailed metrics
     const totalPapers = papers.length;
     const excludedCount = Object.values(exclusionReasons).reduce((a, b) => a + b, 0);
     const includedCount = totalPapers - excludedCount;
 
     this.database.updatePRISMAData(this.sessionId, {
       identification: {
-        recordsIdentified: totalPapers,
-        recordsRemoved: 0
+        recordsIdentifiedPerSource: { 'Semantic Scholar': totalPapers },
+        totalRecordsIdentified: totalPapers,
+        duplicatesRemoved: 0, // TODO: Track actual duplicates
+        recordsMarkedIneligibleByAutomation: keywordExcludedCount,
+        recordsRemovedForOtherReasons: 0,
+        totalRecordsRemoved: keywordExcludedCount
       },
       screening: {
-        recordsScreened: totalPapers,
-        recordsExcluded: excludedCount,
-        reasonsForExclusion: exclusionReasons
+        recordsScreened: totalPapers - keywordExcludedCount,
+        recordsExcluded: 0, // No screening exclusions in rule-based mode
+        reasonsForExclusion: {}
+      },
+      eligibility: {
+        reportsAssessed: totalPapers - keywordExcludedCount,
+        reportsExcluded: 0,
+        reasonsForExclusion: {}
       },
       included: {
-        studiesIncluded: includedCount
+        studiesIncluded: includedCount,
+        reportsOfIncludedStudies: includedCount
       }
     });
 

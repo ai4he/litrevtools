@@ -52,20 +52,28 @@ export class OutputManager {
     let completedStages = 0;
 
     try {
-      // Generate CSV
+      // Generate CSV files (both raw and labeled)
       onProgress?.({
         status: 'running',
         stage: 'csv',
-        currentTask: 'Generating CSV file...',
+        currentTask: 'Generating CSV files (raw and labeled)...',
         totalStages,
         completedStages,
         progress: Math.round((completedStages / totalStages) * 100)
       });
 
-      const csvPath = path.join(sessionDir, 'papers.csv');
       const csvGen = new CSVGenerator();
-      await csvGen.generate(session.papers, csvPath);
-      outputs.csv = csvPath;
+
+      // Generate raw extractions CSV (Phase 1 output)
+      const rawCsvPath = path.join(sessionDir, 'papers-raw.csv');
+      await csvGen.generateRawExtractions(session.papers, rawCsvPath);
+
+      // Generate labeled extractions CSV (Phase 2 output)
+      const labeledCsvPath = path.join(sessionDir, 'papers-labeled.csv');
+      await csvGen.generateLabeledExtractions(session.papers, labeledCsvPath);
+
+      // Set the labeled CSV as the primary output for backward compatibility
+      outputs.csv = labeledCsvPath;
       completedStages++;
 
       // Generate BibTeX
@@ -189,7 +197,8 @@ export class OutputManager {
 
       const zipPath = path.join(sessionDir, 'litreview.zip');
       const filesToZip = [
-        outputs.csv!,
+        path.join(sessionDir, 'papers-raw.csv'),      // Raw extractions
+        path.join(sessionDir, 'papers-labeled.csv'),  // Labeled extractions
         outputs.bibtex!,
         outputs.prismaDiagram!,
         outputs.prismaTable!

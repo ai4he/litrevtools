@@ -27,10 +27,14 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'openai' | 'anthropic'>('gemini');
   const [llmApiKeys, setLlmApiKeys] = useState<string[]>([]);
   const [currentApiKey, setCurrentApiKey] = useState('');
-  const [llmBatchSize, setLlmBatchSize] = useState('10');
+  const [llmBatchSize, setLlmBatchSize] = useState('20'); // Increased for efficiency
   const [llmTemperature, setLlmTemperature] = useState('0.3');
   const [fallbackStrategy, setFallbackStrategy] = useState<'rule_based' | 'prompt_user' | 'fail'>('rule_based');
   const [enableKeyRotation, setEnableKeyRotation] = useState(true);
+
+  // Semantic Filtering Prompts
+  const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('');
+  const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('');
 
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();
@@ -124,13 +128,16 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       ...(startDateParsed?.day && { startDay: startDateParsed.day }),
       ...(endDateParsed?.day && { endDay: endDateParsed.day }),
       ...(maxResults && { maxResults: parseInt(maxResults) }),
+      // Semantic filtering prompts (only include if LLM is enabled and prompts are provided)
+      ...(llmEnabled && inclusionCriteriaPrompt.trim() && { inclusionCriteriaPrompt: inclusionCriteriaPrompt.trim() }),
+      ...(llmEnabled && exclusionCriteriaPrompt.trim() && { exclusionCriteriaPrompt: exclusionCriteriaPrompt.trim() }),
       llmConfig: llmEnabled ? {
         enabled: true,
         provider: llmProvider,
         apiKeys: llmApiKeys.length > 0 ? llmApiKeys : undefined,
         apiKey: llmApiKeys.length > 0 ? llmApiKeys[0] : undefined,
-        batchSize: parseInt(llmBatchSize) || 10,
-        maxConcurrentBatches: 3,
+        batchSize: parseInt(llmBatchSize) || 20, // Optimized batch size
+        maxConcurrentBatches: 5, // Increased for better parallelism
         timeout: 30000,
         retryAttempts: 3,
         temperature: parseFloat(llmTemperature) || 0.3,
@@ -139,8 +146,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       } : {
         enabled: false,
         provider: 'gemini',
-        batchSize: 10,
-        maxConcurrentBatches: 3,
+        batchSize: 20,
+        maxConcurrentBatches: 5,
         timeout: 30000,
         retryAttempts: 3,
         temperature: 0.3,
@@ -360,6 +367,55 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
 
             {llmEnabled && (
               <>
+                {/* Semantic Filtering Prompts */}
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <Sparkles className="text-blue-600" size={18} />
+                    Semantic Filtering Criteria
+                  </h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Define semantic criteria for the LLM to evaluate each paper. These prompts will be used
+                    to determine inclusion and exclusion flags in the labeled CSV output. Progress will be tracked
+                    in real-time during Phase 2 (labeling), showing current batch, papers processed, and time remaining.
+                  </p>
+
+                  {/* Inclusion Criteria Prompt */}
+                  <div>
+                    <label className="label text-sm">
+                      Inclusion Criteria Prompt
+                    </label>
+                    <textarea
+                      value={inclusionCriteriaPrompt}
+                      onChange={(e) => setInclusionCriteriaPrompt(e.target.value)}
+                      placeholder="Describe the criteria for including papers. Example: The paper must focus on large language models applied to mathematical reasoning tasks, with empirical evaluation and quantitative results."
+                      rows={4}
+                      className="input-field text-sm resize-none"
+                      disabled={disabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Papers meeting this criteria will have systematic_filtering_inclusion = 1
+                    </p>
+                  </div>
+
+                  {/* Exclusion Criteria Prompt */}
+                  <div>
+                    <label className="label text-sm">
+                      Exclusion Criteria Prompt
+                    </label>
+                    <textarea
+                      value={exclusionCriteriaPrompt}
+                      onChange={(e) => setExclusionCriteriaPrompt(e.target.value)}
+                      placeholder="Describe the criteria for excluding papers. Example: Papers that are surveys, literature reviews, or do not include original experimental work should be excluded."
+                      rows={4}
+                      className="input-field text-sm resize-none"
+                      disabled={disabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Papers meeting this criteria will have systematic_filtering_exclusion = 1
+                    </p>
+                  </div>
+                </div>
+
                 {/* Provider Selection */}
                 <div>
                   <label className="label">LLM Provider</label>
@@ -504,7 +560,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                           className="input-field text-sm"
                           disabled={disabled}
                         />
-                        <p className="text-xs text-gray-500 mt-1">Papers per batch (1-50)</p>
+                        <p className="text-xs text-gray-500 mt-1">Papers per batch (1-50). Larger = fewer API calls. Default 20 is optimized for efficiency.</p>
                       </div>
                       <div>
                         <label className="label text-xs">Temperature</label>
