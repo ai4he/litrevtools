@@ -521,13 +521,13 @@ export class LitRevDatabase {
     const values: any[] = [];
 
     if (data.identification) {
-      if (data.identification.recordsIdentified !== undefined) {
+      if (data.identification.totalRecordsIdentified !== undefined) {
         fields.push('records_identified = ?');
-        values.push(data.identification.recordsIdentified);
+        values.push(data.identification.totalRecordsIdentified);
       }
-      if (data.identification.recordsRemoved !== undefined) {
+      if (data.identification.totalRecordsRemoved !== undefined) {
         fields.push('records_removed = ?');
-        values.push(data.identification.recordsRemoved);
+        values.push(data.identification.totalRecordsRemoved);
       }
     }
 
@@ -603,24 +603,42 @@ export class LitRevDatabase {
 
     if (!row) {
       return {
-        identification: { recordsIdentified: 0, recordsRemoved: 0 },
+        identification: {
+          recordsIdentifiedPerSource: {},
+          totalRecordsIdentified: 0,
+          duplicatesRemoved: 0,
+          recordsMarkedIneligibleByAutomation: 0,
+          recordsRemovedForOtherReasons: 0,
+          totalRecordsRemoved: 0
+        },
         screening: { recordsScreened: 0, recordsExcluded: 0, reasonsForExclusion: {} },
-        included: { studiesIncluded: 0 }
+        eligibility: { reportsAssessed: 0, reportsExcluded: 0, reasonsForExclusion: {} },
+        included: { studiesIncluded: 0, reportsOfIncludedStudies: 0 }
       };
     }
 
     return {
       identification: {
-        recordsIdentified: row.records_identified,
-        recordsRemoved: row.records_removed
+        recordsIdentifiedPerSource: {},
+        totalRecordsIdentified: row.records_identified || 0,
+        duplicatesRemoved: 0,
+        recordsMarkedIneligibleByAutomation: 0,
+        recordsRemovedForOtherReasons: 0,
+        totalRecordsRemoved: row.records_removed || 0
       },
       screening: {
         recordsScreened: row.records_screened,
         recordsExcluded: row.records_excluded,
         reasonsForExclusion: JSON.parse(row.reasons_for_exclusion || '{}')
       },
+      eligibility: {
+        reportsAssessed: 0,
+        reportsExcluded: 0,
+        reasonsForExclusion: {}
+      },
       included: {
-        studiesIncluded: row.studies_included
+        studiesIncluded: row.studies_included || 0,
+        reportsOfIncludedStudies: row.studies_included || 0
       }
     };
   }

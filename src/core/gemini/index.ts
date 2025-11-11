@@ -77,8 +77,8 @@ Search Strategy:
 - Exclusion criteria: ${exclusionCriteria.join(', ')}
 
 PRISMA Flow:
-- Records identified: ${prismaData.identification.recordsIdentified}
-- Records removed: ${prismaData.identification.recordsRemoved}
+- Records identified: ${prismaData.identification.totalRecordsIdentified}
+- Records removed: ${prismaData.identification.totalRecordsRemoved}
 - Records screened: ${prismaData.screening.recordsScreened}
 - Records excluded: ${prismaData.screening.recordsExcluded}
 - Studies included: ${prismaData.included.studiesIncluded}
@@ -223,7 +223,7 @@ Generate an abstract for a PRISMA systematic literature review with the followin
 
 Topic: ${searchKeywords.join(', ')}
 Papers reviewed: ${includedPapers.length}
-Initial records: ${prismaData.identification.recordsIdentified}
+Initial records: ${prismaData.identification.totalRecordsIdentified}
 Final included: ${prismaData.included.studiesIncluded}
 
 The abstract should:
@@ -283,8 +283,8 @@ SEARCH PARAMETERS:
 - Exclusion criteria: ${exclusionCriteria.join(', ')}
 
 PRISMA STATISTICS:
-- Records identified: ${prismaData.identification.recordsIdentified}
-- Records removed: ${prismaData.identification.recordsRemoved}
+- Records identified: ${prismaData.identification.totalRecordsIdentified}
+- Records removed: ${prismaData.identification.totalRecordsRemoved}
 - Records screened: ${prismaData.screening.recordsScreened}
 - Records excluded: ${prismaData.screening.recordsExcluded}
 - Studies included: ${prismaData.included.studiesIncluded}
@@ -545,7 +545,7 @@ ${previousDraft.conclusion}
 
 UPDATED STATISTICS:
 - Total papers now included: ${allIncluded.length}
-- Records identified: ${prismaData.identification.recordsIdentified}
+- Records identified: ${prismaData.identification.totalRecordsIdentified}
 - Studies included: ${prismaData.included.studiesIncluded}
 
 TASK: COMPLETELY REGENERATE the paper integrating the new papers.

@@ -261,8 +261,8 @@ Table~\\ref{tab:prisma} summarizes the PRISMA flow statistics.
 \\toprule
 \\textbf{Stage} & \\textbf{Count} \\\\
 \\midrule
-Records identified & ${prismaData.identification.recordsIdentified} \\\\
-Records removed (duplicates, etc.) & ${prismaData.identification.recordsRemoved} \\\\
+Records identified & ${prismaData.identification.totalRecordsIdentified} \\\\
+Records removed (duplicates, etc.) & ${prismaData.identification.totalRecordsRemoved} \\\\
 Records screened & ${prismaData.screening.recordsScreened} \\\\
 Records excluded & ${prismaData.screening.recordsExcluded} \\\\
 Studies included in review & ${prismaData.included.studiesIncluded} \\\\
