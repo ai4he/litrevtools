@@ -157,6 +157,7 @@ export interface SearchSession {
   parameters: SearchParameters;
   progress: SearchProgress;
   papers: Paper[];
+  originalPapers?: Paper[]; // Papers before semantic filtering (Step 1)
   prismaData: PRISMAData;
   outputs: OutputFiles;
   createdAt: Date;

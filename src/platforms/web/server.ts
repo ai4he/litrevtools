@@ -223,10 +223,18 @@ app.post('/api/search/:id/stop', (req, res) => {
 app.post('/api/sessions/:id/generate', async (req, res) => {
   try {
     const sessionId = req.params.id;
+    const { dataSource } = req.body; // 'step1', 'step2', or undefined (defaults to current)
     const session = litrev.getSession(sessionId);
 
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // Validate data source
+    const validDataSources = ['step1', 'step2', 'current', undefined];
+    if (dataSource && !validDataSources.includes(dataSource)) {
+      res.status(400).json({ success: false, error: 'Invalid data source. Must be "step1", "step2", or omitted for current.' });
       return;
     }
 
@@ -251,15 +259,27 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
     res.json({ success: true, message: 'Output generation started' });
 
     // Start generation with progress callbacks
-    litrev.generateOutputs(sessionId, (progress) => {
-      emitOrBuffer(sessionId, 'output-progress', progress);
+    const generateMethod = dataSource
+      ? litrev.generateOutputsWithDataSource(sessionId, dataSource || 'current', (progress) => {
+          emitOrBuffer(sessionId, 'output-progress', progress);
 
-      // When completed, emit the outputs
-      if (progress.status === 'completed') {
-        const updatedSession = litrev.getSession(sessionId);
-        emitOrBuffer(sessionId, 'outputs', updatedSession?.outputs);
-      }
-    }).catch((error: any) => {
+          // When completed, emit the outputs
+          if (progress.status === 'completed') {
+            const updatedSession = litrev.getSession(sessionId);
+            emitOrBuffer(sessionId, 'outputs', updatedSession?.outputs);
+          }
+        })
+      : litrev.generateOutputs(sessionId, (progress) => {
+          emitOrBuffer(sessionId, 'output-progress', progress);
+
+          // When completed, emit the outputs
+          if (progress.status === 'completed') {
+            const updatedSession = litrev.getSession(sessionId);
+            emitOrBuffer(sessionId, 'outputs', updatedSession?.outputs);
+          }
+        });
+
+    generateMethod.catch((error: any) => {
       console.error('[Server] Output generation failed:', error);
       emitOrBuffer(sessionId, 'output-progress', {
         status: 'error',
