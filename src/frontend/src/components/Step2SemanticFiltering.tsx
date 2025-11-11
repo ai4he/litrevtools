@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Filter, Download, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { downloadBlob } from '../utils/helpers';
 import { sessionAPI } from '../utils/api';
+import { useSocket } from '../hooks/useSocket';
+import axios from 'axios';
 
 interface SemanticFilteringProgress {
   status: 'idle' | 'running' | 'completed' | 'error';
@@ -41,6 +43,57 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     'Literature reviews of any kind are not allowed.'
   );
   const [apiKey, setApiKey] = useState('');
+  const { socket } = useSocket();
+
+  // Listen for semantic filter progress events via WebSocket
+  useEffect(() => {
+    if (!socket || !sessionId) {
+      return;
+    }
+
+    console.log('[Step2] Setting up semantic-filter-progress listener for session:', sessionId);
+
+    // Subscribe to session updates
+    socket.emit('subscribe', sessionId);
+
+    // Listen for progress
+    const progressEvent = `semantic-filter-progress:${sessionId}`;
+    const completeEvent = `semantic-filter-complete:${sessionId}`;
+
+    const handleProgress = (progressData: SemanticFilteringProgress) => {
+      console.log('[Step2] Received progress:', progressData);
+      setProgress(progressData);
+
+      if (progressData.status === 'running') {
+        setIsFiltering(true);
+        setError(null);
+      } else if (progressData.status === 'completed') {
+        setIsFiltering(false);
+      } else if (progressData.status === 'error') {
+        setIsFiltering(false);
+        setError(progressData.error || 'Semantic filtering failed');
+      }
+    };
+
+    const handleComplete = (data: any) => {
+      console.log('[Step2] Filtering complete:', data);
+      setIsFiltering(false);
+      setProgress(null);
+      if (sessionId) {
+        onFilteringComplete(sessionId, data.papers || []);
+      }
+    };
+
+    socket.on(progressEvent, handleProgress);
+    socket.on(completeEvent, handleComplete);
+
+    return () => {
+      console.log('[Step2] Cleaning up semantic-filter-progress listener');
+      socket.off(progressEvent, handleProgress);
+      socket.off(completeEvent, handleComplete);
+      socket.emit('unsubscribe', sessionId);
+    };
+  }, [socket, sessionId, onFilteringComplete]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,45 +122,46 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
       return;
     }
 
+    if (!sessionId && useStep1Data) {
+      setError('No session available. Please complete Step 1 first.');
+      return;
+    }
+
     try {
       setIsFiltering(true);
       setError(null);
-
-      // TODO: Call API endpoint for semantic filtering
-      // For now, simulate progress
       setProgress({
         status: 'running',
         currentTask: 'Starting semantic filtering...',
         progress: 0,
         phase: 'inclusion',
-        totalPapers: 100,
+        totalPapers: 0,
         processedPapers: 0,
-        currentBatch: 1,
-        totalBatches: 5,
+        currentBatch: 0,
+        totalBatches: 0,
         timeElapsed: 0
       });
 
-      // Simulate completion after 3 seconds
-      setTimeout(() => {
-        setProgress({
-          status: 'completed',
-          currentTask: 'Semantic filtering complete!',
-          progress: 100,
-          phase: 'finalizing',
-          totalPapers: 100,
-          processedPapers: 100,
-          currentBatch: 5,
-          totalBatches: 5
+      // Call the real API endpoint
+      if (useStep1Data && sessionId) {
+        // Use Step 1 results
+        await axios.post(`/api/sessions/${sessionId}/semantic-filter`, {
+          inclusionPrompt,
+          exclusionPrompt,
+          apiKey
         });
-        setIsFiltering(false);
-        if (sessionId) {
-          onFilteringComplete(sessionId, []);
-        }
-      }, 3000);
+      } else if (uploadedFile) {
+        // TODO: Handle CSV upload case
+        // For now, show error
+        throw new Error('CSV upload not yet implemented. Please use Step 1 results.');
+      }
+
+      // Progress will come via WebSocket
     } catch (err: any) {
       console.error('Semantic filtering failed:', err);
-      setError(err.response?.data?.message || 'Failed to start semantic filtering');
+      setError(err.response?.data?.message || err.message || 'Failed to start semantic filtering');
       setIsFiltering(false);
+      setProgress(null);
     }
   };
 

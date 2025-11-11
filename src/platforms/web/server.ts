@@ -289,10 +289,92 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
       return;
     }
 
-    // TODO: Implement semantic filtering
-    // For now, just return success
+    if (!apiKey || !apiKey.trim()) {
+      res.status(400).json({ success: false, error: 'API key is required' });
+      return;
+    }
+
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        // Client is subscribed, emit directly
+        io.emit(eventName, data);
+      } else {
+        // Client not subscribed yet, buffer the event
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
+    // Return immediately - filtering happens in background
     res.json({ success: true, message: 'Semantic filtering started' });
+
+    // Start semantic filtering with progress callbacks
+    litrev.applySemanticFiltering(
+      sessionId,
+      apiKey,
+      inclusionPrompt,
+      exclusionPrompt,
+      (progress) => {
+        // Transform LLM progress to frontend format
+        const totalStages = 2; // inclusion + exclusion (or just 1 if only one is provided)
+        const completedStages = progress.phase === 'inclusion' ? 0 : progress.phase === 'exclusion' ? 1 : 2;
+        const overallProgress = (progress.processedPapers / progress.totalPapers) * 100;
+
+        emitOrBuffer(sessionId, 'semantic-filter-progress', {
+          status: 'running',
+          currentTask: `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`,
+          progress: overallProgress,
+          phase: progress.phase,
+          totalPapers: progress.totalPapers,
+          processedPapers: progress.processedPapers,
+          currentBatch: progress.currentBatch,
+          totalBatches: progress.totalBatches,
+          timeElapsed: progress.timeElapsed,
+          estimatedTimeRemaining: progress.estimatedTimeRemaining
+        });
+      }
+    ).then(() => {
+      // Filtering completed successfully
+      emitOrBuffer(sessionId, 'semantic-filter-progress', {
+        status: 'completed',
+        currentTask: 'Semantic filtering completed!',
+        progress: 100,
+        phase: 'finalizing',
+        totalPapers: session.papers.length,
+        processedPapers: session.papers.length,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+
+      // Regenerate CSV with labeled data
+      const updatedSession = litrev.getSession(sessionId);
+      emitOrBuffer(sessionId, 'semantic-filter-complete', {
+        sessionId,
+        papers: updatedSession?.papers
+      });
+    }).catch((error: any) => {
+      console.error('[Server] Semantic filtering failed:', error);
+      emitOrBuffer(sessionId, 'semantic-filter-progress', {
+        status: 'error',
+        currentTask: 'Semantic filtering failed',
+        progress: 0,
+        phase: 'finalizing',
+        error: error.message,
+        totalPapers: session.papers.length,
+        processedPapers: 0,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+    });
+
   } catch (error: any) {
+    console.error('[Server] Semantic filtering error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

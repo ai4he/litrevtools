@@ -7,6 +7,7 @@ import { LitRevDatabase } from './database';
 import { ScholarExtractor } from './scholar';
 import { GeminiService } from './gemini';
 import { OutputManager } from './outputs';
+import { LLMService, LLMFilteringProgress } from './llm/llm-service';
 import {
   AppConfig,
   SearchParameters,
@@ -177,6 +178,56 @@ export class LitRevTools {
       discussion,
       conclusion
     };
+  }
+
+  /**
+   * Apply semantic filtering to a session's papers
+   * Creates a new LLM service instance with the provided API key
+   */
+  async applySemanticFiltering(
+    sessionId: string,
+    apiKey: string,
+    inclusionPrompt?: string,
+    exclusionPrompt?: string,
+    onProgress?: (progress: LLMFilteringProgress) => void
+  ): Promise<void> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // Create LLM service with the provided API key
+    const llmService = new LLMService({
+      enabled: true,
+      provider: 'gemini',
+      apiKey: apiKey,
+      batchSize: 20,
+      maxConcurrentBatches: 5,
+      timeout: 30000,
+      retryAttempts: 3,
+      temperature: 0.3,
+      fallbackStrategy: 'rule_based',
+      enableKeyRotation: false
+    });
+
+    // Initialize the LLM service
+    await llmService.initialize();
+
+    // Apply semantic filtering with progress tracking
+    const filteredPapers = await llmService.semanticFilterSeparate(
+      session.papers,
+      inclusionPrompt,
+      exclusionPrompt,
+      onProgress
+    );
+
+    // Update the session's papers in the database
+    for (const paper of filteredPapers) {
+      this.database.updatePaper(sessionId, paper);
+    }
+
+    // Update session to mark semantic filtering as complete
+    // This could be stored in session metadata if needed
   }
 
   /**
