@@ -223,7 +223,7 @@ export class LitRevTools {
 
     // Update the session's papers in the database
     for (const paper of filteredPapers) {
-      this.database.updatePaper(sessionId, paper);
+      this.database.addPaper(sessionId, paper);
     }
 
     // Update session to mark semantic filtering as complete
