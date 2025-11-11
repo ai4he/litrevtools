@@ -198,14 +198,21 @@ Following PRISMA methodology:
 
 Generates:
 - **CSV**: Spreadsheet with all paper data
-- **BibTeX**: Reference file for LaTeX documents
+- **BibTeX**: Reference file for LaTeX documents with full citation information
 - **LaTeX**: Complete research paper with sections:
   - Abstract
   - Introduction
   - Methodology
-  - Results
+  - Results (organized by themes/subsections)
   - Discussion
   - Conclusion
+  - **✨ NEW: Iterative Paper Generation**
+    - Papers are processed in configurable batches (default: 15 papers)
+    - Each batch triggers a complete regeneration of the paper
+    - Full paper abstracts and BibTeX info sent to AI for context
+    - Papers are intelligently organized into thematic subsections
+    - Proper citations using `\cite{}` commands throughout
+    - Results section dynamically reorganized as more papers are added
 - **PRISMA Diagram**: TikZ flow diagram
 - **PRISMA Tables**: Statistical summaries
 - **ZIP**: Archive with all outputs
@@ -218,6 +225,9 @@ Generates:
 # Gemini API
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-flash-lite-latest
+
+# Paper Generation Settings
+PAPER_BATCH_SIZE=15  # Papers per batch for iterative generation
 
 # Google OAuth (for future features)
 GOOGLE_CLIENT_ID=your_client_id

@@ -10,6 +10,7 @@ import { SearchParameters } from '../types';
 
 export const SearchPage: React.FC = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [searchParameters, setSearchParameters] = useState<SearchParameters | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const { socket, isConnected } = useSocket();
   const { progress, papers, error, clearError } = useProgress(socket, sessionId);
@@ -36,6 +37,7 @@ export const SearchPage: React.FC = () => {
   const handleStartSearch = async (params: SearchParameters) => {
     try {
       setIsSearching(true);
+      setSearchParameters(params); // Store the search parameters
       const response = await searchAPI.start(params);
       setSessionId(response.sessionId);
     } catch (err: any) {
@@ -116,6 +118,9 @@ export const SearchPage: React.FC = () => {
             {/* Progress Dashboard */}
             <ProgressDashboard
               progress={progress}
+              sessionId={sessionId}
+              searchParameters={searchParameters || undefined}
+              papers={papers}
               onPause={handlePause}
               onResume={handleResume}
               onStop={handleStop}
@@ -133,6 +138,7 @@ export const SearchPage: React.FC = () => {
                 <button
                   onClick={() => {
                     setSessionId(null);
+                    setSearchParameters(null);
                     setIsSearching(false);
                   }}
                   className="btn-primary px-8 py-3 text-lg"

@@ -11,10 +11,24 @@ export class BibTeXGenerator {
    * Generate BibTeX file from papers
    */
   async generate(papers: Paper[], outputPath: string): Promise<string> {
+    console.log(`[BibTeXGenerator] Total papers received: ${papers.length}`);
+
     const includedPapers = papers.filter(p => p.included);
+    console.log(`[BibTeXGenerator] Included papers after filtering: ${includedPapers.length}`);
+
+    if (includedPapers.length === 0) {
+      console.warn(`[BibTeXGenerator] WARNING: No included papers found! Checking paper properties...`);
+      console.log(`[BibTeXGenerator] Sample paper (first 3):`);
+      papers.slice(0, 3).forEach((p, i) => {
+        console.log(`  Paper ${i + 1}: included=${p.included}, title="${p.title.substring(0, 50)}..."`);
+      });
+    }
 
     const bibtexEntries = includedPapers.map(paper => this.paperToBibTeX(paper));
     const bibtex = bibtexEntries.join('\n\n');
+
+    console.log(`[BibTeXGenerator] Generated BibTeX content length: ${bibtex.length} characters`);
+    console.log(`[BibTeXGenerator] First 500 chars:\n${bibtex.substring(0, 500)}...`);
 
     // Ensure directory exists
     const dir = path.dirname(outputPath);
@@ -24,6 +38,7 @@ export class BibTeXGenerator {
 
     // Write to file
     fs.writeFileSync(outputPath, bibtex, 'utf-8');
+    console.log(`[BibTeXGenerator] Written to ${outputPath}`);
 
     return outputPath;
   }

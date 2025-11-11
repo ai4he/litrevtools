@@ -65,7 +65,7 @@ export class SemanticScholarService {
   /**
    * Search for papers using Semantic Scholar API
    */
-  async search(params: SemanticScholarSearchParams): Promise<{
+  async search(params: SemanticScholarSearchParams, retryCount: number = 0, maxRetries: number = 3): Promise<{
     papers: Paper[];
     total: number;
     hasMore: boolean;
@@ -126,11 +126,20 @@ export class SemanticScholarService {
       };
     } catch (error: any) {
       if (error.response?.status === 429) {
-        console.error('Rate limit exceeded, waiting before retry...');
+        if (retryCount >= maxRetries) {
+          console.error(`Rate limit exceeded. Max retries (${maxRetries}) reached. Returning empty results.`);
+          return {
+            papers: [],
+            total: 0,
+            hasMore: false
+          };
+        }
+        console.error(`Rate limit exceeded, waiting before retry... (attempt ${retryCount + 1}/${maxRetries})`);
         await this.delay(60000); // Wait 1 minute
-        return this.search(params); // Retry
+        return this.search(params, retryCount + 1, maxRetries); // Retry with incremented count
       }
 
+      console.error(`Semantic Scholar API error: ${error.message}`);
       throw new Error(`Semantic Scholar API error: ${error.message}`);
     }
   }

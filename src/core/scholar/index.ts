@@ -16,8 +16,7 @@ export class ScholarExtractor {
   private onProgress?: ProgressCallback;
   private onPaper?: PaperCallback;
   private llmService?: LLMService;
-  private parameters?: SearchParameters;
-  private timerInterval?: NodeJS.Timeout;
+  private currentParameters?: SearchParameters;
 
   constructor(database: LitRevDatabase) {
     this.database = database;
@@ -116,6 +115,117 @@ export class ScholarExtractor {
   }
 
   /**
+   * Start a new search session (non-blocking version)
+   * Returns sessionId immediately after initialization, before search executes
+   */
+  async startSearchNonBlocking(
+    parameters: SearchParameters,
+    onProgress?: ProgressCallback,
+    onPaper?: PaperCallback
+  ): Promise<string> {
+    if (this.isRunning) {
+      throw new Error('A search is already running');
+    }
+
+    this.isRunning = true;
+    this.startTime = Date.now();
+    this.onProgress = onProgress;
+    this.onPaper = onPaper;
+    this.currentParameters = parameters;
+
+    // Create session
+    this.sessionId = this.database.createSession(parameters);
+
+    // Update progress
+    this.updateProgress({
+      status: 'running',
+      currentTask: 'Initializing search',
+      nextTask: 'Preparing Semantic Scholar search',
+      progress: 5
+    });
+
+    return this.sessionId;
+  }
+
+  /**
+   * Execute the search in the background (to be called after startSearchNonBlocking)
+   */
+  async executeSearchInBackground(): Promise<void> {
+    if (!this.sessionId || !this.currentParameters) {
+      throw new Error('Search not initialized. Call startSearchNonBlocking first.');
+    }
+
+    console.log(`[ScholarExtractor] Starting background search for session: ${this.sessionId}`);
+
+    const parameters = this.currentParameters;
+
+    try {
+      // Determine year range
+      // If no time range is provided at all, search without year filter (all results)
+      let years: number[] | undefined;
+
+      if (parameters.startYear !== undefined || parameters.endYear !== undefined) {
+        const currentYear = new Date().getFullYear();
+        const startYear = parameters.startYear || 2000;
+        const endYear = parameters.endYear || currentYear;
+        years = this.generateYearRange(startYear, endYear);
+
+        this.updateProgress({
+          currentTask: 'Preparing search',
+          nextTask: `Searching ${years.length} years`,
+          progress: 15
+        });
+      } else {
+        // No year range specified - search all years
+        this.updateProgress({
+          currentTask: 'Preparing search',
+          nextTask: 'Searching all years',
+          progress: 15
+        });
+      }
+
+      // Execute parallel search
+      await this.executeParallelSearch(parameters, years);
+
+      // Initialize LLM service if enabled
+      if (parameters.llmConfig?.enabled) {
+        this.updateProgress({
+          currentTask: 'Initializing LLM service',
+          nextTask: 'Applying intelligent filters',
+          progress: 82
+        });
+
+        this.llmService = new LLMService(parameters.llmConfig);
+        await this.llmService.initialize();
+      }
+
+      // Apply exclusion filters (LLM-based or rule-based)
+      await this.applyFilters(parameters);
+
+      // Mark as completed
+      console.log(`[ScholarExtractor] Background search completed successfully for session: ${this.sessionId}`);
+      this.updateProgress({
+        status: 'completed',
+        currentTask: 'Search completed',
+        nextTask: 'Ready for PRISMA analysis',
+        progress: 100
+      });
+    } catch (error) {
+      console.error(`[ScholarExtractor] Background search error for session ${this.sessionId}:`, error);
+      this.updateProgress({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        progress: 0
+      });
+      throw error;
+    } finally {
+      console.log(`[ScholarExtractor] Cleaning up background search for session: ${this.sessionId}`);
+      this.isRunning = false;
+      this.currentParameters = undefined;
+    }
+  }
+
+  /**
    * Execute parallel search across years
    */
   private async executeParallelSearch(
@@ -167,7 +277,6 @@ export class ScholarExtractor {
             ? Math.min(maxPerRequest, maxResultsPerYear - fetchedForYear)
             : maxPerRequest;
 
-          const apiCallTime = Date.now();
           const result = await semanticScholar.search({
             query: parameters.inclusionKeywords.join(' '),
             year,
@@ -175,21 +284,10 @@ export class ScholarExtractor {
             offset
           });
 
-          // Track this API call in progress
-          this.updateProgress({
-            lastApiCall: {
-              year,
-              recordsRequested: limit,
-              recordsReceived: result.papers.length,
-              offset,
-              timestamp: apiCallTime
-            }
-          });
-
-          // Filter by month if specified
+          // Filter by date (month/day) if specified
           let papersToAdd = result.papers;
-          if (parameters.startMonth || parameters.endMonth) {
-            papersToAdd = this.filterPapersByMonth(result.papers, parameters.startMonth, parameters.endMonth, year, years[0], years[years.length - 1]);
+          if (parameters.startMonth || parameters.endMonth || parameters.startDay || parameters.endDay) {
+            papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, year, years[0], years[years.length - 1]);
           }
 
           allPapers.push(...papersToAdd);
@@ -466,22 +564,11 @@ export class ScholarExtractor {
         ? Math.min(maxPerRequest, maxResults - totalFetched)
         : maxPerRequest;
 
-      const apiCallTime = Date.now();
       const result = await semanticScholar.search({
         query: parameters.inclusionKeywords.join(' '),
         // No year filter - search all years
         limit,
         offset
-      });
-
-      // Track this API call in progress
-      this.updateProgress({
-        lastApiCall: {
-          recordsRequested: limit,
-          recordsReceived: result.papers.length,
-          offset,
-          timestamp: apiCallTime
-        }
       });
 
       // Filter by month if specified (though this is less meaningful without year context)
@@ -539,18 +626,20 @@ export class ScholarExtractor {
   }
 
   /**
-   * Filter papers by month based on publication date
+   * Filter papers by date (year, month, and day) based on publication date
    */
-  private filterPapersByMonth(
+  private filterPapersByDate(
     papers: Paper[],
     startMonth: number | undefined,
     endMonth: number | undefined,
+    startDay: number | undefined,
+    endDay: number | undefined,
     currentYear: number,
     firstYear: number,
     lastYear: number
   ): Paper[] {
-    // If no month filtering is specified, return all papers
-    if (!startMonth && !endMonth) {
+    // If no date filtering is specified, return all papers
+    if (!startMonth && !endMonth && !startDay && !endDay) {
       return papers;
     }
 
@@ -565,6 +654,7 @@ export class ScholarExtractor {
         const dateParts = paper.publicationDate.split('-');
         const pubYear = parseInt(dateParts[0]);
         const pubMonth = dateParts.length > 1 ? parseInt(dateParts[1]) : undefined;
+        const pubDay = dateParts.length > 2 ? parseInt(dateParts[2]) : undefined;
 
         // If we can't determine the month, include the paper conservatively
         if (!pubMonth) {
@@ -572,18 +662,34 @@ export class ScholarExtractor {
         }
 
         // For the first year of the range
-        if (currentYear === firstYear && startMonth) {
-          // Only include papers from startMonth onwards in the first year
+        if (currentYear === firstYear && (startMonth || startDay)) {
           if (pubYear === firstYear) {
-            return pubMonth >= startMonth;
+            // Check month filter
+            if (startMonth && pubMonth < startMonth) {
+              return false;
+            }
+            // Check day filter (only if we're in the start month)
+            if (startMonth && pubMonth === startMonth && startDay && pubDay) {
+              return pubDay >= startDay;
+            }
+            // If we passed month check but no day filter, or we're past the start month
+            return true;
           }
         }
 
         // For the last year of the range
-        if (currentYear === lastYear && endMonth) {
-          // Only include papers up to endMonth in the last year
+        if (currentYear === lastYear && (endMonth || endDay)) {
           if (pubYear === lastYear) {
-            return pubMonth <= endMonth;
+            // Check month filter
+            if (endMonth && pubMonth > endMonth) {
+              return false;
+            }
+            // Check day filter (only if we're in the end month)
+            if (endMonth && pubMonth === endMonth && endDay && pubDay) {
+              return pubDay <= endDay;
+            }
+            // If we passed month check but no day filter, or we're before the end month
+            return true;
           }
         }
 
@@ -715,215 +821,5 @@ export class ScholarExtractor {
    */
   getLLMUsageStats() {
     return this.llmService?.getUsageStats() || null;
-  }
-
-  /**
-   * Start a search non-blocking - returns sessionId immediately
-   * and allows background execution
-   */
-  async startSearchNonBlocking(
-    parameters: SearchParameters,
-    onProgress?: ProgressCallback,
-    onPaper?: PaperCallback
-  ): Promise<string> {
-    if (this.isRunning) {
-      throw new Error('A search is already running');
-    }
-
-    // Store parameters and callbacks
-    this.parameters = parameters;
-    this.onProgress = onProgress;
-    this.onPaper = onPaper;
-
-    // Create session
-    this.sessionId = this.database.createSession(parameters);
-
-    // Initialize progress with idle state
-    this.updateProgress({
-      status: 'idle',
-      currentTask: 'Waiting to start',
-      nextTask: 'Initializing search',
-      progress: 0
-    });
-
-    return this.sessionId;
-  }
-
-  /**
-   * Execute search in background (called after startSearchNonBlocking)
-   */
-  async executeSearchInBackground(): Promise<void> {
-    if (!this.sessionId || !this.parameters) {
-      throw new Error('Search not initialized - call startSearchNonBlocking first');
-    }
-
-    this.isRunning = true;
-    this.startTime = Date.now();
-
-    // Start the timer that updates elapsed time every second
-    this.startTimer();
-
-    // Update progress
-    this.updateProgress({
-      status: 'running',
-      currentTask: 'Initializing search',
-      nextTask: 'Estimating total papers',
-      progress: 2
-    });
-
-    try {
-      const parameters = this.parameters;
-
-      // Determine year range
-      let years: number[] | undefined;
-
-      if (parameters.startYear !== undefined || parameters.endYear !== undefined) {
-        const currentYear = new Date().getFullYear();
-        const startYear = parameters.startYear || 2000;
-        const endYear = parameters.endYear || currentYear;
-        years = this.generateYearRange(startYear, endYear);
-      }
-
-      // ESTIMATION PHASE: Estimate total papers before starting
-      await this.estimateTotalPapers(parameters, years);
-
-      // Execute parallel search
-      await this.executeParallelSearch(parameters, years);
-
-      // Initialize LLM service if enabled
-      if (parameters.llmConfig?.enabled) {
-        this.updateProgress({
-          currentTask: 'Initializing LLM service',
-          nextTask: 'Applying intelligent filters',
-          progress: 82
-        });
-
-        this.llmService = new LLMService(parameters.llmConfig);
-        await this.llmService.initialize();
-      }
-
-      // Apply exclusion filters (LLM-based or rule-based)
-      await this.applyFilters(parameters);
-
-      // Stop the timer
-      this.stopTimer();
-
-      // Mark as completed
-      this.updateProgress({
-        status: 'completed',
-        currentTask: 'Search completed',
-        nextTask: 'Ready for output generation',
-        progress: 100
-      });
-    } catch (error) {
-      this.stopTimer();
-      this.updateProgress({
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        progress: 0
-      });
-      throw error;
-    } finally {
-      this.isRunning = false;
-    }
-  }
-
-  /**
-   * Estimate total papers that will be found (before actual search)
-   */
-  private async estimateTotalPapers(
-    parameters: SearchParameters,
-    years: number[] | undefined
-  ): Promise<void> {
-    if (!this.sessionId) throw new Error('No active session');
-
-    this.updateProgress({
-      status: 'estimating',
-      isEstimating: true,
-      currentTask: 'Estimating total papers available',
-      nextTask: 'Will begin fetching papers after estimation',
-      progress: 5
-    });
-
-    const semanticScholar = new SemanticScholarService();
-    let estimatedTotal = 0;
-
-    try {
-      if (!years) {
-        // No year filter - get total from a single query
-        const result = await semanticScholar.search({
-          query: parameters.inclusionKeywords.join(' '),
-          limit: 1,
-          offset: 0
-        });
-        estimatedTotal = result.total;
-      } else {
-        // Estimate by sampling a few years
-        const sampleYears = years.length > 5 ? [years[0], years[Math.floor(years.length / 2)], years[years.length - 1]] : years;
-
-        for (const year of sampleYears) {
-          const result = await semanticScholar.search({
-            query: parameters.inclusionKeywords.join(' '),
-            year,
-            limit: 1,
-            offset: 0
-          });
-          estimatedTotal += result.total;
-        }
-
-        // Extrapolate to all years if we sampled
-        if (sampleYears.length < years.length) {
-          estimatedTotal = Math.round((estimatedTotal / sampleYears.length) * years.length);
-        }
-      }
-
-      // Apply maxResults cap if specified
-      if (parameters.maxResults && estimatedTotal > parameters.maxResults) {
-        estimatedTotal = parameters.maxResults;
-      }
-
-      this.updateProgress({
-        status: 'running',
-        isEstimating: false,
-        estimatedTotalPapers: estimatedTotal,
-        currentTask: `Estimation complete: ~${estimatedTotal} papers found`,
-        nextTask: 'Beginning paper extraction',
-        progress: 10
-      });
-
-      console.log(`[Estimator] Estimated ${estimatedTotal} total papers`);
-    } catch (error) {
-      console.error('[Estimator] Failed to estimate, continuing anyway:', error);
-      this.updateProgress({
-        isEstimating: false,
-        currentTask: 'Estimation unavailable, proceeding with search',
-        nextTask: 'Beginning paper extraction',
-        progress: 10
-      });
-    }
-  }
-
-  /**
-   * Start a timer that updates elapsed time every second
-   */
-  private startTimer(): void {
-    this.stopTimer(); // Clear any existing timer
-
-    this.timerInterval = setInterval(() => {
-      if (this.sessionId && this.isRunning) {
-        // Just trigger an update to refresh timeElapsed
-        this.updateProgress({});
-      }
-    }, 1000); // Update every second
-  }
-
-  /**
-   * Stop the running timer
-   */
-  private stopTimer(): void {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = undefined;
-    }
   }
 }

@@ -17,8 +17,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [exclusionKeywords, setExclusionKeywords] = useState<string[]>([]);
   const [currentInclusion, setCurrentInclusion] = useState('');
   const [currentExclusion, setCurrentExclusion] = useState('');
-  const [startYear, setStartYear] = useState<string>('');
-  const [endYear, setEndYear] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [maxResults, setMaxResults] = useState<string>('');
 
   // LLM Configuration
@@ -53,6 +53,44 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
     }
   };
 
+  // Parse flexible date format: YYYY, YYYY-MM, or YYYY-MM-DD
+  const parseDate = (dateStr: string): { year?: number; month?: number; day?: number } | null => {
+    if (!dateStr.trim()) return null;
+
+    const parts = dateStr.trim().split('-');
+
+    if (parts.length === 1) {
+      // YYYY format
+      const year = parseInt(parts[0]);
+      if (isNaN(year) || year < 1900 || year > new Date().getFullYear() + 10) {
+        return null;
+      }
+      return { year };
+    } else if (parts.length === 2) {
+      // YYYY-MM format
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]);
+      if (isNaN(year) || isNaN(month) || year < 1900 || year > new Date().getFullYear() + 10 || month < 1 || month > 12) {
+        return null;
+      }
+      return { year, month };
+    } else if (parts.length === 3) {
+      // YYYY-MM-DD format
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]);
+      const day = parseInt(parts[2]);
+      if (isNaN(year) || isNaN(month) || isNaN(day) ||
+          year < 1900 || year > new Date().getFullYear() + 10 ||
+          month < 1 || month > 12 ||
+          day < 1 || day > 31) {
+        return null;
+      }
+      return { year, month, day };
+    }
+
+    return null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -61,12 +99,30 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       return;
     }
 
+    // Parse dates
+    const startDateParsed = parseDate(startDate);
+    const endDateParsed = parseDate(endDate);
+
+    if (startDate && !startDateParsed) {
+      alert('Invalid start date format. Use YYYY, YYYY-MM, or YYYY-MM-DD');
+      return;
+    }
+
+    if (endDate && !endDateParsed) {
+      alert('Invalid end date format. Use YYYY, YYYY-MM, or YYYY-MM-DD');
+      return;
+    }
+
     const params: SearchParameters = {
       name: name.trim() || generateSearchName(),
       inclusionKeywords,
       exclusionKeywords,
-      ...(startYear && { startYear: parseInt(startYear) }),
-      ...(endYear && { endYear: parseInt(endYear) }),
+      ...(startDateParsed?.year && { startYear: startDateParsed.year }),
+      ...(endDateParsed?.year && { endYear: endDateParsed.year }),
+      ...(startDateParsed?.month && { startMonth: startDateParsed.month }),
+      ...(endDateParsed?.month && { endMonth: endDateParsed.month }),
+      ...(startDateParsed?.day && { startDay: startDateParsed.day }),
+      ...(endDateParsed?.day && { endDay: endDateParsed.day }),
       ...(maxResults && { maxResults: parseInt(maxResults) }),
       llmConfig: llmEnabled ? {
         enabled: true,
@@ -214,33 +270,35 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
         DEFAULT_EXCLUSION_SUGGESTIONS
       )}
 
-      {/* Year Range */}
+      {/* Date Range */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="label">Start Year (optional)</label>
+          <label className="label">Start Date (optional)</label>
           <input
-            type="number"
-            value={startYear}
-            onChange={(e) => setStartYear(e.target.value)}
-            placeholder="e.g., 2020"
-            min="1900"
-            max={new Date().getFullYear()}
+            type="text"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            placeholder="2020, 2020-01, or 2020-01-15"
             className="input-field"
             disabled={disabled}
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Format: YYYY, YYYY-MM, or YYYY-MM-DD
+          </p>
         </div>
         <div>
-          <label className="label">End Year (optional)</label>
+          <label className="label">End Date (optional)</label>
           <input
-            type="number"
-            value={endYear}
-            onChange={(e) => setEndYear(e.target.value)}
-            placeholder="e.g., 2024"
-            min="1900"
-            max={new Date().getFullYear()}
+            type="text"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            placeholder="2024, 2024-06, or 2024-06-15"
             className="input-field"
             disabled={disabled}
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Format: YYYY, YYYY-MM, or YYYY-MM-DD
+          </p>
         </div>
       </div>
 
