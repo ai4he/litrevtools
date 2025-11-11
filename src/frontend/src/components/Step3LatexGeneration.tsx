@@ -63,6 +63,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
   const [dataSource, setDataSource] = useState<'step1' | 'step2' | 'upload'>('step2');
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
+  const [outputsGenerated, setOutputsGenerated] = useState(false);
   const { socket } = useSocket();
 
   // Listen for output progress events via WebSocket
@@ -90,6 +91,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
       } else if (progress.status === 'completed') {
         setIsGenerating(false);
         setOutputProgress(null); // Clear progress when done
+        setOutputsGenerated(true); // Mark outputs as generated
       } else if (progress.status === 'error') {
         setIsGenerating(false);
         setError(progress.error || 'Output generation failed');
@@ -100,6 +102,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
       console.log('[Step3] Outputs generated:', data);
       setIsGenerating(false);
       setOutputProgress(null);
+      setOutputsGenerated(true); // Mark outputs as generated
     };
 
     socket.on(outputProgressEvent, handleOutputProgress);
@@ -154,7 +157,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
 
       // Request generation - progress will come via WebSocket
       if (sessionId) {
-        await sessionAPI.generate(sessionId);
+        await sessionAPI.generate(sessionId, dataSource);
       } else {
         // TODO: Handle CSV upload case
         throw new Error('CSV upload not yet implemented');
@@ -188,7 +191,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
     }
   };
 
-  const isComplete = outputProgress?.status === 'completed' || (!isGenerating && sessionId);
+  const isComplete = outputsGenerated && !isGenerating;
   const hasError = outputProgress?.status === 'error' || !!error;
 
   const batchProgress: BatchProgress | undefined = outputProgress?.latexBatchProgress ? {
@@ -236,7 +239,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
       )}
 
       {/* Configuration */}
-      {!isGenerating && !isComplete && (
+      {!isGenerating && !outputsGenerated && (
         <div className="space-y-6">
           {/* Data Source Selection */}
           <div>
@@ -333,7 +336,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
       )}
 
       {/* Download Buttons */}
-      {isComplete && !isGenerating && sessionId && (
+      {outputsGenerated && !isGenerating && sessionId && (
         <div className="space-y-4">
           <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
             <h4 className="font-semibold text-green-900 mb-2">All Outputs Generated Successfully!</h4>
