@@ -95,7 +95,8 @@ export class LaTeXGenerator {
           searchParams.inclusionKeywords,
           searchParams.inclusionKeywords,
           searchParams.exclusionKeywords,
-          prismaData
+          prismaData,
+          searchParams.latexGenerationPrompt
         );
       } else {
         // Subsequent batches: regenerate with new papers
@@ -105,7 +106,8 @@ export class LaTeXGenerator {
           batch,
           papersProcessedSoFar,
           searchParams.inclusionKeywords,
-          prismaData
+          prismaData,
+          searchParams.latexGenerationPrompt
         );
       }
 

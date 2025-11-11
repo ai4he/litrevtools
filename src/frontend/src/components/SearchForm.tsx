@@ -33,8 +33,9 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [enableKeyRotation, setEnableKeyRotation] = useState(true);
 
   // Semantic Filtering Prompts
-  const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('');
-  const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('');
+  const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('The paper must have a scientific contribution by proposing a new approach that advance science, so papers that only implement the technology as use case are not allowed. The approach has to be applicable to mathematics, if it is a general computer science approach that is not specificly aplied to mathematics then misregard it.');
+  const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('Literature reviews of any kind are not allowed.');
+  const [latexGenerationPrompt, setLatexGenerationPrompt] = useState('');
 
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();
@@ -131,6 +132,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       // Semantic filtering prompts (only include if LLM is enabled and prompts are provided)
       ...(llmEnabled && inclusionCriteriaPrompt.trim() && { inclusionCriteriaPrompt: inclusionCriteriaPrompt.trim() }),
       ...(llmEnabled && exclusionCriteriaPrompt.trim() && { exclusionCriteriaPrompt: exclusionCriteriaPrompt.trim() }),
+      ...(llmEnabled && latexGenerationPrompt.trim() && { latexGenerationPrompt: latexGenerationPrompt.trim() }),
       llmConfig: llmEnabled ? {
         enabled: true,
         provider: llmProvider,
@@ -412,6 +414,24 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Papers meeting this criteria will have systematic_filtering_exclusion = 1
+                    </p>
+                  </div>
+
+                  {/* Additional Prompt for LaTeX Generation */}
+                  <div>
+                    <label className="label text-sm">
+                      Additional Prompt for the LaTeX Generation Process (optional)
+                    </label>
+                    <textarea
+                      value={latexGenerationPrompt}
+                      onChange={(e) => setLatexGenerationPrompt(e.target.value)}
+                      placeholder="Add any additional instructions or requirements for LaTeX generation. This prompt will be included in all LaTeX generation sections (Introduction, Methodology, Results, Discussion, Conclusion). Example: Use a formal academic tone and emphasize methodological rigor."
+                      rows={4}
+                      className="input-field text-sm resize-none"
+                      disabled={disabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Optional additional instructions for customizing LaTeX document generation
                     </p>
                   </div>
                 </div>

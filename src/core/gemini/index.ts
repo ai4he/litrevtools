@@ -251,7 +251,8 @@ Return the text in plain format (citations not needed in abstract).
     searchKeywords: string[],
     inclusionCriteria: string[],
     exclusionCriteria: string[],
-    prismaData: PRISMAData
+    prismaData: PRISMAData,
+    latexGenerationPrompt?: string
   ): Promise<{
     abstract: string;
     introduction: string;
@@ -347,7 +348,7 @@ MANDATORY REQUIREMENTS:
 ✓ Return LaTeX-formatted text with proper citation commands
 ✓ Results section MUST have subsections organized by theme
 ✓ Each claim about a paper MUST have a citation
-
+${latexGenerationPrompt ? `\nADDITIONAL INSTRUCTIONS:\n${latexGenerationPrompt}\n` : ''}
 CRITICAL: Return your response as VALID JSON with PROPER ESCAPING:
 
 IMPORTANT JSON ESCAPING RULES:
@@ -487,7 +488,8 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
     newPapers: Paper[],
     allPapers: Paper[],
     searchKeywords: string[],
-    prismaData: PRISMAData
+    prismaData: PRISMAData,
+    latexGenerationPrompt?: string
   ): Promise<{
     abstract: string;
     introduction: string;
@@ -578,7 +580,7 @@ REGENERATE COMPLETE PAPER:
 4. RESULTS: **CRITICAL** - Reorganize with new papers, cite ALL papers discussed
 5. DISCUSSION: Integrate new findings, synthesize across all papers, CITE extensively
 6. CONCLUSION: Update with insights from complete set, CITE key papers
-
+${latexGenerationPrompt ? `\nADDITIONAL INSTRUCTIONS:\n${latexGenerationPrompt}\n` : ''}
 CRITICAL: Return your response as VALID JSON with PROPER ESCAPING:
 
 IMPORTANT JSON ESCAPING RULES:

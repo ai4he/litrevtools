@@ -18,6 +18,7 @@ export interface SearchParameters {
   // Semantic filtering prompts for LLM-based evaluation
   inclusionCriteriaPrompt?: string; // Semantic prompt defining inclusion criteria
   exclusionCriteriaPrompt?: string; // Semantic prompt defining exclusion criteria
+  latexGenerationPrompt?: string; // Additional prompt for LaTeX generation customization
 }
 
 export interface Paper {
