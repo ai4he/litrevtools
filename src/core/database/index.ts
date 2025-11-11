@@ -75,6 +75,32 @@ export class LitRevDatabase {
       )
     `);
 
+    // Original papers table (stores Step 1 papers before semantic filtering)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS original_papers (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        authors TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        abstract TEXT,
+        url TEXT NOT NULL,
+        citations INTEGER,
+        source TEXT NOT NULL,
+        pdf_url TEXT,
+        venue TEXT,
+        doi TEXT,
+        keywords TEXT,
+        extracted_at TEXT NOT NULL,
+        included INTEGER NOT NULL DEFAULT 1,
+        exclusion_reason TEXT,
+        category TEXT,
+        llm_confidence REAL,
+        llm_reasoning TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+      )
+    `);
+
     // PRISMA data table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS prisma_data (
@@ -160,6 +186,7 @@ export class LitRevDatabase {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_papers_session ON papers(session_id);
       CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(year);
+      CREATE INDEX IF NOT EXISTS idx_original_papers_session ON original_papers(session_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
     `);
   }
@@ -463,6 +490,54 @@ export class LitRevDatabase {
     return rows.map(row => this.rowToPaper(row));
   }
 
+  getOriginalPapers(sessionId: string): Paper[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM original_papers WHERE session_id = ? ORDER BY year DESC, title ASC
+    `).all(sessionId) as any[];
+
+    return rows.map(row => this.rowToPaper(row));
+  }
+
+  setOriginalPapers(sessionId: string, papers: Paper[]): void {
+    // Clear existing original papers for this session
+    this.db.prepare(`
+      DELETE FROM original_papers WHERE session_id = ?
+    `).run(sessionId);
+
+    // Insert new original papers
+    const stmt = this.db.prepare(`
+      INSERT INTO original_papers (
+        id, session_id, title, authors, year, abstract, url, citations,
+        source, pdf_url, venue, doi, keywords, extracted_at, included,
+        exclusion_reason, category, llm_confidence, llm_reasoning
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const paper of papers) {
+      stmt.run(
+        paper.id,
+        sessionId,
+        paper.title,
+        JSON.stringify(paper.authors),
+        paper.year,
+        paper.abstract || null,
+        paper.url,
+        paper.citations || null,
+        paper.source,
+        paper.pdfUrl || null,
+        paper.venue || null,
+        paper.doi || null,
+        paper.keywords ? JSON.stringify(paper.keywords) : null,
+        paper.extractedAt.toISOString(),
+        paper.included ? 1 : 0,
+        paper.exclusionReason || null,
+        paper.category || null,
+        paper.llmConfidence || null,
+        paper.llmReasoning || null
+      );
+    }
+  }
+
   getSession(sessionId: string): SearchSession | null {
     const sessionRow = this.db.prepare(`
       SELECT * FROM sessions WHERE id = ?
@@ -471,6 +546,7 @@ export class LitRevDatabase {
     if (!sessionRow) return null;
 
     const papers = this.getPapers(sessionId);
+    const originalPapers = this.getOriginalPapers(sessionId);
     const prismaData = this.getPRISMAData(sessionId);
     const outputs = this.getOutputFiles(sessionId);
     const latestScreenshot = this.getLatestScreenshot(sessionId);
@@ -501,6 +577,7 @@ export class LitRevDatabase {
         screenshot: latestScreenshot
       },
       papers,
+      originalPapers: originalPapers.length > 0 ? originalPapers : undefined,
       prismaData,
       outputs,
       createdAt: new Date(sessionRow.created_at),

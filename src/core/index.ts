@@ -134,6 +134,51 @@ export class LitRevTools {
   }
 
   /**
+   * Generate all outputs for a session with a specific data source
+   * @param sessionId - The session ID
+   * @param dataSource - Which papers to use: 'step1' (original), 'step2' (filtered), or 'current' (default)
+   * @param onProgress - Progress callback
+   */
+  async generateOutputsWithDataSource(
+    sessionId: string,
+    dataSource: 'step1' | 'step2' | 'current',
+    onProgress?: (progress: OutputProgress) => void
+  ): Promise<void> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // Select the appropriate papers based on data source
+    let papers: Paper[];
+    if (dataSource === 'step1' && session.originalPapers && session.originalPapers.length > 0) {
+      papers = session.originalPapers;
+    } else if (dataSource === 'step2' || dataSource === 'current') {
+      papers = session.papers;
+    } else {
+      // Fallback to current papers if original papers not available
+      papers = session.papers;
+    }
+
+    // Temporarily update the session papers to generate outputs with the selected data source
+    const originalPapers = [...session.papers];
+    try {
+      // Clear current papers and add selected papers
+      for (const paper of papers) {
+        this.database.addPaper(sessionId, paper);
+      }
+
+      // Generate outputs
+      await this.outputManager.generateAll(sessionId, onProgress);
+    } finally {
+      // Restore original papers
+      for (const paper of originalPapers) {
+        this.database.addPaper(sessionId, paper);
+      }
+    }
+  }
+
+  /**
    * Generate PRISMA paper content using Gemini
    */
   async generatePRISMAPaper(sessionId: string): Promise<{
@@ -194,6 +239,11 @@ export class LitRevTools {
     const session = this.database.getSession(sessionId);
     if (!session) {
       throw new Error('Session not found');
+    }
+
+    // Store original papers if not already stored (for Step 3 data source selection)
+    if (!session.originalPapers || session.originalPapers.length === 0) {
+      this.database.setOriginalPapers(sessionId, [...session.papers]);
     }
 
     // Create LLM service with the provided API key
