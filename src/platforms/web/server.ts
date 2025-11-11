@@ -153,6 +153,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
     };
 
     // Start search with WebSocket callbacks that receive sessionId as parameter
+    // This returns the sessionId immediately and runs the search in the background
     const sessionId = await tools.startSearch(params, {
       onProgress: (progress: SearchProgress, sid: string) => {
         emitOrBuffer(sid, 'progress', progress);
@@ -179,6 +180,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
     activeSearches.set(sessionId, { sessionId, tools });
 
+    // Return immediately with the sessionId (search continues in background)
     res.json({ success: true, sessionId });
   } catch (error: any) {
     console.error('Error starting search:', error);
@@ -223,12 +225,59 @@ app.post('/api/search/:id/stop', (req, res) => {
   res.json({ success: true });
 });
 
-// Generate outputs
+// Generate outputs (async with WebSocket progress)
 app.post('/api/sessions/:id/generate', async (req, res) => {
   try {
-    await litrev.generateOutputs(req.params.id);
-    const session = litrev.getSession(req.params.id);
-    res.json({ success: true, outputs: session?.outputs });
+    const sessionId = req.params.id;
+    const session = litrev.getSession(sessionId);
+
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        // Client is subscribed, emit directly
+        io.emit(eventName, data);
+      } else {
+        // Client not subscribed yet, buffer the event
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
+    // Return immediately - generation happens in background
+    res.json({ success: true, message: 'Output generation started' });
+
+    // Start generation with progress callbacks
+    litrev.generateOutputs(sessionId, (progress) => {
+      emitOrBuffer(sessionId, 'output-progress', progress);
+
+      // When completed, emit the outputs
+      if (progress.status === 'completed') {
+        const updatedSession = litrev.getSession(sessionId);
+        emitOrBuffer(sessionId, 'outputs', updatedSession?.outputs);
+      }
+    }).catch((error: any) => {
+      console.error('[Server] Output generation failed:', error);
+      emitOrBuffer(sessionId, 'output-progress', {
+        status: 'error',
+        stage: 'completed',
+        currentTask: 'Output generation failed',
+        totalStages: 5,
+        completedStages: 0,
+        error: error.message,
+        progress: 0
+      });
+    });
+
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

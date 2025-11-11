@@ -19,6 +19,10 @@ export interface SearchParameters {
   exclusionKeywords: string[];
   startYear?: number;
   endYear?: number;
+  startMonth?: number;
+  endMonth?: number;
+  startDay?: number;
+  endDay?: number;
   maxResults?: number;
   llmConfig?: LLMConfig;
 }
@@ -54,6 +58,21 @@ export interface ProgressUpdate {
   estimatedTimeRemaining: number;
   progress: number;
   screenshot?: string;
+}
+
+export interface OutputProgress {
+  status: 'idle' | 'running' | 'completed' | 'error';
+  stage: 'csv' | 'bibtex' | 'latex' | 'prisma' | 'zip' | 'completed';
+  currentTask: string;
+  totalStages: number;
+  completedStages: number;
+  latexBatchProgress?: {
+    currentBatch: number;
+    totalBatches: number;
+    papersInBatch: number;
+  };
+  error?: string;
+  progress: number;
 }
 
 export interface SearchSession {

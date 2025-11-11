@@ -12,6 +12,7 @@ import {
   SearchParameters,
   SearchSession,
   SearchProgress,
+  OutputProgress,
   Paper,
   ProgressCallback,
   PaperCallback,
@@ -40,12 +41,14 @@ export class LitRevTools {
     this.outputManager = new OutputManager(
       this.database,
       this.gemini,
-      this.config.outputDir
+      this.config.outputDir,
+      this.config.gemini.paperBatchSize
     );
   }
 
   /**
    * Start a new literature review search
+   * Returns the sessionId immediately and runs the search in the background
    */
   async startSearch(
     parameters: SearchParameters,
@@ -55,28 +58,46 @@ export class LitRevTools {
       onError?: ErrorCallback;
     }
   ): Promise<string> {
-    let sessionId = '';
-    try {
-      // Initialize scholar extractor
-      this.scholarExtractor = new ScholarExtractor(this.database);
+    // Initialize scholar extractor
+    this.scholarExtractor = new ScholarExtractor(this.database);
 
-      // Start the search
-      sessionId = await this.scholarExtractor.startSearch(
-        parameters,
-        callbacks?.onProgress,
-        callbacks?.onPaper
-      );
+    // Start the search and get sessionId immediately (before the search completes)
+    const sessionId = await this.scholarExtractor.startSearchNonBlocking(
+      parameters,
+      callbacks?.onProgress,
+      callbacks?.onPaper
+    );
 
-      // Generate outputs as they become available
-      await this.outputManager.generateIncremental(sessionId);
+    console.log(`[LitRevTools] Search initialized with sessionId: ${sessionId}, starting background execution...`);
 
-      return sessionId;
-    } catch (error) {
-      if (callbacks?.onError) {
-        callbacks.onError(error as Error, sessionId);
-      }
-      throw error;
-    }
+    // Add a small delay to ensure the client has time to subscribe to WebSocket
+    // before the background task starts sending events
+    const extractor = this.scholarExtractor;
+    setTimeout(() => {
+      console.log(`[LitRevTools] Starting background search for session: ${sessionId}`);
+
+      // Run the search in the background without awaiting
+      extractor.executeSearchInBackground().then(async () => {
+        console.log(`[LitRevTools] Background search completed for session: ${sessionId}, generating outputs...`);
+        // Generate outputs after search completes
+        try {
+          await this.outputManager.generateIncremental(sessionId);
+          console.log(`[LitRevTools] Outputs generated successfully for session: ${sessionId}`);
+        } catch (error) {
+          console.error(`[LitRevTools] Error generating outputs for session ${sessionId}:`, error);
+          if (callbacks?.onError) {
+            callbacks.onError(error as Error, sessionId);
+          }
+        }
+      }).catch((error) => {
+        console.error(`[LitRevTools] Search error for session ${sessionId}:`, error);
+        if (callbacks?.onError) {
+          callbacks.onError(error as Error, sessionId);
+        }
+      });
+    }, 100); // 100ms delay to allow client to subscribe
+
+    return sessionId;
   }
 
   /**
@@ -96,7 +117,7 @@ export class LitRevTools {
   /**
    * Generate all outputs for a session
    */
-  async generateOutputs(sessionId: string): Promise<void> {
+  async generateOutputs(sessionId: string, onProgress?: (progress: OutputProgress) => void): Promise<void> {
     const session = this.database.getSession(sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -104,7 +125,7 @@ export class LitRevTools {
 
     // Only generate if search is completed
     if (session.progress.status === 'completed') {
-      await this.outputManager.generateAll(sessionId);
+      await this.outputManager.generateAll(sessionId, onProgress);
     } else {
       // Generate incremental outputs
       await this.outputManager.generateIncremental(sessionId);
@@ -213,7 +234,8 @@ export class LitRevTools {
       },
       gemini: {
         apiKey: geminiApiKey,
-        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+        paperBatchSize: parseInt(process.env.PAPER_BATCH_SIZE || '15')
       },
       googleAuth: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',

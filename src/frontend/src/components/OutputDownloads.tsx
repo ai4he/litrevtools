@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, FileText, File, Package, Loader2 } from 'lucide-react';
 import { sessionAPI } from '../utils/api';
 import { downloadBlob } from '../utils/helpers';
+import { useSocket } from '../hooks/useSocket';
+import { OutputProgress } from '../types';
 
 interface OutputDownloadsProps {
   sessionId: string;
@@ -53,6 +55,56 @@ export const OutputDownloads: React.FC<OutputDownloadsProps> = ({ sessionId, dis
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [outputProgress, setOutputProgress] = useState<OutputProgress | null>(null);
+  const { socket } = useSocket();
+
+  // Listen for output progress events via WebSocket
+  useEffect(() => {
+    if (!socket || !sessionId) {
+      return;
+    }
+
+    console.log('[OutputDownloads] Setting up output-progress listener for session:', sessionId);
+
+    // Subscribe to session updates
+    socket.emit('subscribe', sessionId);
+
+    // Listen for output progress
+    const outputProgressEvent = `output-progress:${sessionId}`;
+    const outputsEvent = `outputs:${sessionId}`;
+
+    const handleOutputProgress = (progress: OutputProgress) => {
+      console.log('[OutputDownloads] Received output progress:', progress);
+      setOutputProgress(progress);
+
+      if (progress.status === 'running') {
+        setGenerating(true);
+        setError(null);
+      } else if (progress.status === 'completed') {
+        setGenerating(false);
+        setOutputProgress(null); // Clear progress when done
+      } else if (progress.status === 'error') {
+        setGenerating(false);
+        setError(progress.error || 'Output generation failed');
+      }
+    };
+
+    const handleOutputsGenerated = (data: any) => {
+      console.log('[OutputDownloads] Outputs generated:', data);
+      setGenerating(false);
+      setOutputProgress(null);
+    };
+
+    socket.on(outputProgressEvent, handleOutputProgress);
+    socket.on(outputsEvent, handleOutputsGenerated);
+
+    return () => {
+      console.log('[OutputDownloads] Cleaning up output-progress listener');
+      socket.off(outputProgressEvent, handleOutputProgress);
+      socket.off(outputsEvent, handleOutputsGenerated);
+      socket.emit('unsubscribe', sessionId);
+    };
+  }, [socket, sessionId]);
 
   const handleDownload = async (type: OutputType, filename: string) => {
     try {
@@ -77,13 +129,21 @@ export const OutputDownloads: React.FC<OutputDownloadsProps> = ({ sessionId, dis
     try {
       setGenerating(true);
       setError(null);
+      setOutputProgress({
+        status: 'running',
+        stage: 'csv',
+        currentTask: 'Starting output generation...',
+        totalStages: 5,
+        completedStages: 0,
+        progress: 0
+      });
+      // Request generation - progress will come via WebSocket
       await sessionAPI.generate(sessionId);
-      // Outputs will be available for download after generation
     } catch (err: any) {
       console.error('Generate failed:', err);
-      setError(err.response?.data?.message || 'Failed to generate outputs');
-    } finally {
+      setError(err.response?.data?.message || 'Failed to start output generation');
       setGenerating(false);
+      setOutputProgress(null);
     }
   };
 
@@ -154,6 +214,31 @@ export const OutputDownloads: React.FC<OutputDownloadsProps> = ({ sessionId, dis
           )}
         </button>
       </div>
+
+      {/* Progress Bar */}
+      {outputProgress && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-blue-900">{outputProgress.currentTask}</span>
+            <span className="text-sm text-blue-700">{outputProgress.progress}%</span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2.5 mb-2">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${outputProgress.progress}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-between text-xs text-blue-700">
+            <span>Stage {outputProgress.completedStages}/{outputProgress.totalStages}: {outputProgress.stage}</span>
+            {outputProgress.latexBatchProgress && (
+              <span>
+                LaTeX Batch {outputProgress.latexBatchProgress.currentBatch}/{outputProgress.latexBatchProgress.totalBatches}
+                ({outputProgress.latexBatchProgress.papersInBatch} papers)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Download Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -12,6 +12,8 @@ export interface SearchParameters {
   endYear?: number;
   startMonth?: number; // 1-12, optional month filter
   endMonth?: number; // 1-12, optional month filter
+  startDay?: number; // 1-31, optional day filter
+  endDay?: number; // 1-31, optional day filter
   llmConfig?: LLMConfig; // LLM configuration for intelligent tasks
 }
 
@@ -50,6 +52,21 @@ export interface SearchProgress {
   timeElapsed: number; // in milliseconds
   estimatedTimeRemaining?: number; // in milliseconds
   screenshot?: string; // base64 encoded screenshot
+  error?: string;
+  progress: number; // 0-100
+}
+
+export interface OutputProgress {
+  status: 'idle' | 'running' | 'completed' | 'error';
+  stage: 'csv' | 'bibtex' | 'latex' | 'prisma' | 'zip' | 'completed';
+  currentTask: string;
+  totalStages: number;
+  completedStages: number;
+  latexBatchProgress?: {
+    currentBatch: number;
+    totalBatches: number;
+    papersInBatch: number;
+  };
   error?: string;
   progress: number; // 0-100
 }
@@ -104,6 +121,7 @@ export interface DatabaseConfig {
 export interface GeminiConfig {
   apiKey: string;
   model: string;
+  paperBatchSize?: number; // Papers per batch for iterative paper generation (default: 15)
 }
 
 /**

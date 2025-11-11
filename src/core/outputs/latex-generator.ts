@@ -9,60 +9,108 @@ import * as path from 'path';
 
 export class LaTeXGenerator {
   private gemini: GeminiService;
+  private batchSize: number = 15; // Papers per batch
 
-  constructor(gemini: GeminiService) {
+  constructor(gemini: GeminiService, batchSize?: number) {
     this.gemini = gemini;
+    if (batchSize) {
+      this.batchSize = batchSize;
+    }
   }
 
   /**
-   * Generate complete LaTeX research paper
+   * Generate complete LaTeX research paper using iterative drafting
+   * Processes papers in batches, regenerating the entire paper each time
    */
   async generate(
     papers: Paper[],
     searchParams: SearchParameters,
     prismaData: PRISMAData,
-    outputPath: string
+    outputPath: string,
+    onBatchProgress?: (currentBatch: number, papersInBatch: number) => void
   ): Promise<string> {
-    // Generate content sections using Gemini
-    const abstract = await this.gemini.generateAbstract(
-      papers,
-      searchParams.inclusionKeywords,
-      prismaData
-    );
+    console.log(`[LaTeXGenerator] Total papers received: ${papers.length}`);
+    const includedPapers = papers.filter(p => p.included);
 
-    const introduction = await this.gemini.generateIntroduction(
-      papers,
-      searchParams.inclusionKeywords
-    );
+    console.log(`[LaTeXGenerator] Generating paper with ${includedPapers.length} papers using iterative approach`);
+    console.log(`[LaTeXGenerator] Batch size: ${this.batchSize} papers per iteration`);
 
-    const methodology = await this.gemini.generateMethodology(
-      searchParams.inclusionKeywords,
-      searchParams.inclusionKeywords,
-      searchParams.exclusionKeywords,
-      prismaData
-    );
+    if (includedPapers.length === 0) {
+      console.warn(`[LaTeXGenerator] WARNING: No included papers found!`);
+      console.log(`[LaTeXGenerator] Sample of all papers (first 3):`);
+      papers.slice(0, 3).forEach((p, i) => {
+        console.log(`  Paper ${i + 1}: included=${p.included}, title="${p.title.substring(0, 50)}..."`);
+      });
+    }
 
-    const results = await this.gemini.generateResults(papers);
+    // Split papers into batches
+    const batches: Paper[][] = [];
+    for (let i = 0; i < includedPapers.length; i += this.batchSize) {
+      batches.push(includedPapers.slice(i, i + this.batchSize));
+    }
 
-    const discussion = await this.gemini.generateDiscussion(
-      papers,
-      searchParams.inclusionKeywords
-    );
+    console.log(`[LaTeXGenerator] Processing ${batches.length} batches`);
 
-    const conclusion = await this.gemini.generateConclusion(
-      papers,
-      searchParams.inclusionKeywords
-    );
+    let currentDraft: {
+      abstract: string;
+      introduction: string;
+      methodology: string;
+      results: string;
+      discussion: string;
+      conclusion: string;
+    } | null = null;
+
+    // Process batches iteratively
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const papersProcessedSoFar = includedPapers.slice(0, (i + 1) * this.batchSize);
+
+      console.log(`[LaTeXGenerator] Processing batch ${i + 1}/${batches.length} (${batch.length} papers)`);
+      console.log(`[LaTeXGenerator] Total papers processed so far: ${papersProcessedSoFar.length}/${includedPapers.length}`);
+
+      // Emit progress
+      onBatchProgress?.(i + 1, batch.length);
+
+      if (i === 0) {
+        // First batch: generate initial draft
+        console.log(`[LaTeXGenerator] Generating initial draft with first ${batch.length} papers...`);
+        currentDraft = await this.gemini.generateFullPaperDraft(
+          batch,
+          searchParams.inclusionKeywords,
+          searchParams.inclusionKeywords,
+          searchParams.exclusionKeywords,
+          prismaData
+        );
+      } else {
+        // Subsequent batches: regenerate with new papers
+        console.log(`[LaTeXGenerator] Regenerating paper with ${batch.length} additional papers...`);
+        currentDraft = await this.gemini.regeneratePaperWithNewPapers(
+          currentDraft!,
+          batch,
+          papersProcessedSoFar,
+          searchParams.inclusionKeywords,
+          prismaData
+        );
+      }
+
+      console.log(`[LaTeXGenerator] Batch ${i + 1} completed`);
+    }
+
+    if (!currentDraft) {
+      throw new Error('No papers to generate LaTeX document');
+    }
+
+    console.log(`[LaTeXGenerator] All batches processed, building final LaTeX document...`);
 
     // Build LaTeX document
     const latex = this.buildLaTeXDocument({
       title: this.generateTitle(searchParams.inclusionKeywords),
-      abstract,
-      introduction,
-      methodology,
-      results,
-      discussion,
-      conclusion,
+      abstract: currentDraft.abstract,
+      introduction: currentDraft.introduction,
+      methodology: currentDraft.methodology,
+      results: currentDraft.results,
+      discussion: currentDraft.discussion,
+      conclusion: currentDraft.conclusion,
       searchParams,
       prismaData
     });
@@ -75,6 +123,8 @@ export class LaTeXGenerator {
 
     // Write to file
     fs.writeFileSync(outputPath, latex, 'utf-8');
+
+    console.log(`[LaTeXGenerator] LaTeX document written to ${outputPath}`);
 
     return outputPath;
   }
@@ -131,7 +181,7 @@ export class LaTeXGenerator {
 
 % Abstract
 \\begin{abstract}
-${this.escapeLatex(content.abstract)}
+${content.abstract}
 \\end{abstract}
 
 \\newpage
@@ -140,11 +190,11 @@ ${this.escapeLatex(content.abstract)}
 
 % Introduction
 \\section{Introduction}
-${this.escapeLatex(content.introduction)}
+${content.introduction}
 
 % Methodology
 \\section{Methodology}
-${this.escapeLatex(content.methodology)}
+${content.methodology}
 
 \\subsection{PRISMA Flow}
 The systematic review process followed the PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) guidelines. Figure~\\ref{fig:prisma} shows the flow diagram of the study selection process.
@@ -158,17 +208,17 @@ The systematic review process followed the PRISMA (Preferred Reporting Items for
 
 % Results
 \\section{Results}
-${this.escapeLatex(content.results)}
+${content.results}
 
 ${this.generatePRISMATable(content.prismaData)}
 
 % Discussion
 \\section{Discussion}
-${this.escapeLatex(content.discussion)}
+${content.discussion}
 
 % Conclusion
 \\section{Conclusion}
-${this.escapeLatex(content.conclusion)}
+${content.conclusion}
 
 % References
 \\bibliographystyle{plain}
