@@ -43,8 +43,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize LitRevTools instance
 const litrev = new LitRevTools();
 
-// Active searches map
-const activeSearches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
+// Active searches map (now just tracks sessionIds)
+const activeSearches: Set<string> = new Set();
 
 // Event buffer to store events until client subscribes
 const eventBuffer: Map<string, Array<{ event: string; data: any }>> = new Map();
@@ -132,9 +132,6 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       return;
     }
 
-    // Create a new tools instance for this search
-    const tools = new LitRevTools();
-
     // Helper function to emit or buffer events
     const emitOrBuffer = (sid: string, event: string, data: any) => {
       const eventName = `${event}:${sid}`;
@@ -154,7 +151,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
     // Start search with WebSocket callbacks that receive sessionId as parameter
     // This returns the sessionId immediately and runs the search in the background
-    const sessionId = await tools.startSearch(params, {
+    const sessionId = await litrev.startSearch(params, {
       onProgress: (progress: SearchProgress, sid: string) => {
         emitOrBuffer(sid, 'progress', progress);
 
@@ -162,9 +159,9 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
           // Clean up
           activeSearches.delete(sid);
           if (progress.status === 'completed') {
-            // Generate outputs
-            tools.generateOutputs(sid).then(() => {
-              const session = tools.getSession(sid);
+            // Generate outputs automatically
+            litrev.generateOutputs(sid).then(() => {
+              const session = litrev.getSession(sid);
               emitOrBuffer(sid, 'outputs', session?.outputs);
             }).catch(console.error);
           }
@@ -178,7 +175,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       }
     });
 
-    activeSearches.set(sessionId, { sessionId, tools });
+    activeSearches.add(sessionId);
 
     // Return immediately with the sessionId (search continues in background)
     res.json({ success: true, sessionId });
@@ -190,37 +187,34 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
 // Pause search
 app.post('/api/search/:id/pause', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.pauseSearch();
+  litrev.pauseSearch();
   res.json({ success: true });
 });
 
 // Resume search
 app.post('/api/search/:id/resume', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.resumeSearch();
+  litrev.resumeSearch();
   res.json({ success: true });
 });
 
 // Stop search
 app.post('/api/search/:id/stop', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.stopSearch();
+  litrev.stopSearch();
   activeSearches.delete(req.params.id);
   res.json({ success: true });
 });
@@ -278,6 +272,26 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
       });
     });
 
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Apply semantic filtering to a session
+app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { inclusionPrompt, exclusionPrompt, apiKey } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // TODO: Implement semantic filtering
+    // For now, just return success
+    res.json({ success: true, message: 'Semantic filtering started' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

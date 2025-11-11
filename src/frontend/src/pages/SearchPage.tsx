@@ -1,93 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { SearchForm } from '../components/SearchForm';
-import { ProgressDashboard } from '../components/ProgressDashboard';
-import { PaperList } from '../components/PaperList';
-import { OutputDownloads } from '../components/OutputDownloads';
+import React, { useState } from 'react';
+import { Step1Search } from '../components/Step1Search';
+import { Step2SemanticFiltering } from '../components/Step2SemanticFiltering';
+import { Step3LatexGeneration } from '../components/Step3LatexGeneration';
 import { useSocket } from '../hooks/useSocket';
-import { useProgress } from '../hooks/useProgress';
-import { searchAPI } from '../utils/api';
-import { SearchParameters } from '../types';
 
 export const SearchPage: React.FC = () => {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [searchParameters, setSearchParameters] = useState<SearchParameters | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const { socket, isConnected } = useSocket();
-  const { progress, papers, error, clearError } = useProgress(socket, sessionId);
+  const [step1SessionId, setStep1SessionId] = useState<string | null>(null);
+  const [step1Complete, setStep1Complete] = useState(false);
+  const [step2Complete, setStep2Complete] = useState(false);
+  const { isConnected } = useSocket();
 
-  useEffect(() => {
-    console.log('[SearchPage] State:', {
-      sessionId,
-      isSearching,
-      isConnected,
-      hasProgress: !!progress,
-      progressStatus: progress?.status,
-      papersCount: papers.length,
-      error
-    });
-  }, [sessionId, isSearching, isConnected, progress, papers, error]);
-
-  useEffect(() => {
-    if (error) {
-      alert(`Error: ${error}`);
-      clearError();
-    }
-  }, [error]);
-
-  const handleStartSearch = async (params: SearchParameters) => {
-    try {
-      setIsSearching(true);
-      setSearchParameters(params); // Store the search parameters
-      const response = await searchAPI.start(params);
-      setSessionId(response.sessionId);
-    } catch (err: any) {
-      console.error('Failed to start search:', err);
-      alert(err.response?.data?.message || 'Failed to start search');
-      setIsSearching(false);
-    }
+  const handleStep1Complete = (sessionId: string, _rawData: any[]) => {
+    console.log('[SearchPage] Step 1 completed:', sessionId);
+    setStep1SessionId(sessionId);
+    setStep1Complete(true);
   };
 
-  const handlePause = async () => {
-    if (!sessionId) return;
-    try {
-      await searchAPI.pause(sessionId);
-    } catch (err: any) {
-      console.error('Failed to pause search:', err);
-      alert(err.response?.data?.message || 'Failed to pause search');
-    }
+  const handleStep2Complete = (sessionId: string, _labeledData: any[]) => {
+    console.log('[SearchPage] Step 2 completed:', sessionId);
+    setStep2Complete(true);
   };
-
-  const handleResume = async () => {
-    if (!sessionId) return;
-    try {
-      await searchAPI.resume(sessionId);
-    } catch (err: any) {
-      console.error('Failed to resume search:', err);
-      alert(err.response?.data?.message || 'Failed to resume search');
-    }
-  };
-
-  const handleStop = async () => {
-    if (!sessionId) return;
-    if (!confirm('Are you sure you want to stop this search?')) return;
-
-    try {
-      await searchAPI.stop(sessionId);
-      setIsSearching(false);
-    } catch (err: any) {
-      console.error('Failed to stop search:', err);
-      alert(err.response?.data?.message || 'Failed to stop search');
-    }
-  };
-
-  // Update searching state based on progress
-  useEffect(() => {
-    if (progress) {
-      if (progress.status === 'completed' || progress.status === 'error') {
-        setIsSearching(false);
-      }
-    }
-  }, [progress]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -95,60 +27,93 @@ export const SearchPage: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">LitRevTools</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             AI-Powered Systematic Literature Review Tool with PRISMA Methodology
           </p>
+
+          {/* Workflow Overview */}
+          <div className="flex items-center gap-4 p-4 bg-white border-2 border-gray-200 rounded-lg">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  step1Complete ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                }`}>
+                  1
+                </div>
+                <span className="text-sm font-medium">Search & Extract</span>
+              </div>
+            </div>
+            <div className="text-gray-300">→</div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  step2Complete ? 'bg-green-100 text-green-600' :
+                  step1Complete ? 'bg-yellow-100 text-yellow-600' :
+                  'bg-gray-100 text-gray-400'
+                }`}>
+                  2
+                </div>
+                <span className={`text-sm font-medium ${!step1Complete ? 'text-gray-400' : ''}`}>
+                  Semantic Filtering
+                </span>
+              </div>
+            </div>
+            <div className="text-gray-300">→</div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  step1Complete ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'
+                }`}>
+                  3
+                </div>
+                <span className={`text-sm font-medium ${!step1Complete ? 'text-gray-400' : ''}`}>
+                  LaTeX Generation
+                </span>
+              </div>
+            </div>
+          </div>
+
           {!isConnected && (
-            <div className="mt-2 px-3 py-1 bg-yellow-100 text-yellow-800 rounded inline-block text-sm">
+            <div className="mt-4 px-3 py-1 bg-yellow-100 text-yellow-800 rounded inline-block text-sm">
               Connecting to server...
             </div>
           )}
         </div>
 
-        {/* Search Form */}
-        {!sessionId && (
-          <div className="mb-8">
-            <SearchForm onSubmit={handleStartSearch} disabled={isSearching} />
-          </div>
-        )}
+        {/* Three-Step Workflow */}
+        <div className="space-y-8">
+          {/* Step 1: Search & Raw Data Extraction */}
+          <Step1Search
+            onSearchComplete={handleStep1Complete}
+            disabled={false}
+          />
 
-        {/* Progress and Results */}
-        {sessionId && progress && (
-          <div className="space-y-8">
-            {/* Progress Dashboard */}
-            <ProgressDashboard
-              progress={progress}
-              sessionId={sessionId}
-              searchParameters={searchParameters || undefined}
-              papers={papers}
-              onPause={handlePause}
-              onResume={handleResume}
-              onStop={handleStop}
-            />
+          {/* Step 2: Semantic Filtering */}
+          <Step2SemanticFiltering
+            sessionId={step1SessionId}
+            enabled={step1Complete}
+            onFilteringComplete={handleStep2Complete}
+          />
 
-            {/* Output Downloads */}
-            <OutputDownloads sessionId={sessionId} />
+          {/* Step 3: LaTeX Generation */}
+          <Step3LatexGeneration
+            sessionId={step1SessionId}
+            enabled={step1Complete}
+          />
+        </div>
 
-            {/* Papers List */}
-            <PaperList papers={papers} />
-
-            {/* Reset Button */}
-            {(progress.status === 'completed' || progress.status === 'error') && (
-              <div className="text-center">
-                <button
-                  onClick={() => {
-                    setSessionId(null);
-                    setSearchParameters(null);
-                    setIsSearching(false);
-                  }}
-                  className="btn-primary px-8 py-3 text-lg"
-                >
-                  Start New Search
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Info Box */}
+        <div className="mt-8 p-6 bg-blue-50 border-2 border-blue-200 rounded-lg">
+          <h3 className="font-semibold text-blue-900 mb-2">How it works</h3>
+          <ol className="space-y-2 text-sm text-blue-800">
+            <li><strong>Step 1:</strong> Search Semantic Scholar and download raw CSV with keyword-based exclusions.</li>
+            <li><strong>Step 2:</strong> Apply LLM-based semantic filtering with custom inclusion/exclusion criteria. You can use Step 1 results or upload your own CSV.</li>
+            <li><strong>Step 3:</strong> Generate complete LaTeX paper with PRISMA methodology. You can use results from Step 1, Step 2, or upload your own CSV.</li>
+          </ol>
+          <p className="mt-4 text-sm text-blue-700">
+            <strong>Note:</strong> Steps 2 and 3 become available after completing Step 1, or you can skip ahead by uploading your own CSV files.
+          </p>
+        </div>
       </div>
     </div>
   );
