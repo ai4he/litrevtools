@@ -15,6 +15,9 @@ export interface SearchParameters {
   startDay?: number; // 1-31, optional day filter
   endDay?: number; // 1-31, optional day filter
   llmConfig?: LLMConfig; // LLM configuration for intelligent tasks
+  // Semantic filtering prompts for LLM-based evaluation
+  inclusionCriteriaPrompt?: string; // Semantic prompt defining inclusion criteria
+  exclusionCriteriaPrompt?: string; // Semantic prompt defining exclusion criteria
 }
 
 export interface Paper {
@@ -37,6 +40,13 @@ export interface Paper {
   category?: string; // LLM-identified category
   llmConfidence?: number; // LLM confidence score for filtering decision (0-1)
   llmReasoning?: string; // LLM reasoning for inclusion/exclusion
+  // Keyword-based exclusion (Phase 1: Extraction)
+  excluded_by_keyword?: boolean; // True if paper was excluded by keyword matching during extraction
+  // Semantic filtering flags (Phase 2: Labeling)
+  systematic_filtering_inclusion?: boolean; // 1 if meets LLM inclusion criteria, 0 otherwise
+  systematic_filtering_exclusion?: boolean; // 1 if meets LLM exclusion criteria, 0 otherwise
+  systematic_filtering_inclusion_reasoning?: string; // LLM reasoning for inclusion decision
+  systematic_filtering_exclusion_reasoning?: string; // LLM reasoning for exclusion decision
 }
 
 export interface SearchProgress {
@@ -97,17 +107,38 @@ export interface TorCircuit {
 }
 
 export interface PRISMAData {
+  // Identification - via databases & registers
   identification: {
-    recordsIdentified: number;
-    recordsRemoved: number;
+    recordsIdentifiedPerSource: Record<string, number>; // Records from each database/register
+    totalRecordsIdentified: number; // Total across all sources
+    // Records removed before screening
+    duplicatesRemoved: number;
+    recordsMarkedIneligibleByAutomation: number; // excluded_by_keyword count
+    recordsRemovedForOtherReasons: number;
+    totalRecordsRemoved: number;
   };
+  // Screening
   screening: {
-    recordsScreened: number;
-    recordsExcluded: number;
-    reasonsForExclusion: Record<string, number>;
+    recordsScreened: number; // Papers that went through screening
+    recordsExcluded: number; // Papers excluded after screening
+    reasonsForExclusion: Record<string, number>; // Breakdown of exclusion reasons
   };
+  // Identification - via other methods (optional)
+  identificationOtherMethods?: {
+    recordsIdentified: number;
+    reportsSought: number;
+    reportsNotRetrieved: number;
+  };
+  // Eligibility
+  eligibility: {
+    reportsAssessed: number; // Full-text reports assessed
+    reportsExcluded: number; // Reports excluded with reasons
+    reasonsForExclusion: Record<string, number>; // Reasons for exclusion
+  };
+  // Included
   included: {
-    studiesIncluded: number;
+    studiesIncluded: number; // Final number of included studies
+    reportsOfIncludedStudies: number; // Number of reports (PRISMA 2020 distinction)
   };
 }
 
