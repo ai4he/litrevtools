@@ -42,7 +42,6 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
   const [exclusionPrompt, setExclusionPrompt] = useState(
     'Literature reviews of any kind are not allowed.'
   );
-  const [apiKey, setApiKey] = useState('');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -114,11 +113,6 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
   };
 
   const handleStartFiltering = async () => {
-    if (!apiKey.trim()) {
-      setError('Please provide a Gemini API key');
-      return;
-    }
-
     if (!useStep1Data && !uploadedFile) {
       setError('Please select a data source (Step 1 results or upload CSV)');
       return;
@@ -149,8 +143,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
         // Use Step 1 results
         await axios.post(`/api/sessions/${sessionId}/semantic-filter`, {
           inclusionPrompt,
-          exclusionPrompt,
-          apiKey
+          exclusionPrompt
         });
       } else if (uploadedFile) {
         // Handle CSV upload case
@@ -170,8 +163,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
         const response = await axios.post('/api/semantic-filter/csv', {
           csvContent,
           inclusionPrompt,
-          exclusionPrompt,
-          apiKey
+          exclusionPrompt
         });
 
         // Set the temporary session ID returned from the server
@@ -339,20 +331,6 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
           {/* LLM Configuration */}
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900">LLM Configuration</h3>
-
-            {/* API Key */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Gemini API Key *
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key"
-                className="input w-full"
-              />
-            </div>
 
             {/* Inclusion Criteria */}
             <div>

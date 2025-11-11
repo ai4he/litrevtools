@@ -331,7 +331,7 @@ export class GoogleScholarScraper {
         abstract,
         url,
         citations,
-        source: 'google-scholar',
+        source: 'semantic-scholar',
         pdfUrl,
         venue,
         extractedAt: new Date(),

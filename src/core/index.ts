@@ -186,7 +186,6 @@ export class LitRevTools {
    */
   async applySemanticFiltering(
     sessionId: string,
-    apiKey: string,
     inclusionPrompt?: string,
     exclusionPrompt?: string,
     onProgress?: (progress: LLMFilteringProgress) => void
@@ -196,18 +195,17 @@ export class LitRevTools {
       throw new Error('Session not found');
     }
 
-    // Create LLM service with the provided API key
+    // Create LLM service - will use .env API keys with rotation
     const llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
-      apiKey: apiKey,
       batchSize: 20,
       maxConcurrentBatches: 5,
       timeout: 30000,
       retryAttempts: 3,
       temperature: 0.3,
       fallbackStrategy: 'rule_based',
-      enableKeyRotation: false
+      enableKeyRotation: true
     });
 
     // Initialize the LLM service

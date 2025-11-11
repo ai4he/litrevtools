@@ -30,7 +30,7 @@ export interface Paper {
   abstract?: string;
   url: string;
   citations?: number;
-  source: 'google-scholar' | 'semantic-scholar' | 'other';
+  source: 'semantic-scholar' | 'other';
   pdfUrl?: string;
   venue?: string;
   doi?: string;

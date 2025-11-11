@@ -280,12 +280,7 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
 // Apply semantic filtering with CSV upload
 app.post('/api/semantic-filter/csv', async (req, res) => {
   try {
-    const { csvContent, inclusionPrompt, exclusionPrompt, apiKey } = req.body;
-
-    if (!apiKey || !apiKey.trim()) {
-      res.status(400).json({ success: false, error: 'API key is required' });
-      return;
-    }
+    const { csvContent, inclusionPrompt, exclusionPrompt } = req.body;
 
     if (!csvContent || !csvContent.trim()) {
       res.status(400).json({ success: false, error: 'CSV content is required' });
@@ -326,14 +321,13 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
     const llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
-      apiKey: apiKey,
       batchSize: 20,
       maxConcurrentBatches: 5,
       timeout: 30000,
       retryAttempts: 3,
       temperature: 0.3,
       fallbackStrategy: 'rule_based',
-      enableKeyRotation: false
+      enableKeyRotation: true
     });
 
     await llmService.initialize();
@@ -426,6 +420,7 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
         citations: parseInt(paper.Citations || paper.citations) || 0,
         doi: paper.DOI || paper.doi,
         venue: paper.Venue || paper.venue,
+        source: (paper.Source || paper.source || 'other') as 'semantic-scholar' | 'other',
         included: paper.Included === 'Yes' || paper.Included === '1' || paper.Included === 'true',
         exclusionReason: paper['Exclusion Reason'] || paper.exclusionReason,
         excluded_by_keyword: paper['Excluded by Keyword'] === 'Yes' || paper['Excluded by Keyword'] === '1',
@@ -466,16 +461,11 @@ function parseCsvLine(line: string): string[] {
 app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
   try {
     const sessionId = req.params.id;
-    const { inclusionPrompt, exclusionPrompt, apiKey } = req.body;
+    const { inclusionPrompt, exclusionPrompt } = req.body;
 
     const session = litrev.getSession(sessionId);
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
-      return;
-    }
-
-    if (!apiKey || !apiKey.trim()) {
-      res.status(400).json({ success: false, error: 'API key is required' });
       return;
     }
 
@@ -502,7 +492,6 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
     // Start semantic filtering with progress callbacks
     litrev.applySemanticFiltering(
       sessionId,
-      apiKey,
       inclusionPrompt,
       exclusionPrompt,
       (progress) => {
