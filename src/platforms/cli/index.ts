@@ -434,6 +434,93 @@ program
     }
   });
 
+// Semantic filtering command (Step 2)
+program
+  .command('filter <sessionId>')
+  .description('Apply semantic filtering to a session using LLM')
+  .option('-i, --inclusion <prompt>', 'Inclusion criteria prompt')
+  .option('-e, --exclusion <prompt>', 'Exclusion criteria prompt')
+  .action(async (sessionId: string, options) => {
+    const tools = new LitRevTools();
+
+    try {
+      const session = tools.getSession(sessionId);
+      if (!session) {
+        console.error(chalk.red('Session not found'));
+        tools.close();
+        process.exit(1);
+      }
+
+      console.log(chalk.blue.bold('\n🔍 Semantic Filtering (Step 2)\n'));
+      console.log(chalk.white(`Session: ${session.parameters.name || sessionId}`));
+      console.log(chalk.white(`Total papers: ${session.papers.length}\n`));
+
+      // Default prompts if not provided
+      const inclusionPrompt = options.inclusion ||
+        'Include papers that directly address the research topic, present original research or methodologies, and are relevant to the systematic review objectives.';
+
+      const exclusionPrompt = options.exclusion ||
+        'Exclude papers that are surveys, reviews, off-topic, lack methodological rigor, or do not contribute original insights to the research question.';
+
+      console.log(chalk.gray('Inclusion criteria:'));
+      console.log(chalk.gray(`  ${inclusionPrompt.substring(0, 80)}...\n`));
+      console.log(chalk.gray('Exclusion criteria:'));
+      console.log(chalk.gray(`  ${exclusionPrompt.substring(0, 80)}...\n`));
+
+      // Create progress bar
+      const progressBar = new cliProgress.SingleBar({
+        format: chalk.cyan('{phase}') + ' |' + chalk.green('{bar}') + '| {percentage}% | {current}/{total} papers',
+        barCompleteChar: '\u2588',
+        barIncompleteChar: '\u2591',
+        hideCursor: true
+      });
+
+      let currentPhase = 'Initializing...';
+      progressBar.start(session.papers.length, 0, {
+        phase: currentPhase,
+        current: 0,
+        total: session.papers.length
+      });
+
+      // Apply semantic filtering with progress tracking
+      await tools.applySemanticFiltering(
+        sessionId,
+        inclusionPrompt,
+        exclusionPrompt,
+        (progress) => {
+          currentPhase = progress.phase === 'inclusion' ? 'Inclusion filtering' : 'Exclusion filtering';
+          progressBar.update(progress.processedPapers, {
+            phase: currentPhase,
+            current: progress.processedPapers,
+            total: progress.totalPapers
+          });
+        }
+      );
+
+      progressBar.stop();
+
+      // Get updated session
+      const updatedSession = tools.getSession(sessionId);
+      if (updatedSession) {
+        const includedCount = updatedSession.papers.filter(p =>
+          p.systematic_filtering_inclusion === true &&
+          p.systematic_filtering_exclusion === false
+        ).length;
+
+        console.log(chalk.green.bold('\n✓ Semantic filtering completed!\n'));
+        console.log(chalk.white(`Total papers: ${updatedSession.papers.length}`));
+        console.log(chalk.white(`Papers passing filters: ${includedCount}`));
+        console.log(chalk.white(`Papers excluded: ${updatedSession.papers.length - includedCount}\n`));
+      }
+
+      tools.close();
+    } catch (error: any) {
+      console.error(chalk.red('Error:'), error.message);
+      tools.close();
+      process.exit(1);
+    }
+  });
+
 // Show parameter schema command (helpful for users)
 program
   .command('params')
