@@ -277,6 +277,191 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
   }
 });
 
+// Apply semantic filtering with CSV upload
+app.post('/api/semantic-filter/csv', async (req, res) => {
+  try {
+    const { csvContent, inclusionPrompt, exclusionPrompt, apiKey } = req.body;
+
+    if (!apiKey || !apiKey.trim()) {
+      res.status(400).json({ success: false, error: 'API key is required' });
+      return;
+    }
+
+    if (!csvContent || !csvContent.trim()) {
+      res.status(400).json({ success: false, error: 'CSV content is required' });
+      return;
+    }
+
+    // Parse CSV content to create papers
+    const papers = await parseCsvToPapers(csvContent);
+
+    if (papers.length === 0) {
+      res.status(400).json({ success: false, error: 'No valid papers found in CSV' });
+      return;
+    }
+
+    // Create a temporary session ID for this upload
+    const tempSessionId = `csv-upload-${Date.now()}`;
+
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        io.emit(eventName, data);
+      } else {
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
+    // Return immediately with temp session ID
+    res.json({ success: true, sessionId: tempSessionId, message: 'Semantic filtering started' });
+
+    // Create LLM service and apply filtering
+    const { LLMService } = await import('../../core/llm/llm-service');
+    const llmService = new LLMService({
+      enabled: true,
+      provider: 'gemini',
+      apiKey: apiKey,
+      batchSize: 20,
+      maxConcurrentBatches: 5,
+      timeout: 30000,
+      retryAttempts: 3,
+      temperature: 0.3,
+      fallbackStrategy: 'rule_based',
+      enableKeyRotation: false
+    });
+
+    await llmService.initialize();
+
+    // Apply semantic filtering with progress
+    llmService.semanticFilterSeparate(
+      papers,
+      inclusionPrompt,
+      exclusionPrompt,
+      (progress) => {
+        const overallProgress = (progress.processedPapers / progress.totalPapers) * 100;
+        emitOrBuffer(tempSessionId, 'semantic-filter-progress', {
+          status: 'running',
+          currentTask: `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`,
+          progress: overallProgress,
+          phase: progress.phase,
+          totalPapers: progress.totalPapers,
+          processedPapers: progress.processedPapers,
+          currentBatch: progress.currentBatch,
+          totalBatches: progress.totalBatches,
+          timeElapsed: progress.timeElapsed,
+          estimatedTimeRemaining: progress.estimatedTimeRemaining
+        });
+      }
+    ).then((filteredPapers) => {
+      // Filtering completed
+      emitOrBuffer(tempSessionId, 'semantic-filter-progress', {
+        status: 'completed',
+        currentTask: 'Semantic filtering completed!',
+        progress: 100,
+        phase: 'finalizing',
+        totalPapers: filteredPapers.length,
+        processedPapers: filteredPapers.length,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+
+      emitOrBuffer(tempSessionId, 'semantic-filter-complete', {
+        sessionId: tempSessionId,
+        papers: filteredPapers
+      });
+    }).catch((error: any) => {
+      console.error('[Server] CSV semantic filtering failed:', error);
+      emitOrBuffer(tempSessionId, 'semantic-filter-progress', {
+        status: 'error',
+        currentTask: 'Semantic filtering failed',
+        progress: 0,
+        phase: 'finalizing',
+        error: error.message,
+        totalPapers: papers.length,
+        processedPapers: 0,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+    });
+
+  } catch (error: any) {
+    console.error('[Server] CSV upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Helper function to parse CSV content to papers
+async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
+  const lines = csvContent.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const papers: Paper[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    try {
+      const values = parseCsvLine(lines[i]);
+      const paper: any = {};
+
+      headers.forEach((header, index) => {
+        if (values[index] !== undefined) {
+          paper[header] = values[index];
+        }
+      });
+
+      // Map CSV columns to Paper interface
+      papers.push({
+        id: paper.ID || paper.id || `paper-${i}`,
+        title: paper.Title || paper.title || 'Untitled',
+        authors: paper.Authors ? paper.Authors.split(';').map((a: string) => a.trim()) : [],
+        year: parseInt(paper.Year || paper.year) || new Date().getFullYear(),
+        abstract: paper.Abstract || paper.abstract || '',
+        url: paper.URL || paper.url || '',
+        citations: parseInt(paper.Citations || paper.citations) || 0,
+        doi: paper.DOI || paper.doi,
+        venue: paper.Venue || paper.venue,
+        included: paper.Included === 'Yes' || paper.Included === '1' || paper.Included === 'true',
+        exclusionReason: paper['Exclusion Reason'] || paper.exclusionReason,
+        excluded_by_keyword: paper['Excluded by Keyword'] === 'Yes' || paper['Excluded by Keyword'] === '1',
+        extractedAt: new Date()
+      });
+    } catch (error) {
+      console.error(`Error parsing line ${i}:`, error);
+    }
+  }
+
+  return papers;
+}
+
+// Helper to parse a CSV line handling quoted values
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let currentValue = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+    } else if (char === ',' && !insideQuotes) {
+      values.push(currentValue.trim());
+      currentValue = '';
+    } else {
+      currentValue += char;
+    }
+  }
+
+  values.push(currentValue.trim());
+  return values;
+}
+
 // Apply semantic filtering to a session
 app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
   try {
