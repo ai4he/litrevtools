@@ -43,8 +43,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize LitRevTools instance
 const litrev = new LitRevTools();
 
-// Active searches map
-const activeSearches: Map<string, { sessionId: string; tools: LitRevTools }> = new Map();
+// Active searches map (now just tracks sessionIds)
+const activeSearches: Set<string> = new Set();
 
 // Event buffer to store events until client subscribes
 const eventBuffer: Map<string, Array<{ event: string; data: any }>> = new Map();
@@ -132,9 +132,6 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       return;
     }
 
-    // Create a new tools instance for this search
-    const tools = new LitRevTools();
-
     // Helper function to emit or buffer events
     const emitOrBuffer = (sid: string, event: string, data: any) => {
       const eventName = `${event}:${sid}`;
@@ -154,7 +151,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
     // Start search with WebSocket callbacks that receive sessionId as parameter
     // This returns the sessionId immediately and runs the search in the background
-    const sessionId = await tools.startSearch(params, {
+    const sessionId = await litrev.startSearch(params, {
       onProgress: (progress: SearchProgress, sid: string) => {
         emitOrBuffer(sid, 'progress', progress);
 
@@ -162,9 +159,9 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
           // Clean up
           activeSearches.delete(sid);
           if (progress.status === 'completed') {
-            // Generate outputs
-            tools.generateOutputs(sid).then(() => {
-              const session = tools.getSession(sid);
+            // Generate outputs automatically
+            litrev.generateOutputs(sid).then(() => {
+              const session = litrev.getSession(sid);
               emitOrBuffer(sid, 'outputs', session?.outputs);
             }).catch(console.error);
           }
@@ -178,7 +175,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       }
     });
 
-    activeSearches.set(sessionId, { sessionId, tools });
+    activeSearches.add(sessionId);
 
     // Return immediately with the sessionId (search continues in background)
     res.json({ success: true, sessionId });
@@ -190,37 +187,34 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
 // Pause search
 app.post('/api/search/:id/pause', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.pauseSearch();
+  litrev.pauseSearch();
   res.json({ success: true });
 });
 
 // Resume search
 app.post('/api/search/:id/resume', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.resumeSearch();
+  litrev.resumeSearch();
   res.json({ success: true });
 });
 
 // Stop search
 app.post('/api/search/:id/stop', (req, res) => {
-  const search = activeSearches.get(req.params.id);
-  if (!search) {
-    res.status(404).json({ success: false, error: 'Search not found' });
+  if (!activeSearches.has(req.params.id)) {
+    res.status(404).json({ success: false, error: 'Search not found or already completed' });
     return;
   }
 
-  search.tools.stopSearch();
+  litrev.stopSearch();
   activeSearches.delete(req.params.id);
   res.json({ success: true });
 });
@@ -279,6 +273,108 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
     });
 
   } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Apply semantic filtering to a session
+app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { inclusionPrompt, exclusionPrompt, apiKey } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (!apiKey || !apiKey.trim()) {
+      res.status(400).json({ success: false, error: 'API key is required' });
+      return;
+    }
+
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        // Client is subscribed, emit directly
+        io.emit(eventName, data);
+      } else {
+        // Client not subscribed yet, buffer the event
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
+    // Return immediately - filtering happens in background
+    res.json({ success: true, message: 'Semantic filtering started' });
+
+    // Start semantic filtering with progress callbacks
+    litrev.applySemanticFiltering(
+      sessionId,
+      apiKey,
+      inclusionPrompt,
+      exclusionPrompt,
+      (progress) => {
+        // Transform LLM progress to frontend format
+        const totalStages = 2; // inclusion + exclusion (or just 1 if only one is provided)
+        const completedStages = progress.phase === 'inclusion' ? 0 : progress.phase === 'exclusion' ? 1 : 2;
+        const overallProgress = (progress.processedPapers / progress.totalPapers) * 100;
+
+        emitOrBuffer(sessionId, 'semantic-filter-progress', {
+          status: 'running',
+          currentTask: `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`,
+          progress: overallProgress,
+          phase: progress.phase,
+          totalPapers: progress.totalPapers,
+          processedPapers: progress.processedPapers,
+          currentBatch: progress.currentBatch,
+          totalBatches: progress.totalBatches,
+          timeElapsed: progress.timeElapsed,
+          estimatedTimeRemaining: progress.estimatedTimeRemaining
+        });
+      }
+    ).then(() => {
+      // Filtering completed successfully
+      emitOrBuffer(sessionId, 'semantic-filter-progress', {
+        status: 'completed',
+        currentTask: 'Semantic filtering completed!',
+        progress: 100,
+        phase: 'finalizing',
+        totalPapers: session.papers.length,
+        processedPapers: session.papers.length,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+
+      // Regenerate CSV with labeled data
+      const updatedSession = litrev.getSession(sessionId);
+      emitOrBuffer(sessionId, 'semantic-filter-complete', {
+        sessionId,
+        papers: updatedSession?.papers
+      });
+    }).catch((error: any) => {
+      console.error('[Server] Semantic filtering failed:', error);
+      emitOrBuffer(sessionId, 'semantic-filter-progress', {
+        status: 'error',
+        currentTask: 'Semantic filtering failed',
+        progress: 0,
+        phase: 'finalizing',
+        error: error.message,
+        totalPapers: session.papers.length,
+        processedPapers: 0,
+        currentBatch: 0,
+        totalBatches: 0
+      });
+    });
+
+  } catch (error: any) {
+    console.error('[Server] Semantic filtering error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
