@@ -27,7 +27,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'openai' | 'anthropic'>('gemini');
   const [llmApiKeys, setLlmApiKeys] = useState<string[]>([]);
   const [currentApiKey, setCurrentApiKey] = useState('');
-  const [llmBatchSize, setLlmBatchSize] = useState('10');
+  const [llmBatchSize, setLlmBatchSize] = useState('20'); // Increased for efficiency
   const [llmTemperature, setLlmTemperature] = useState('0.3');
   const [fallbackStrategy, setFallbackStrategy] = useState<'rule_based' | 'prompt_user' | 'fail'>('rule_based');
   const [enableKeyRotation, setEnableKeyRotation] = useState(true);
@@ -136,8 +136,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
         provider: llmProvider,
         apiKeys: llmApiKeys.length > 0 ? llmApiKeys : undefined,
         apiKey: llmApiKeys.length > 0 ? llmApiKeys[0] : undefined,
-        batchSize: parseInt(llmBatchSize) || 10,
-        maxConcurrentBatches: 3,
+        batchSize: parseInt(llmBatchSize) || 20, // Optimized batch size
+        maxConcurrentBatches: 5, // Increased for better parallelism
         timeout: 30000,
         retryAttempts: 3,
         temperature: parseFloat(llmTemperature) || 0.3,
@@ -146,8 +146,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       } : {
         enabled: false,
         provider: 'gemini',
-        batchSize: 10,
-        maxConcurrentBatches: 3,
+        batchSize: 20,
+        maxConcurrentBatches: 5,
         timeout: 30000,
         retryAttempts: 3,
         temperature: 0.3,
@@ -375,7 +375,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                   </h4>
                   <p className="text-xs text-gray-600 mb-3">
                     Define semantic criteria for the LLM to evaluate each paper. These prompts will be used
-                    to determine inclusion and exclusion flags in the labeled CSV output.
+                    to determine inclusion and exclusion flags in the labeled CSV output. Progress will be tracked
+                    in real-time during Phase 2 (labeling), showing current batch, papers processed, and time remaining.
                   </p>
 
                   {/* Inclusion Criteria Prompt */}
@@ -559,7 +560,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
                           className="input-field text-sm"
                           disabled={disabled}
                         />
-                        <p className="text-xs text-gray-500 mt-1">Papers per batch (1-50)</p>
+                        <p className="text-xs text-gray-500 mt-1">Papers per batch (1-50). Larger = fewer API calls. Default 20 is optimized for efficiency.</p>
                       </div>
                       <div>
                         <label className="label text-xs">Temperature</label>

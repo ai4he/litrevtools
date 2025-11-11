@@ -7,6 +7,22 @@ import { LLMProvider } from './base-provider';
 import { GeminiProvider } from './gemini-provider';
 import { APIKeyManager } from './api-key-manager';
 
+/**
+ * Progress callback for LLM filtering operations
+ */
+export interface LLMFilteringProgress {
+  phase: 'inclusion' | 'exclusion' | 'finalizing';
+  totalPapers: number;
+  processedPapers: number;
+  currentBatch: number;
+  totalBatches: number;
+  papersInCurrentBatch: number;
+  timeElapsed: number;
+  estimatedTimeRemaining: number;
+}
+
+export type LLMProgressCallback = (progress: LLMFilteringProgress) => void;
+
 export class LLMService {
   private provider?: LLMProvider;
   private config: LLMConfig;
@@ -15,14 +31,15 @@ export class LLMService {
 
   constructor(config?: Partial<LLMConfig>) {
     // Default configuration with Gemini as default provider
+    // Optimized batch size for efficiency (larger batches = fewer API calls)
     this.config = {
       enabled: config?.enabled ?? true,
       provider: config?.provider || 'gemini',
       model: config?.model,
       apiKey: config?.apiKey,
       apiKeys: config?.apiKeys,
-      batchSize: config?.batchSize || 10,
-      maxConcurrentBatches: config?.maxConcurrentBatches || 3,
+      batchSize: config?.batchSize || 20, // Increased from 10 to 20 for efficiency
+      maxConcurrentBatches: config?.maxConcurrentBatches || 5, // Increased from 3 to 5 for parallel processing
       timeout: config?.timeout || 30000,
       retryAttempts: config?.retryAttempts || 3,
       temperature: config?.temperature || 0.3,
@@ -161,17 +178,23 @@ export class LLMService {
   /**
    * Filter papers using semantic understanding with separate inclusion and exclusion evaluation
    * Returns papers with separate inclusion and exclusion flags and reasoning
+   * @param papers Papers to filter
+   * @param inclusionCriteriaPrompt Semantic inclusion criteria
+   * @param exclusionCriteriaPrompt Semantic exclusion criteria
+   * @param progressCallback Optional callback for progress updates
    */
   async semanticFilterSeparate(
     papers: Paper[],
     inclusionCriteriaPrompt?: string,
-    exclusionCriteriaPrompt?: string
+    exclusionCriteriaPrompt?: string,
+    progressCallback?: LLMProgressCallback
   ): Promise<Paper[]> {
     if (!this.isEnabled()) {
       throw new Error('LLM service is not enabled or initialized');
     }
 
     let processedPapers = [...papers];
+    const startTime = Date.now();
 
     // Evaluate inclusion criteria if provided
     if (inclusionCriteriaPrompt && inclusionCriteriaPrompt.trim()) {
@@ -182,7 +205,15 @@ export class LLMService {
         context: { paper, criteriaType: 'inclusion' }
       }));
 
-      const inclusionResponses = await this.processBatchRequests(inclusionRequests);
+      const totalBatches = Math.ceil(inclusionRequests.length / this.config.batchSize);
+
+      const inclusionResponses = await this.processBatchRequestsWithProgress(
+        inclusionRequests,
+        'inclusion',
+        papers.length,
+        startTime,
+        progressCallback
+      );
 
       processedPapers = processedPapers.map(paper => {
         const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
@@ -213,7 +244,15 @@ export class LLMService {
         context: { paper, criteriaType: 'exclusion' }
       }));
 
-      const exclusionResponses = await this.processBatchRequests(exclusionRequests);
+      const totalBatches = Math.ceil(exclusionRequests.length / this.config.batchSize);
+
+      const exclusionResponses = await this.processBatchRequestsWithProgress(
+        exclusionRequests,
+        'exclusion',
+        papers.length,
+        startTime,
+        progressCallback
+      );
 
       processedPapers = processedPapers.map(paper => {
         const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
@@ -358,6 +397,92 @@ export class LLMService {
 
       const batchResults = await Promise.all(batchPromises);
       allResponses.push(...batchResults.flat());
+    }
+
+    return allResponses;
+  }
+
+  /**
+   * Process batch requests with progress tracking
+   */
+  private async processBatchRequestsWithProgress(
+    requests: LLMRequest[],
+    phase: 'inclusion' | 'exclusion',
+    totalPapers: number,
+    startTime: number,
+    progressCallback?: LLMProgressCallback
+  ): Promise<LLMResponse[]> {
+    if (!this.provider) {
+      throw new Error('LLM provider not initialized');
+    }
+
+    const allResponses: LLMResponse[] = [];
+    const batchSize = this.config.batchSize;
+    const maxConcurrent = this.config.maxConcurrentBatches;
+
+    // Split into batches
+    const batches: LLMRequest[][] = [];
+    for (let i = 0; i < requests.length; i += batchSize) {
+      batches.push(requests.slice(i, i + batchSize));
+    }
+
+    const totalBatches = batches.length;
+    let processedPapers = 0;
+
+    // Process batches with concurrency control and progress tracking
+    for (let i = 0; i < batches.length; i += maxConcurrent) {
+      const concurrentBatches = batches.slice(i, i + maxConcurrent);
+      const currentBatchIndex = i / maxConcurrent + 1;
+
+      // Calculate progress
+      const timeElapsed = Date.now() - startTime;
+      const papersPerMs = processedPapers > 0 ? processedPapers / timeElapsed : 0;
+      const remainingPapers = totalPapers - processedPapers;
+      const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
+
+      // Report progress before processing
+      if (progressCallback) {
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers,
+          currentBatch: Math.floor(i / maxConcurrent) + 1,
+          totalBatches: Math.ceil(batches.length / maxConcurrent),
+          papersInCurrentBatch: concurrentBatches.reduce((sum, batch) => sum + batch.length, 0),
+          timeElapsed,
+          estimatedTimeRemaining
+        });
+      }
+
+      // Process concurrent batches
+      const batchPromises = concurrentBatches.map(batch =>
+        this.provider!.batchRequest(batch, this.config.temperature)
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+      allResponses.push(...batchResults.flat());
+
+      // Update processed count
+      processedPapers += concurrentBatches.reduce((sum, batch) => sum + batch.length, 0);
+
+      // Report progress after processing
+      if (progressCallback) {
+        const newTimeElapsed = Date.now() - startTime;
+        const newPapersPerMs = processedPapers / newTimeElapsed;
+        const newRemainingPapers = totalPapers - processedPapers;
+        const newEstimatedTimeRemaining = newPapersPerMs > 0 ? Math.round(newRemainingPapers / newPapersPerMs) : 0;
+
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers,
+          currentBatch: Math.floor(i / maxConcurrent) + 1,
+          totalBatches: Math.ceil(batches.length / maxConcurrent),
+          papersInCurrentBatch: 0, // Batch completed
+          timeElapsed: newTimeElapsed,
+          estimatedTimeRemaining: newEstimatedTimeRemaining
+        });
+      }
     }
 
     return allResponses;

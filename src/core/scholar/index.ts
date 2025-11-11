@@ -371,11 +371,36 @@ export class ScholarExtractor {
 
       // Check if semantic prompts are provided for new separate evaluation
       if (parameters.inclusionCriteriaPrompt || parameters.exclusionCriteriaPrompt) {
-        // Use new separate evaluation method
+        // Create progress callback for real-time updates during Phase 2
+        const llmProgressCallback = (llmProgress: any) => {
+          const phaseLabel = llmProgress.phase === 'inclusion'
+            ? 'Evaluating inclusion criteria'
+            : llmProgress.phase === 'exclusion'
+            ? 'Evaluating exclusion criteria'
+            : 'Finalizing results';
+
+          const progressPercent = 85 + Math.floor((llmProgress.processedPapers / llmProgress.totalPapers) * 10); // 85-95%
+
+          const timeElapsedSec = Math.floor(llmProgress.timeElapsed / 1000);
+          const timeRemainingSec = Math.floor(llmProgress.estimatedTimeRemaining / 1000);
+
+          this.updateProgress({
+            currentTask: `Phase 2: ${phaseLabel} (Batch ${llmProgress.currentBatch}/${llmProgress.totalBatches})`,
+            nextTask: llmProgress.processedPapers < llmProgress.totalPapers
+              ? `Processing ${llmProgress.papersInCurrentBatch} papers - ${timeElapsedSec}s elapsed, ${timeRemainingSec}s remaining`
+              : 'Finalizing semantic filtering results',
+            progress: progressPercent,
+            processedPapers: llmProgress.processedPapers,
+            totalPapers: llmProgress.totalPapers
+          });
+        };
+
+        // Use new separate evaluation method with progress tracking
         filteredPapers = await this.llmService.semanticFilterSeparate(
           papers,
           parameters.inclusionCriteriaPrompt,
-          parameters.exclusionCriteriaPrompt
+          parameters.exclusionCriteriaPrompt,
+          llmProgressCallback
         );
       } else {
         // Fall back to legacy method using keywords
