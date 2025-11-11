@@ -220,6 +220,7 @@ export class SemanticScholarService {
       title: sPaper.title,
       authors: sPaper.authors.map(a => a.name),
       year: sPaper.year,
+      publicationDate: sPaper.publicationDate, // Include publication date for month filtering
       abstract: sPaper.abstract,
       url: sPaper.url,
       citations: sPaper.citationCount,
