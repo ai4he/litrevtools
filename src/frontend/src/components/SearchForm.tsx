@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, X, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { SearchParameters } from '../types';
 import { generateSearchName } from '../utils/helpers';
+import axios from 'axios';
 
 interface SearchFormProps {
   onSubmit: (params: SearchParameters) => void;
@@ -36,6 +37,28 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('The paper must have a scientific contribution by proposing a new approach that advance science, so papers that only implement the technology as use case are not allowed. The approach has to be applicable to mathematics, if it is a general computer science approach that is not specificly aplied to mathematics then misregard it.');
   const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('Literature reviews of any kind are not allowed.');
   const [latexGenerationPrompt, setLatexGenerationPrompt] = useState('');
+
+  // Fetch debug mode configuration on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get('/api/config');
+        const isDebugMode = response.data?.config?.debugMode || false;
+
+        // Set default values if debug mode is enabled
+        if (isDebugMode) {
+          setStartDate('2022');
+          setEndDate('2022');
+          setMaxResults('45');
+        }
+      } catch (error) {
+        console.error('Failed to fetch config:', error);
+        // Default to blank fields on error (debug mode disabled)
+      }
+    };
+
+    fetchConfig();
+  }, []);
 
   const addKeyword = (type: 'inclusion' | 'exclusion', keyword: string) => {
     const trimmed = keyword.trim();

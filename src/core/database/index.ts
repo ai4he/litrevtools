@@ -78,7 +78,7 @@ export class LitRevDatabase {
     // Original papers table (stores Step 1 papers before semantic filtering)
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS original_papers (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
         session_id TEXT NOT NULL,
         title TEXT NOT NULL,
         authors TEXT NOT NULL,
@@ -97,6 +97,7 @@ export class LitRevDatabase {
         category TEXT,
         llm_confidence REAL,
         llm_reasoning TEXT,
+        PRIMARY KEY (id, session_id),
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
     `);
@@ -210,6 +211,51 @@ export class LitRevDatabase {
     if (!hasLlmReasoning) {
       console.log('Adding llm_reasoning column to papers table...');
       this.db.exec('ALTER TABLE papers ADD COLUMN llm_reasoning TEXT');
+    }
+
+    // Migration: Fix original_papers table primary key (from single id to composite)
+    // Check if original_papers table exists and has the old schema
+    try {
+      const originalPapersInfo = this.db.prepare("PRAGMA table_info(original_papers)").all() as Array<{ name: string, pk: number }>;
+      if (originalPapersInfo.length > 0) {
+        // Check if only 'id' is the primary key (pk=1 for id, pk=0 for session_id)
+        const idPk = originalPapersInfo.find(col => col.name === 'id');
+        const sessionIdPk = originalPapersInfo.find(col => col.name === 'session_id');
+
+        if (idPk && idPk.pk > 0 && sessionIdPk && sessionIdPk.pk === 0) {
+          console.log('Migrating original_papers table to use composite primary key...');
+          // Drop and recreate with new schema
+          this.db.exec('DROP TABLE IF EXISTS original_papers');
+          this.db.exec(`
+            CREATE TABLE original_papers (
+              id TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              authors TEXT NOT NULL,
+              year INTEGER NOT NULL,
+              abstract TEXT,
+              url TEXT NOT NULL,
+              citations INTEGER,
+              source TEXT NOT NULL,
+              pdf_url TEXT,
+              venue TEXT,
+              doi TEXT,
+              keywords TEXT,
+              extracted_at TEXT NOT NULL,
+              included INTEGER NOT NULL DEFAULT 1,
+              exclusion_reason TEXT,
+              category TEXT,
+              llm_confidence REAL,
+              llm_reasoning TEXT,
+              PRIMARY KEY (id, session_id),
+              FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+            )
+          `);
+          console.log('original_papers table migration completed');
+        }
+      }
+    } catch (error) {
+      console.error('Error during original_papers migration:', error);
     }
   }
 

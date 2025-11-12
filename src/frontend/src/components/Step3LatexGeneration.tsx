@@ -53,8 +53,7 @@ const OUTPUT_FILES: OutputFile[] = [
 ];
 
 export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
-  sessionId,
-  enabled
+  sessionId
 }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -128,11 +127,6 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
   };
 
   const handleStartGeneration = async () => {
-    if (!enabled) {
-      setError('Please complete Step 1 or Step 2 first, or upload a CSV file');
-      return;
-    }
-
     if (dataSource === 'upload' && !uploadedFile) {
       setError('Please upload a CSV file');
       return;
@@ -205,16 +199,16 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
     estimatedFinalSize: outputProgress.latexBatchProgress.estimatedFinalSize
   } : undefined;
 
+  // Step 3 is always enabled (can use CSV upload even without previous steps)
   return (
-    <div className={`card ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className="card">
       {/* Step Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
           isComplete && !isGenerating ? 'bg-green-100 text-green-600' :
           hasError ? 'bg-red-100 text-red-600' :
           isGenerating ? 'bg-blue-100 text-blue-600' :
-          enabled ? 'bg-yellow-100 text-yellow-600' :
-          'bg-gray-100 text-gray-400'
+          'bg-yellow-100 text-yellow-600'
         }`}>
           {isComplete && !isGenerating ? <CheckCircle size={24} /> :
            hasError ? <AlertCircle size={24} /> :
@@ -226,11 +220,6 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
             Generate complete LaTeX paper with PRISMA methodology and all outputs
           </p>
         </div>
-        {!enabled && (
-          <span className="px-3 py-1 bg-gray-200 text-gray-600 text-sm rounded-full">
-            Locked
-          </span>
-        )}
       </div>
 
       {/* Error Message */}
@@ -312,7 +301,7 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
           {/* Start Button */}
           <button
             onClick={handleStartGeneration}
-            disabled={!enabled || isGenerating}
+            disabled={isGenerating || (dataSource !== 'upload' && !sessionId) || (dataSource === 'upload' && !uploadedFile)}
             className="btn-primary w-full flex items-center justify-center gap-2"
           >
             <Play size={18} />

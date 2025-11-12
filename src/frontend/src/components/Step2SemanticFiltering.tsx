@@ -28,11 +28,11 @@ interface Step2SemanticFilteringProps {
 
 export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
   sessionId,
-  enabled,
   onFilteringComplete
 }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
+  const [filteringCompleted, setFilteringCompleted] = useState(false);
   const [progress, setProgress] = useState<SemanticFilteringProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [useStep1Data, setUseStep1Data] = useState(true);
@@ -82,6 +82,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     const handleComplete = (data: any) => {
       console.log('[Step2] Filtering complete:', data);
       setIsFiltering(false);
+      setFilteringCompleted(true);
       setProgress(null);
       const papers = data.papers || [];
       setFilteredPapers(papers);
@@ -125,6 +126,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
 
     try {
       setIsFiltering(true);
+      setFilteringCompleted(false);
       setError(null);
       setProgress({
         status: 'running',
@@ -233,7 +235,7 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     }
   };
 
-  const isComplete = progress?.status === 'completed';
+  const isComplete = filteringCompleted;
   const hasError = progress?.status === 'error' || !!error;
 
   const batchProgress: BatchProgress | undefined = progress ? {
@@ -243,18 +245,18 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
     itemsRemaining: progress.totalPapers - progress.processedPapers
   } : undefined;
 
-  const isEnabled = enabled || uploadedFile !== null;
+  // Step 2 is always enabled (can use CSV upload even without Step 1)
+  const isEnabled = true;
 
   return (
-    <div className={`card ${!isEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className="card">
       {/* Step Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
           isComplete ? 'bg-green-100 text-green-600' :
           hasError ? 'bg-red-100 text-red-600' :
           isFiltering ? 'bg-blue-100 text-blue-600' :
-          isEnabled ? 'bg-yellow-100 text-yellow-600' :
-          'bg-gray-100 text-gray-400'
+          'bg-yellow-100 text-yellow-600'
         }`}>
           {isComplete ? <CheckCircle size={24} /> :
            hasError ? <AlertCircle size={24} /> :
@@ -266,11 +268,6 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
             Apply LLM-based semantic filtering with inclusion and exclusion criteria
           </p>
         </div>
-        {!isEnabled && (
-          <span className="px-3 py-1 bg-gray-200 text-gray-600 text-sm rounded-full">
-            Locked
-          </span>
-        )}
       </div>
 
       {/* Error Message */}

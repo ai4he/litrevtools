@@ -158,13 +158,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
         if (progress.status === 'completed' || progress.status === 'error') {
           // Clean up
           activeSearches.delete(sid);
-          if (progress.status === 'completed') {
-            // Generate outputs automatically
-            litrev.generateOutputs(sid).then(() => {
-              const session = litrev.getSession(sid);
-              emitOrBuffer(sid, 'outputs', session?.outputs);
-            }).catch(console.error);
-          }
+          // Note: Do not auto-generate outputs - user must explicitly trigger Step 3
         }
       },
       onPaper: (paper: Paper, sid: string) => {
@@ -656,6 +650,16 @@ io.on('connection', (socket) => {
   // Unsubscribe from session updates
   socket.on('unsubscribe', (sessionId: string) => {
     socket.leave(`session:${sessionId}`);
+  });
+});
+
+// Get application configuration (for frontend)
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    config: {
+      debugMode: process.env.DEBUG_MODE === 'true'
+    }
   });
 });
 
