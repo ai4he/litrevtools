@@ -133,10 +133,13 @@ export class GeminiProvider extends BaseLLMProvider {
       const batchResults = await Promise.all(batchPromises);
       responses.push(...batchResults);
 
-      // Delay between batches to respect rate limits (15 RPM free tier)
-      // With batch size 10, we need ~5 second delay to stay under 15 RPM
+      // Delay between batches to respect rate limits
+      // With key rotation (multiple API keys), we can process faster
+      // Each key supports 15 RPM, so with N keys we get N * 15 RPM
       if (i + batchSize < requests.length) {
-        await this.delay(5000);
+        const keyCount = this.keyManager?.getActiveKeyCount() || 1;
+        const delayMs = Math.max(1000, 5000 / keyCount); // Scale delay by number of keys, min 1s
+        await this.delay(delayMs);
       }
     }
 
