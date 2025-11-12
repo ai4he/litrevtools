@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Filter, Download, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { downloadBlob } from '../utils/helpers';
@@ -26,10 +26,14 @@ interface Step2SemanticFilteringProps {
   onFilteringComplete: (sessionId: string, labeledCsvData: any[]) => void;
 }
 
-export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
+export interface Step2SemanticFilteringRef {
+  startFiltering: (inclusionPrompt?: string, exclusionPrompt?: string) => void;
+}
+
+export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step2SemanticFilteringProps>(({
   sessionId,
   onFilteringComplete
-}) => {
+}, ref) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filteringCompleted, setFilteringCompleted] = useState(false);
@@ -48,6 +52,25 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
 
   // Use csvSessionId if available (for CSV upload), otherwise use sessionId from Step 1
   const activeSessionId = csvSessionId || sessionId;
+
+  // Expose trigger method to parent via ref
+  useImperativeHandle(ref, () => ({
+    startFiltering: (customInclusionPrompt?: string, customExclusionPrompt?: string) => {
+      // Automatically use Step 1 data when triggered via ref
+      setUseStep1Data(true);
+      // Update prompts if provided
+      if (customInclusionPrompt) {
+        setInclusionPrompt(customInclusionPrompt);
+      }
+      if (customExclusionPrompt) {
+        setExclusionPrompt(customExclusionPrompt);
+      }
+      // Delay slightly to ensure state updates
+      setTimeout(() => {
+        handleStartFiltering();
+      }, 100);
+    }
+  }));
 
   // Listen for semantic filter progress events via WebSocket
   useEffect(() => {
@@ -402,4 +425,4 @@ export const Step2SemanticFiltering: React.FC<Step2SemanticFilteringProps> = ({
       )}
     </div>
   );
-};
+});

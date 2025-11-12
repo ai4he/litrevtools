@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { FileText, Download, CheckCircle, AlertCircle, Play, Package, File } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { downloadBlob } from '../utils/helpers';
@@ -9,6 +9,10 @@ import { useSocket } from '../hooks/useSocket';
 interface Step3LatexGenerationProps {
   sessionId: string | null;
   enabled: boolean;
+}
+
+export interface Step3LatexGenerationRef {
+  startGeneration: () => void;
 }
 
 type OutputType = 'csv' | 'bibtex' | 'latex' | 'zip';
@@ -52,9 +56,9 @@ const OUTPUT_FILES: OutputFile[] = [
   },
 ];
 
-export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
+export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3LatexGenerationProps>(({
   sessionId
-}) => {
+}, ref) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [outputProgress, setOutputProgress] = useState<OutputProgress | null>(null);
@@ -64,6 +68,15 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [outputsGenerated, setOutputsGenerated] = useState(false);
   const { socket } = useSocket();
+
+  // Expose trigger method to parent via ref
+  useImperativeHandle(ref, () => ({
+    startGeneration: () => {
+      // Automatically use Step 2 data when triggered via ref
+      setDataSource('step2');
+      handleStartGeneration();
+    }
+  }));
 
   // Listen for output progress events via WebSocket
   useEffect(() => {
@@ -362,4 +375,4 @@ export const Step3LatexGeneration: React.FC<Step3LatexGenerationProps> = ({
       )}
     </div>
   );
-};
+});

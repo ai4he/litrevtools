@@ -38,6 +38,9 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('Literature reviews of any kind are not allowed.');
   const [latexGenerationPrompt, setLatexGenerationPrompt] = useState('');
 
+  // Auto Mode - run all steps sequentially
+  const [autoMode, setAutoMode] = useState(false);
+
   // Fetch debug mode configuration on mount
   useEffect(() => {
     const fetchConfig = async () => {
@@ -156,6 +159,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
       ...(llmEnabled && inclusionCriteriaPrompt.trim() && { inclusionCriteriaPrompt: inclusionCriteriaPrompt.trim() }),
       ...(llmEnabled && exclusionCriteriaPrompt.trim() && { exclusionCriteriaPrompt: exclusionCriteriaPrompt.trim() }),
       ...(llmEnabled && latexGenerationPrompt.trim() && { latexGenerationPrompt: latexGenerationPrompt.trim() }),
+      autoMode,
       llmConfig: llmEnabled ? {
         enabled: true,
         provider: llmProvider,
@@ -349,6 +353,37 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
         <p className="text-sm text-gray-500 mt-1">
           Infinite results if left empty
         </p>
+      </div>
+
+      {/* Auto Mode Toggle */}
+      <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-base font-semibold text-gray-900">Automatic Mode</h3>
+              {autoMode && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">
+                  ENABLED
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-600">
+              Automatically execute all three steps sequentially: Search → Semantic Filtering → Output Generation
+            </p>
+          </div>
+          <div className="ml-4">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoMode}
+                onChange={(e) => setAutoMode(e.target.checked)}
+                className="sr-only peer"
+                disabled={disabled}
+              />
+              <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
       </div>
 
       {/* LLM Configuration Section */}

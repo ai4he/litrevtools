@@ -10,7 +10,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useProgress } from '../hooks/useProgress';
 
 interface Step1SearchProps {
-  onSearchComplete: (sessionId: string, rawCsvData: any[]) => void;
+  onSearchComplete: (sessionId: string, rawCsvData: any[], autoMode: boolean, searchParameters?: any) => void;
   disabled?: boolean;
 }
 
@@ -102,13 +102,14 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
         setIsSearching(false);
         // Notify parent that search is complete
         if (sessionId) {
-          onSearchComplete(sessionId, papers);
+          const autoMode = searchParameters?.autoMode || false;
+          onSearchComplete(sessionId, papers, autoMode, searchParameters || undefined);
         }
       } else if (progress.status === 'error') {
         setIsSearching(false);
       }
     }
-  }, [progress, sessionId, papers]);
+  }, [progress, sessionId, papers, searchParameters]);
 
   const isComplete = progress?.status === 'completed';
   const hasError = progress?.status === 'error';

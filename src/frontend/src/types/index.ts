@@ -28,6 +28,7 @@ export interface SearchParameters {
   inclusionCriteriaPrompt?: string;
   exclusionCriteriaPrompt?: string;
   latexGenerationPrompt?: string;
+  autoMode?: boolean; // Auto-run all steps sequentially
 }
 
 export interface Paper {

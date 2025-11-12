@@ -1,25 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Step1Search } from '../components/Step1Search';
-import { Step2SemanticFiltering } from '../components/Step2SemanticFiltering';
-import { Step3LatexGeneration } from '../components/Step3LatexGeneration';
+import { Step2SemanticFiltering, Step2SemanticFilteringRef } from '../components/Step2SemanticFiltering';
+import { Step3LatexGeneration, Step3LatexGenerationRef } from '../components/Step3LatexGeneration';
 import { useSocket } from '../hooks/useSocket';
 
 export const SearchPage: React.FC = () => {
   const [step1SessionId, setStep1SessionId] = useState<string | null>(null);
   const [step1Complete, setStep1Complete] = useState(false);
   const [step2Complete, setStep2Complete] = useState(false);
+  const [autoMode, setAutoMode] = useState(false);
+  const [autoModeMessage, setAutoModeMessage] = useState<string | null>(null);
   const { isConnected } = useSocket();
 
-  const handleStep1Complete = (sessionId: string, _rawData: any[]) => {
-    console.log('[SearchPage] Step 1 completed:', sessionId);
+  // Refs for triggering steps programmatically
+  const step2Ref = useRef<Step2SemanticFilteringRef>(null);
+  const step3Ref = useRef<Step3LatexGenerationRef>(null);
+
+  const handleStep1Complete = (sessionId: string, _rawData: any[], isAutoMode: boolean, params?: any) => {
+    console.log('[SearchPage] Step 1 completed:', sessionId, 'AutoMode:', isAutoMode);
     setStep1SessionId(sessionId);
     setStep1Complete(true);
+    setAutoMode(isAutoMode);
+
+    // If auto mode is enabled, automatically trigger Step 2
+    if (isAutoMode) {
+      setAutoModeMessage('Step 1 complete. Automatically starting Step 2: Semantic Filtering...');
+      // Delay slightly to ensure UI updates
+      setTimeout(() => {
+        console.log('[SearchPage] Auto-triggering Step 2');
+        const inclusionPrompt = params?.inclusionCriteriaPrompt || 'The paper must have a scientific contribution by proposing a new approach that advance science.';
+        const exclusionPrompt = params?.exclusionCriteriaPrompt || 'Literature reviews of any kind are not allowed.';
+        step2Ref.current?.startFiltering(inclusionPrompt, exclusionPrompt);
+      }, 1000);
+    }
   };
 
   const handleStep2Complete = (sessionId: string, _labeledData: any[]) => {
-    console.log('[SearchPage] Step 2 completed:', sessionId);
+    console.log('[SearchPage] Step 2 completed:', sessionId, 'AutoMode:', autoMode);
     setStep2Complete(true);
+
+    // If auto mode is enabled, automatically trigger Step 3
+    if (autoMode) {
+      setAutoModeMessage('Step 2 complete. Automatically starting Step 3: Output Generation...');
+      // Delay slightly to ensure UI updates
+      setTimeout(() => {
+        console.log('[SearchPage] Auto-triggering Step 3');
+        step3Ref.current?.startGeneration();
+      }, 1000);
+    }
   };
+
+  // Clear auto mode message after a few seconds
+  useEffect(() => {
+    if (autoModeMessage) {
+      const timer = setTimeout(() => {
+        setAutoModeMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoModeMessage]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -78,6 +117,14 @@ export const SearchPage: React.FC = () => {
               Connecting to server...
             </div>
           )}
+
+          {/* Auto Mode Message */}
+          {autoModeMessage && (
+            <div className="mt-4 px-4 py-3 bg-blue-100 border-2 border-blue-400 text-blue-800 rounded-lg inline-block text-sm font-medium flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
+              {autoModeMessage}
+            </div>
+          )}
         </div>
 
         {/* Three-Step Workflow */}
@@ -90,6 +137,7 @@ export const SearchPage: React.FC = () => {
 
           {/* Step 2: Semantic Filtering */}
           <Step2SemanticFiltering
+            ref={step2Ref}
             sessionId={step1SessionId}
             enabled={step1Complete}
             onFilteringComplete={handleStep2Complete}
@@ -97,6 +145,7 @@ export const SearchPage: React.FC = () => {
 
           {/* Step 3: LaTeX Generation */}
           <Step3LatexGeneration
+            ref={step3Ref}
             sessionId={step1SessionId}
             enabled={step1Complete}
           />
