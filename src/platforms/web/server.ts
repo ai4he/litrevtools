@@ -546,21 +546,15 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
         totalBatches: 0
       });
 
-      // Regenerate outputs (CSV, BibTeX, LaTeX, ZIP) with filtered data
-      try {
-        await litrev.generateOutputs(sessionId);
-        console.log(`[Server] Outputs regenerated after semantic filtering for session ${sessionId}`);
-      } catch (error: any) {
-        console.error(`[Server] Failed to regenerate outputs after semantic filtering:`, error);
-      }
-
+      // Emit completion event immediately so download button appears
+      // Note: CSV download works from the papers data, no file regeneration needed
       const updatedSession = litrev.getSession(sessionId);
       console.log(`[Server] Emitting semantic-filter-complete for session ${sessionId} with ${updatedSession?.papers.length} papers`);
       emitOrBuffer(sessionId, 'semantic-filter-complete', {
         sessionId,
         papers: updatedSession?.papers
       });
-      console.log(`[Server] semantic-filter-complete event emitted for session ${sessionId}`);
+      console.log(`[Server] semantic-filter-complete event emitted - download button should appear immediately`);
     }).catch((error: any) => {
       console.error('[Server] Semantic filtering failed:', error);
       emitOrBuffer(sessionId, 'semantic-filter-progress', {
