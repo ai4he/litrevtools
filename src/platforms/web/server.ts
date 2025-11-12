@@ -527,7 +527,7 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
           estimatedTimeRemaining: progress.estimatedTimeRemaining
         });
       }
-    ).then(() => {
+    ).then(async () => {
       // Filtering completed successfully
       emitOrBuffer(sessionId, 'semantic-filter-progress', {
         status: 'completed',
@@ -540,7 +540,14 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
         totalBatches: 0
       });
 
-      // Regenerate CSV with labeled data
+      // Regenerate outputs (CSV, BibTeX, LaTeX, ZIP) with filtered data
+      try {
+        await litrev.generateOutputs(sessionId);
+        console.log(`[Server] Outputs regenerated after semantic filtering for session ${sessionId}`);
+      } catch (error: any) {
+        console.error(`[Server] Failed to regenerate outputs after semantic filtering:`, error);
+      }
+
       const updatedSession = litrev.getSession(sessionId);
       emitOrBuffer(sessionId, 'semantic-filter-complete', {
         sessionId,
