@@ -138,10 +138,12 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       const room = io.sockets.adapter.rooms.get(`session:${sid}`);
 
       if (room && room.size > 0) {
-        // Client is subscribed, emit directly
-        io.emit(eventName, data);
+        // Client is subscribed, emit to room
+        console.log(`[Server] Emitting ${eventName} to ${room.size} subscribed clients`);
+        io.to(`session:${sid}`).emit(eventName, data);
       } else {
         // Client not subscribed yet, buffer the event
+        console.log(`[Server] Buffering ${eventName} (no subscribers yet)`);
         if (!eventBuffer.has(sid)) {
           eventBuffer.set(sid, []);
         }
@@ -238,10 +240,12 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
       const room = io.sockets.adapter.rooms.get(`session:${sid}`);
 
       if (room && room.size > 0) {
-        // Client is subscribed, emit directly
-        io.emit(eventName, data);
+        // Client is subscribed, emit to room
+        console.log(`[Server] Emitting ${eventName} to ${room.size} subscribed clients`);
+        io.to(`session:${sid}`).emit(eventName, data);
       } else {
         // Client not subscribed yet, buffer the event
+        console.log(`[Server] Buffering ${eventName} (no subscribers yet)`);
         if (!eventBuffer.has(sid)) {
           eventBuffer.set(sid, []);
         }
@@ -489,10 +493,12 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
       const room = io.sockets.adapter.rooms.get(`session:${sid}`);
 
       if (room && room.size > 0) {
-        // Client is subscribed, emit directly
-        io.emit(eventName, data);
+        // Client is subscribed, emit to room
+        console.log(`[Server] Emitting ${eventName} to ${room.size} subscribed clients`);
+        io.to(`session:${sid}`).emit(eventName, data);
       } else {
         // Client not subscribed yet, buffer the event
+        console.log(`[Server] Buffering ${eventName} (no subscribers yet)`);
         if (!eventBuffer.has(sid)) {
           eventBuffer.set(sid, []);
         }
