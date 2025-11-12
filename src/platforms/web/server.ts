@@ -549,10 +549,12 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
       }
 
       const updatedSession = litrev.getSession(sessionId);
+      console.log(`[Server] Emitting semantic-filter-complete for session ${sessionId} with ${updatedSession?.papers.length} papers`);
       emitOrBuffer(sessionId, 'semantic-filter-complete', {
         sessionId,
         papers: updatedSession?.papers
       });
+      console.log(`[Server] semantic-filter-complete event emitted for session ${sessionId}`);
     }).catch((error: any) => {
       console.error('[Server] Semantic filtering failed:', error);
       emitOrBuffer(sessionId, 'semantic-filter-progress', {
