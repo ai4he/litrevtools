@@ -544,11 +544,13 @@ ${paper.venue ? `Venue: ${paper.venue}` : ''}
 **Task:**
 Determine if this paper MEETS the inclusion criteria described above.
 
+**IMPORTANT:** You MUST provide a clear reasoning for your decision, regardless of whether the paper meets the criteria or not. The reasoning should explain why the paper does or does not meet the inclusion criteria based on the information provided.
+
 **Response Format:**
 Provide your response as JSON:
 {
   "meets_criteria": true or false,
-  "reasoning": "Brief explanation of your decision (2-3 sentences)",
+  "reasoning": "REQUIRED: Detailed explanation of your decision (2-3 sentences). Explain specifically why this paper meets or does not meet the inclusion criteria.",
   "confidence": 0.0 to 1.0
 }`;
   }
@@ -575,11 +577,13 @@ ${paper.venue ? `Venue: ${paper.venue}` : ''}
 **Task:**
 Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).
 
+**IMPORTANT:** You MUST provide a clear reasoning for your decision, regardless of whether the paper meets the exclusion criteria or not. The reasoning should explain why the paper does or does not meet the exclusion criteria based on the information provided.
+
 **Response Format:**
 Provide your response as JSON:
 {
   "meets_criteria": true or false,
-  "reasoning": "Brief explanation of your decision (2-3 sentences)",
+  "reasoning": "REQUIRED: Detailed explanation of your decision (2-3 sentences). Explain specifically why this paper meets or does not meet the exclusion criteria.",
   "confidence": 0.0 to 1.0
 }`;
   }

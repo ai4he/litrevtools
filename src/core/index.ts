@@ -233,7 +233,8 @@ export class LitRevTools {
     sessionId: string,
     inclusionPrompt?: string,
     exclusionPrompt?: string,
-    onProgress?: (progress: LLMFilteringProgress) => void
+    onProgress?: (progress: LLMFilteringProgress) => void,
+    batchSize?: number
   ): Promise<void> {
     const session = this.database.getSession(sessionId);
     if (!session) {
@@ -249,7 +250,7 @@ export class LitRevTools {
     const llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
-      batchSize: 20,
+      batchSize: batchSize || 20, // Use configurable batch size, default to 20
       maxConcurrentBatches: 5,
       timeout: 30000,
       retryAttempts: 3,
