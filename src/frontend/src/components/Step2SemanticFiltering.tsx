@@ -46,6 +46,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
   const [exclusionPrompt, setExclusionPrompt] = useState(
     'Literature reviews of any kind are not allowed.'
   );
+  const [batchSize, setBatchSize] = useState(20);
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -168,7 +169,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         // Use Step 1 results
         await axios.post(`/api/sessions/${sessionId}/semantic-filter`, {
           inclusionPrompt,
-          exclusionPrompt
+          exclusionPrompt,
+          batchSize
         });
       } else if (uploadedFile) {
         // Handle CSV upload case
@@ -188,7 +190,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         const response = await axios.post('/api/semantic-filter/csv', {
           csvContent,
           inclusionPrompt,
-          exclusionPrompt
+          exclusionPrompt,
+          batchSize
         });
 
         // Set the temporary session ID returned from the server
@@ -376,6 +379,24 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
                 rows={3}
                 className="input w-full"
               />
+            </div>
+
+            {/* Batch Size */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Batch Size (papers per batch)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={batchSize}
+                onChange={(e) => setBatchSize(Math.max(1, Math.min(100, parseInt(e.target.value) || 20)))}
+                className="input w-full"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Number of papers to process in each batch. Smaller batches provide more frequent progress updates but may take longer overall. Default: 20
+              </p>
             </div>
           </div>
 

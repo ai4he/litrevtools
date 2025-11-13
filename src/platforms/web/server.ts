@@ -298,7 +298,7 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
 // Apply semantic filtering with CSV upload
 app.post('/api/semantic-filter/csv', async (req, res) => {
   try {
-    const { csvContent, inclusionPrompt, exclusionPrompt } = req.body;
+    const { csvContent, inclusionPrompt, exclusionPrompt, batchSize } = req.body;
 
     if (!csvContent || !csvContent.trim()) {
       res.status(400).json({ success: false, error: 'CSV content is required' });
@@ -339,7 +339,7 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
     const llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
-      batchSize: 20,
+      batchSize: batchSize || 20, // Use configurable batch size, default to 20
       maxConcurrentBatches: 5,
       timeout: 30000,
       retryAttempts: 3,
@@ -479,7 +479,7 @@ function parseCsvLine(line: string): string[] {
 app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
   try {
     const sessionId = req.params.id;
-    const { inclusionPrompt, exclusionPrompt } = req.body;
+    const { inclusionPrompt, exclusionPrompt, batchSize } = req.body;
 
     const session = litrev.getSession(sessionId);
     if (!session) {
@@ -532,7 +532,8 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
           timeElapsed: progress.timeElapsed,
           estimatedTimeRemaining: progress.estimatedTimeRemaining
         });
-      }
+      },
+      batchSize // Pass the configurable batch size
     ).then(async () => {
       // Filtering completed successfully
       emitOrBuffer(sessionId, 'semantic-filter-progress', {
