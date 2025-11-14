@@ -78,18 +78,9 @@ export class LitRevTools {
       console.log(`[LitRevTools] Starting background search for session: ${sessionId}`);
 
       // Run the search in the background without awaiting
-      extractor.executeSearchInBackground().then(async () => {
-        console.log(`[LitRevTools] Background search completed for session: ${sessionId}, generating outputs...`);
-        // Generate outputs after search completes
-        try {
-          await this.outputManager.generateIncremental(sessionId);
-          console.log(`[LitRevTools] Outputs generated successfully for session: ${sessionId}`);
-        } catch (error) {
-          console.error(`[LitRevTools] Error generating outputs for session ${sessionId}:`, error);
-          if (callbacks?.onError) {
-            callbacks.onError(error as Error, sessionId);
-          }
-        }
+      extractor.executeSearchInBackground().then(() => {
+        console.log(`[LitRevTools] Background search completed for session: ${sessionId}`);
+        // Note: Outputs are NOT auto-generated - user must explicitly trigger Step 3
       }).catch((error) => {
         console.error(`[LitRevTools] Search error for session ${sessionId}:`, error);
         if (callbacks?.onError) {
