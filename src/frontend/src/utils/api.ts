@@ -69,8 +69,15 @@ export const sessionAPI = {
     return response.data as SearchSession;
   },
 
-  generate: async (sessionId: string, dataSource?: 'step1' | 'step2' | 'current') => {
-    const response = await api.post(`/sessions/${sessionId}/generate`, { dataSource });
+  generate: async (sessionId: string, dataSource?: 'step1' | 'step2' | 'current', options?: {
+    model?: string;
+    batchSize?: number;
+    latexPrompt?: string;
+  }) => {
+    const response = await api.post(`/sessions/${sessionId}/generate`, {
+      dataSource,
+      ...options
+    });
     return response.data;
   },
 

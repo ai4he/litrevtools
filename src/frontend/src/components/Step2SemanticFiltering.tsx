@@ -47,6 +47,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     'Literature reviews of any kind are not allowed.'
   );
   const [batchSize, setBatchSize] = useState(20);
+  const [llmModel, setLlmModel] = useState<'gemini-2.0-flash-exp' | 'gemini-1.5-flash' | 'gemini-1.5-pro'>('gemini-2.0-flash-exp');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -170,7 +171,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         await axios.post(`/api/sessions/${sessionId}/semantic-filter`, {
           inclusionPrompt,
           exclusionPrompt,
-          batchSize
+          batchSize,
+          model: llmModel
         });
       } else if (uploadedFile) {
         // Handle CSV upload case
@@ -191,7 +193,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
           csvContent,
           inclusionPrompt,
           exclusionPrompt,
-          batchSize
+          batchSize,
+          model: llmModel
         });
 
         // Set the temporary session ID returned from the server
@@ -352,33 +355,32 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
           </div>
 
           {/* LLM Configuration */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">LLM Configuration</h3>
+          <div className="space-y-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <span className="text-purple-600">🤖</span>
+              AI-Powered Analysis (LLM)
+            </h3>
+            <p className="text-xs text-gray-600">
+              API keys are automatically loaded from your .env file and rotate automatically when rate limits are reached.
+            </p>
 
-            {/* Inclusion Criteria */}
+            {/* Model Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Inclusion Criteria Prompt
+                LLM Model
               </label>
-              <textarea
-                value={inclusionPrompt}
-                onChange={(e) => setInclusionPrompt(e.target.value)}
-                rows={3}
-                className="input w-full"
-              />
-            </div>
-
-            {/* Exclusion Criteria */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Exclusion Criteria Prompt
-              </label>
-              <textarea
-                value={exclusionPrompt}
-                onChange={(e) => setExclusionPrompt(e.target.value)}
-                rows={3}
-                className="input w-full"
-              />
+              <select
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value as any)}
+                className="input-field w-full"
+              >
+                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental - Fast & Latest)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Stable & Fast)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Most Capable)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Choose the Gemini model for semantic filtering. Flash models are faster and cheaper, Pro is more accurate.
+              </p>
             </div>
 
             {/* Batch Size */}
@@ -392,10 +394,42 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
                 max="100"
                 value={batchSize}
                 onChange={(e) => setBatchSize(Math.max(1, Math.min(100, parseInt(e.target.value) || 20)))}
-                className="input w-full"
+                className="input-field w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Number of papers to process in each batch. Smaller batches provide more frequent progress updates but may take longer overall. Default: 20
+                Number of papers to process in each batch. Larger batches = fewer API calls. Default: 20
+              </p>
+            </div>
+
+            {/* Inclusion Criteria */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Inclusion Criteria Prompt
+              </label>
+              <textarea
+                value={inclusionPrompt}
+                onChange={(e) => setInclusionPrompt(e.target.value)}
+                rows={3}
+                className="input-field w-full resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Papers meeting this criteria will have systematic_filtering_inclusion = 1
+              </p>
+            </div>
+
+            {/* Exclusion Criteria */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Exclusion Criteria Prompt
+              </label>
+              <textarea
+                value={exclusionPrompt}
+                onChange={(e) => setExclusionPrompt(e.target.value)}
+                rows={3}
+                className="input-field w-full resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Papers meeting this criteria will have systematic_filtering_exclusion = 1
               </p>
             </div>
           </div>
