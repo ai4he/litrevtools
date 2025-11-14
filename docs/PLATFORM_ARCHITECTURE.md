@@ -18,7 +18,8 @@ All core functionality is platform-agnostic and shared across all platforms:
 ```
 src/core/
 ├── database/         # SQLite database operations
-├── scholar/          # Google Scholar scraping engine
+├── scholar/          # Semantic Scholar API integration
+├── llm/              # LLM service for filtering and analysis
 ├── gemini/           # AI-powered paper generation
 ├── outputs/          # Multi-format output generators
 └── types/            # Shared TypeScript interfaces
@@ -81,7 +82,7 @@ src/platforms/
 1. Compiles TypeScript backend to `dist/platforms/web/`
 2. Builds React frontend to `dist/frontend/dist/`
 3. Express serves the frontend and exposes REST API
-4. Socket.IO provides real-time updates during searches
+4. Socket.IO provides real-time updates during paper extraction and LLM filtering
 
 **Run Commands**:
 ```bash
@@ -139,7 +140,7 @@ npm run desktop:build
 **How it works**:
 1. Capacitor wraps the **same React frontend** in a WebView
 2. Provides native device APIs (camera, filesystem, etc.)
-3. Communicates with backend server via HTTP/WebSocket
+3. Communicates with backend server via HTTP/WebSocket (Semantic Scholar API + LLM services)
 4. Can bundle frontend for offline use
 
 **Run Commands**:

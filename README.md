@@ -2,19 +2,19 @@
 
 > **Isomorphic Systematic Literature Review Tool using PRISMA Methodology**
 
-LitRevTools is a comprehensive, cross-platform application for conducting systematic literature reviews following the PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) methodology. It automatically extracts research papers from Google Scholar and generates publication-ready research papers.
+LitRevTools is a comprehensive, cross-platform application for conducting systematic literature reviews following the PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) methodology. It automatically extracts research papers from Semantic Scholar API and generates publication-ready research papers.
 
 ## ✨ Features
 
 - **🔄 Isomorphic Architecture**: Single codebase runs on CLI, Web, Desktop, and Mobile
-- **📚 Google Scholar Integration**: Automated paper extraction with parallel year-based searching
-- **🔐 Tor Circuit Rotation**: Built-in IP rotation to prevent blocking
-- **🤖 AI-Powered**: Uses Google Gemini to generate PRISMA research papers
-- **📊 Real-time Progress**: Live updates with screenshots, progress bars, and statistics
+- **📚 Semantic Scholar Integration**: Automated paper extraction via API with rate limiting and pagination
+- **🤖 AI-Powered Filtering**: Uses Google Gemini for intelligent paper filtering and analysis
+- **📊 Real-time Progress**: Live updates with progress bars and statistics via WebSocket
 - **💾 Portable Database**: SQLite-based storage for easy backup and portability
 - **📦 Multiple Output Formats**: CSV, BibTeX, LaTeX, PRISMA diagrams, and ZIP archives
-- **⚡ Parallel Processing**: Multiple Tor circuits for faster searches
-- **🎯 Smart Filtering**: Automatic inclusion/exclusion based on keywords
+- **⚡ Batch Processing**: Efficient parallel processing with configurable batch sizes
+- **🎯 Smart Filtering**: LLM-based semantic filtering or rule-based keyword matching
+- **🔑 API Key Rotation**: Automatic rotation of multiple API keys to handle rate limits
 
 ## 🏗️ Architecture
 
@@ -22,9 +22,10 @@ LitRevTools is a comprehensive, cross-platform application for conducting system
 litrevtools/
 ├── src/
 │   ├── core/                    # Isomorphic business logic
-│   │   ├── scholar/             # Google Scholar extraction
+│   │   ├── scholar/             # Semantic Scholar API extraction
+│   │   ├── llm/                 # LLM service for filtering and analysis
 │   │   ├── database/            # SQLite database layer
-│   │   ├── gemini/              # AI integration
+│   │   ├── gemini/              # AI paper generation
 │   │   ├── outputs/             # Output generators
 │   │   └── types/               # TypeScript types
 │   └── platforms/
@@ -39,9 +40,9 @@ litrevtools/
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Tor (optional, for IP rotation)
-- Gemini API key
-- Google OAuth credentials (for future features)
+- Gemini API key (for AI-powered filtering and paper generation)
+- Semantic Scholar API key (optional - increases rate limits from 100 to 5,000 requests per 5 minutes)
+- Google OAuth credentials (for web authentication)
 
 ### Installation
 
@@ -182,17 +183,17 @@ Define your search parameters:
 ### 2. Extraction Process
 
 The tool performs:
-1. **Parallel searches** across different years using multiple Tor circuits
-2. **Real-time extraction** of paper metadata (title, authors, year, abstract, citations)
-3. **Screenshot capture** for monitoring progress
-4. **Automatic filtering** based on exclusion criteria
+1. **API-based search** using Semantic Scholar with automatic pagination
+2. **Real-time extraction** of paper metadata (title, authors, year, abstract, citations, DOI, PDF links)
+3. **Rate limit management** with automatic retry and backoff
+4. **Automatic filtering** using LLM semantic analysis or rule-based keywords
 
 ### 3. PRISMA Analysis
 
 Following PRISMA methodology:
-- **Identification**: Records found from Google Scholar
-- **Screening**: Application of inclusion/exclusion criteria
-- **Included**: Final set of papers for review
+- **Identification**: Records found from Semantic Scholar API
+- **Screening**: Application of inclusion/exclusion criteria via LLM or keywords
+- **Included**: Final set of papers for review with confidence scores
 
 ### 4. Output Generation
 
@@ -229,14 +230,12 @@ GEMINI_MODEL=gemini-flash-lite-latest
 # Paper Generation Settings
 PAPER_BATCH_SIZE=15  # Papers per batch for iterative generation
 
-# Google OAuth (for future features)
+# Semantic Scholar API (optional - increases rate limits)
+SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_key
+
+# Google OAuth (for web authentication)
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-
-# Tor Configuration
-TOR_SOCKS_PORT=9050
-TOR_CONTROL_PORT=9051
-TOR_PASSWORD=
 
 # Database
 DATABASE_PATH=./data/litrevtools.db
@@ -251,22 +250,17 @@ SCREENSHOT_ENABLED=true
 OUTPUT_DIR=./data/outputs
 ```
 
-### Tor Setup
+### Semantic Scholar API Key
 
-For IP rotation to work, install and run Tor:
+Optional but recommended for higher rate limits:
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install tor
-sudo service tor start
+1. Visit [Semantic Scholar API](https://www.semanticscholar.org/product/api)
+2. Request an API key (free for academic/research use)
+3. Add to your `.env` file: `SEMANTIC_SCHOLAR_API_KEY=your_key`
 
-# macOS
-brew install tor
-brew services start tor
-
-# Windows
-# Download Tor Browser Bundle or install Tor as a service
-```
+**Rate Limits:**
+- Without key: 100 requests per 5 minutes
+- With key: 5,000 requests per 5 minutes
 
 ## 📊 Database Schema
 
@@ -341,18 +335,18 @@ MIT License - see LICENSE file for details
 ## 🙏 Acknowledgments
 
 - PRISMA methodology developers
-- Google Scholar
-- Tor Project
+- Semantic Scholar team at Allen Institute for AI
 - Google Generative AI (Gemini)
 - All open-source contributors
 
 ## ⚠️ Disclaimer
 
 This tool is for academic and research purposes. Please respect:
-- Google Scholar's terms of service
+- Semantic Scholar's API terms of service
 - Rate limiting and fair use policies
 - Copyright and intellectual property rights
 - Academic integrity guidelines
+- Proper attribution when using LLM-generated content
 
 ## 📧 Support
 

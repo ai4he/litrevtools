@@ -26,10 +26,10 @@ A modern, AI-powered web application for conducting systematic literature review
   - Excluded papers count
   - Papers processed
 
-### 🖼️ **Live Browser Screenshots**
-- View real-time screenshots from the headless browser
-- Expandable full-screen view
-- Automatic updates during scraping
+### 🖼️ **Live Progress Updates**
+- Real-time status updates via WebSocket
+- Visual progress tracking
+- Automatic updates during paper extraction
 
 ### 📄 **Paper Management**
 - **Real-time Paper List**: Papers appear as they're discovered
@@ -72,9 +72,9 @@ Available during and after the search:
 - **Server**: Express.js with Socket.IO
 - **Authentication**: Google OAuth 2.0 + JWT
 - **Database**: SQLite (via better-sqlite3)
-- **Web Scraping**: Puppeteer with stealth plugin
-- **AI Integration**: Google Gemini API
-- **Anonymity**: Tor circuit rotation support
+- **API Integration**: Semantic Scholar API for paper extraction
+- **AI Integration**: Google Gemini API for filtering and paper generation
+- **LLM Service**: Intelligent filtering with API key rotation
 
 ## Setup Instructions
 
@@ -124,9 +124,8 @@ WEB_HOST=localhost
 DATABASE_PATH=./data/litrevtools.db
 OUTPUT_DIR=./data/outputs
 
-# Optional: Tor Configuration
-TOR_SOCKS_PORT=9050
-TOR_CONTROL_PORT=9051
+# Optional: Semantic Scholar API (increases rate limits)
+SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ```
 
 #### Getting Google OAuth Credentials
@@ -275,7 +274,7 @@ socket.emit('subscribe', sessionId);
 
 ### 3. Monitor Progress
 - View real-time progress bar and statistics
-- Watch browser screenshots update live
+- Watch LLM filtering progress with confidence scores
 - See papers appear in the list as they're found
 - Track time elapsed and estimated completion
 
@@ -303,8 +302,9 @@ litrevtools/
 ├── src/
 │   ├── core/                         # Shared business logic (isomorphic)
 │   │   ├── database/                 # SQLite database
-│   │   ├── scholar/                  # Google Scholar scraper
-│   │   ├── gemini/                   # AI integration
+│   │   ├── scholar/                  # Semantic Scholar API integration
+│   │   ├── llm/                      # LLM filtering service
+│   │   ├── gemini/                   # AI paper generation
 │   │   ├── outputs/                  # Output generators
 │   │   └── types/                    # TypeScript types
 │   │
@@ -434,9 +434,9 @@ npm run deploy:stop
 - Check firewall rules
 - Ensure CORS is properly configured
 
-### Puppeteer errors
-- Chrome binary may be missing: `npx puppeteer browsers install chrome`
-- Check system dependencies for headless Chrome
+### API rate limiting
+- Semantic Scholar: Add API key to increase rate limits from 100 to 5,000 requests per 5 minutes
+- Gemini: Use multiple API keys with automatic rotation for large literature reviews
 
 ## Browser Compatibility
 
@@ -450,7 +450,8 @@ npm run deploy:stop
 - **Concurrent Searches**: System supports multiple concurrent searches
 - **WebSocket Scaling**: Use Redis adapter for horizontal scaling
 - **Database**: SQLite suitable for single-server deployment
-- **Memory Usage**: ~500MB per active search (due to Puppeteer)
+- **Memory Usage**: ~100-200MB per active search (API-based, no browser automation)
+- **LLM Batching**: Papers processed in configurable batches for optimal performance
 
 ## Contributing
 
