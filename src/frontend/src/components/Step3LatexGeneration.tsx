@@ -67,6 +67,8 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [outputsGenerated, setOutputsGenerated] = useState(false);
+  const [llmModel, setLlmModel] = useState<'gemini-2.0-flash-exp' | 'gemini-1.5-flash' | 'gemini-1.5-pro'>('gemini-2.0-flash-exp');
+  const [batchSize, setBatchSize] = useState(15);
   const { socket } = useSocket();
 
   // Expose trigger method to parent via ref
@@ -166,7 +168,11 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       if (sessionId) {
         // Map dataSource - 'upload' is not supported yet, use 'current' as fallback
         const apiDataSource = dataSource === 'upload' ? 'current' : dataSource;
-        await sessionAPI.generate(sessionId, apiDataSource);
+        await sessionAPI.generate(sessionId, apiDataSource, {
+          model: llmModel,
+          batchSize,
+          latexPrompt: latexPrompt.trim() || undefined
+        });
       } else {
         // TODO: Handle CSV upload case
         throw new Error('CSV upload not yet implemented');
@@ -297,18 +303,69 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
             )}
           </div>
 
-          {/* LaTeX Generation Prompt */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              LaTeX Generation Prompt (Optional)
-            </label>
-            <textarea
-              value={latexPrompt}
-              onChange={(e) => setLatexPrompt(e.target.value)}
-              rows={3}
-              placeholder="Additional instructions for LaTeX paper generation..."
-              className="input w-full"
-            />
+          {/* LLM Configuration */}
+          <div className="space-y-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <span className="text-purple-600">🤖</span>
+              AI-Powered Analysis (LLM)
+            </h3>
+            <p className="text-xs text-gray-600">
+              API keys are automatically loaded from your .env file and rotate automatically when rate limits are reached.
+            </p>
+
+            {/* Model Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                LLM Model
+              </label>
+              <select
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value as any)}
+                className="input-field w-full"
+              >
+                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental - Fast & Latest)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Stable & Fast)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Most Capable)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Choose the Gemini model for LaTeX generation. Flash models are faster and cheaper, Pro is more accurate.
+              </p>
+            </div>
+
+            {/* Batch Size */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Batch Size (papers per batch)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={batchSize}
+                onChange={(e) => setBatchSize(Math.max(1, Math.min(50, parseInt(e.target.value) || 15)))}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Number of papers to include in each iterative generation batch. Default: 15
+              </p>
+            </div>
+
+            {/* LaTeX Generation Prompt */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Additional LaTeX Generation Prompt (Optional)
+              </label>
+              <textarea
+                value={latexPrompt}
+                onChange={(e) => setLatexPrompt(e.target.value)}
+                rows={3}
+                placeholder="Additional instructions for LaTeX paper generation..."
+                className="input-field w-full resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Optional instructions to customize the generated LaTeX paper
+              </p>
+            </div>
           </div>
 
           {/* Start Button */}
