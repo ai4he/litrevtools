@@ -269,6 +269,8 @@ export class ScholarExtractor {
         const maxPerRequest = 100; // Semantic Scholar API limit
         let offset = 0;
         let fetchedForYear = 0;
+        let consecutiveEmptyResults = 0; // Track empty results to detect stuck loops
+        const maxConsecutiveEmpty = 3; // Stop after 3 consecutive empty results
 
         // Paginate if needed
         // If maxResultsPerYear is undefined, fetch all available papers
@@ -277,12 +279,32 @@ export class ScholarExtractor {
             ? Math.min(maxPerRequest, maxResultsPerYear - fetchedForYear)
             : maxPerRequest;
 
+          // Update status before each API call
+          this.updateProgress({
+            currentTask: `Year ${year}: Fetching papers (offset ${offset}, got ${fetchedForYear} so far)`,
+            nextTask: `Processing batch of ${limit} papers`,
+            progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+            currentYear: year
+          });
+
           const result = await semanticScholar.search({
             query: parameters.inclusionKeywords.join(' '),
             year,
             limit,
             offset
           });
+
+          // Detect stuck loops - if we get empty results repeatedly, stop
+          if (result.papers.length === 0) {
+            consecutiveEmptyResults++;
+            console.log(`Year ${year}: Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
+            if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
+              console.log(`Year ${year}: Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+              break;
+            }
+          } else {
+            consecutiveEmptyResults = 0; // Reset counter on successful fetch
+          }
 
           // Filter by date (month/day) if specified
           let papersToAdd = result.papers;
@@ -304,7 +326,16 @@ export class ScholarExtractor {
           fetchedForYear += result.papers.length;
           offset += result.papers.length;
 
-          console.log(`Year ${year}: Found ${fetchedForYear}/${result.total} papers`);
+          console.log(`Year ${year}: Found ${fetchedForYear}/${result.total} papers (total across all years: ${totalFetched})`);
+
+          // Update status after fetching batch
+          this.updateProgress({
+            currentTask: `Year ${year}: Retrieved ${fetchedForYear}/${result.total} papers`,
+            nextTask: result.hasMore ? `Fetching next batch` : `Moving to next year`,
+            progress: 20 + (60 * (i + fetchedForYear / Math.max(1, result.total)) / years.length),
+            currentYear: year,
+            totalPapers: totalFetched
+          });
 
           // Stop if no more results available
           if (!result.hasMore || result.papers.length === 0) {
@@ -633,6 +664,8 @@ export class ScholarExtractor {
     const maxResults = parameters.maxResults; // undefined means fetch all
     let offset = 0;
     let totalFetched = 0;
+    let consecutiveEmptyResults = 0; // Track empty results to detect stuck loops
+    const maxConsecutiveEmpty = 3; // Stop after 3 consecutive empty results
 
     // Paginate through all results
     while (true) {
@@ -640,12 +673,32 @@ export class ScholarExtractor {
         ? Math.min(maxPerRequest, maxResults - totalFetched)
         : maxPerRequest;
 
+      // Update status before each API call
+      this.updateProgress({
+        currentTask: `Fetching papers (offset ${offset}, got ${totalFetched} so far)`,
+        nextTask: `Processing batch of ${limit} papers`,
+        progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+        totalPapers: totalFetched
+      });
+
       const result = await semanticScholar.search({
         query: parameters.inclusionKeywords.join(' '),
         // No year filter - search all years
         limit,
         offset
       });
+
+      // Detect stuck loops - if we get empty results repeatedly, stop
+      if (result.papers.length === 0) {
+        consecutiveEmptyResults++;
+        console.log(`Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
+        if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
+          console.log(`Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+          break;
+        }
+      } else {
+        consecutiveEmptyResults = 0; // Reset counter on successful fetch
+      }
 
       // Filter by month if specified (though this is less meaningful without year context)
       let papersToAdd = result.papers;
@@ -669,10 +722,12 @@ export class ScholarExtractor {
 
       console.log(`Found ${totalFetched}/${result.total} papers (all years)`);
 
+      // Update status after fetching batch
       this.updateProgress({
-        currentTask: `Fetching papers (${totalFetched}/${result.total})`,
-        nextTask: 'Continuing search',
-        progress: 20 + Math.min(60, (totalFetched / result.total) * 60)
+        currentTask: `Retrieved ${totalFetched}/${result.total} papers`,
+        nextTask: result.hasMore ? `Fetching next batch from offset ${offset}` : 'Finalizing search',
+        progress: 20 + Math.min(60, (totalFetched / Math.max(1, result.total)) * 60),
+        totalPapers: totalFetched
       });
 
       // Stop if no more results available
