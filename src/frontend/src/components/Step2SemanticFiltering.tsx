@@ -214,8 +214,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
 
   const handleDownloadLabeledCsv = async () => {
     try {
-      if (csvSessionId && filteredPapers.length > 0) {
-        // For CSV upload, download from local state
+      if (filteredPapers.length > 0) {
+        // Download from local filtered papers state (works for both CSV upload and Step 1 data)
         console.log('[Step2] Downloading CSV from local state:', filteredPapers.length, 'papers');
 
         // Convert papers to CSV
@@ -252,7 +252,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         downloadBlob(blob, 'papers-labeled.csv');
       } else if (sessionId) {
-        // For Step 1 data, download from server
+        // Fallback: try downloading from server (for backward compatibility or if filtering hasn't run)
+        console.log('[Step2] Attempting to download CSV from server for session:', sessionId);
         const blob = await sessionAPI.download(sessionId, 'csv');
         downloadBlob(blob, 'papers-labeled.csv');
       } else {

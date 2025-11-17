@@ -29,13 +29,13 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
 
   // Real-time timer that updates every second when search is running
   React.useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let intervalId: number | undefined;
 
     if (progress.status === 'running') {
       intervalId = setInterval(() => {
         const elapsed = Date.now() - searchStartTime;
         setRealtimeElapsed(elapsed);
-      }, 1000); // Update every second
+      }, 1000) as unknown as number; // Update every second
     } else {
       // When not running, use the progress value
       setRealtimeElapsed(progress.timeElapsed || 0);

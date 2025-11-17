@@ -23,9 +23,9 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
   const [maxResults, setMaxResults] = useState<string>('');
 
   // Prompts for Step 2 and Step 3 (stored here to pass via SearchParameters)
-  const [inclusionCriteriaPrompt, setInclusionCriteriaPrompt] = useState('The paper must have a scientific contribution by proposing a new approach that advance science, so papers that only implement the technology as use case are not allowed. The approach has to be applicable to mathematics, if it is a general computer science approach that is not specificly aplied to mathematics then misregard it.');
-  const [exclusionCriteriaPrompt, setExclusionCriteriaPrompt] = useState('Literature reviews of any kind are not allowed.');
-  const [latexGenerationPrompt, setLatexGenerationPrompt] = useState('');
+  const [inclusionCriteriaPrompt] = useState('The paper must have a scientific contribution by proposing a new approach that advance science, so papers that only implement the technology as use case are not allowed. The approach has to be applicable to mathematics, if it is a general computer science approach that is not specificly aplied to mathematics then misregard it.');
+  const [exclusionCriteriaPrompt] = useState('Literature reviews of any kind are not allowed.');
+  const [latexGenerationPrompt] = useState('');
 
   // Auto Mode - run all steps sequentially
   const [autoMode, setAutoMode] = useState(false);
