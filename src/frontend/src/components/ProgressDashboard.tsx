@@ -24,6 +24,29 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
 }) => {
   const [isDebugExpanded, setIsDebugExpanded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [realtimeElapsed, setRealtimeElapsed] = useState<number>(progress.timeElapsed || 0);
+  const [searchStartTime] = useState<number>(Date.now() - (progress.timeElapsed || 0));
+
+  // Real-time timer that updates every second when search is running
+  React.useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (progress.status === 'running') {
+      intervalId = setInterval(() => {
+        const elapsed = Date.now() - searchStartTime;
+        setRealtimeElapsed(elapsed);
+      }, 1000); // Update every second
+    } else {
+      // When not running, use the progress value
+      setRealtimeElapsed(progress.timeElapsed || 0);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [progress.status, progress.timeElapsed, searchStartTime]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -177,7 +200,7 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
           <div>
             <p className="text-xs text-gray-500">Time Elapsed</p>
             <p className="text-lg font-semibold text-gray-900">
-              {formatTime(progress.timeElapsed)}
+              {formatTime(realtimeElapsed)}
             </p>
           </div>
         </div>

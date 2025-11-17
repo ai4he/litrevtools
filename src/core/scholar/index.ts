@@ -287,12 +287,36 @@ export class ScholarExtractor {
             currentYear: year
           });
 
-          const result = await semanticScholar.search({
-            query: parameters.inclusionKeywords.join(' '),
-            year,
-            limit,
-            offset
-          });
+          const result = await semanticScholar.search(
+            {
+              query: parameters.inclusionKeywords.join(' '),
+              year,
+              limit,
+              offset
+            },
+            0, // retryCount
+            3, // maxRetries
+            (waitTimeMs: number, reason: string) => {
+              // onWaitStart callback - update progress to inform user of waiting
+              this.updateProgress({
+                currentTask: `⏸️  ${reason}`,
+                nextTask: `Will resume after waiting`,
+                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                currentYear: year,
+                totalPapers: totalFetched
+              });
+            },
+            () => {
+              // onWaitEnd callback - update progress to resume fetching
+              this.updateProgress({
+                currentTask: `Year ${year}: Fetching papers (offset ${offset}, got ${fetchedForYear} so far)`,
+                nextTask: `Processing batch of ${limit} papers`,
+                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                currentYear: year,
+                totalPapers: totalFetched
+              });
+            }
+          );
 
           // Detect stuck loops - if we get empty results repeatedly, stop
           if (result.papers.length === 0) {
@@ -681,12 +705,34 @@ export class ScholarExtractor {
         totalPapers: totalFetched
       });
 
-      const result = await semanticScholar.search({
-        query: parameters.inclusionKeywords.join(' '),
-        // No year filter - search all years
-        limit,
-        offset
-      });
+      const result = await semanticScholar.search(
+        {
+          query: parameters.inclusionKeywords.join(' '),
+          // No year filter - search all years
+          limit,
+          offset
+        },
+        0, // retryCount
+        3, // maxRetries
+        (waitTimeMs: number, reason: string) => {
+          // onWaitStart callback - update progress to inform user of waiting
+          this.updateProgress({
+            currentTask: `⏸️  ${reason}`,
+            nextTask: `Will resume after waiting`,
+            progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+            totalPapers: totalFetched
+          });
+        },
+        () => {
+          // onWaitEnd callback - update progress to resume fetching
+          this.updateProgress({
+            currentTask: `Fetching papers (offset ${offset}, got ${totalFetched} so far)`,
+            nextTask: `Processing batch of ${limit} papers`,
+            progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+            totalPapers: totalFetched
+          });
+        }
+      );
 
       // Detect stuck loops - if we get empty results repeatedly, stop
       if (result.papers.length === 0) {
