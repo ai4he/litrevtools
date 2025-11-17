@@ -287,6 +287,21 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
           <p className="text-xs text-gray-500 mt-1">
             Format: YYYY, YYYY-MM, or YYYY-MM-DD
           </p>
+          {/* Year suggestions */}
+          <div className="flex flex-wrap gap-2 mt-2">
+            <span className="text-sm text-gray-600">Suggestions:</span>
+            {['2022', '2023'].map((year) => (
+              <button
+                key={year}
+                type="button"
+                onClick={() => setStartDate(year)}
+                className="text-sm px-3 py-1 border border-gray-300 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                disabled={disabled}
+              >
+                {year}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <label className="label">End Date (optional)</label>
@@ -301,6 +316,21 @@ export const SearchForm: React.FC<SearchFormProps> = ({ onSubmit, disabled = fal
           <p className="text-xs text-gray-500 mt-1">
             Format: YYYY, YYYY-MM, or YYYY-MM-DD
           </p>
+          {/* Year suggestions */}
+          <div className="flex flex-wrap gap-2 mt-2">
+            <span className="text-sm text-gray-600">Suggestions:</span>
+            {['2022', '2023'].map((year) => (
+              <button
+                key={year}
+                type="button"
+                onClick={() => setEndDate(year)}
+                className="text-sm px-3 py-1 border border-gray-300 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                disabled={disabled}
+              >
+                {year}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

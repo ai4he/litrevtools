@@ -68,7 +68,13 @@ export class SemanticScholarService {
    * - Breaking your query into smaller, more specific searches
    * - Using the bulk search endpoint or Datasets API for large-scale data extraction
    */
-  async search(params: SemanticScholarSearchParams, retryCount: number = 0, maxRetries: number = 3): Promise<{
+  async search(
+    params: SemanticScholarSearchParams,
+    retryCount: number = 0,
+    maxRetries: number = 3,
+    onWaitStart?: (waitTimeMs: number, reason: string) => void,
+    onWaitEnd?: () => void
+  ): Promise<{
     papers: Paper[];
     total: number;
     hasMore: boolean;
@@ -81,7 +87,7 @@ export class SemanticScholarService {
     }
 
     // Rate limiting check
-    await this.checkRateLimit();
+    await this.checkRateLimit(onWaitStart, onWaitEnd);
 
     // Build query parameters
     const queryParams: any = {
@@ -145,8 +151,14 @@ export class SemanticScholarService {
         }
         const waitTime = 10000; // Wait 10 seconds (API should recover quickly)
         console.error(`Rate limit exceeded, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Rate limit exceeded (429), retrying in ${waitTime / 1000}s`);
+        }
         await this.delay(waitTime);
-        return this.search(params, retryCount + 1, maxRetries); // Retry with incremented count
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
+        return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd); // Retry with incremented count
       }
 
       // Handle timeout errors
@@ -303,7 +315,10 @@ export class SemanticScholarService {
    * We enforce the authenticated limit (1 RPS) when an API key is present.
    * For unauthenticated requests, we don't enforce delays (the shared 1000 RPS is sufficient).
    */
-  private async checkRateLimit(): Promise<void> {
+  private async checkRateLimit(
+    onWaitStart?: (waitTimeMs: number, reason: string) => void,
+    onWaitEnd?: () => void
+  ): Promise<void> {
     // Only enforce rate limiting for authenticated requests (1 RPS)
     if (this.config.apiKey) {
       const now = Date.now();
@@ -312,7 +327,13 @@ export class SemanticScholarService {
 
       if (timeSinceLastRequest < minDelay) {
         const waitTime = minDelay - timeSinceLastRequest;
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Rate limiting: Waiting ${Math.ceil(waitTime)}ms (authenticated API key, 1 req/sec limit)`);
+        }
         await this.delay(waitTime);
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
       }
 
       this.lastRequestTime = Date.now();
