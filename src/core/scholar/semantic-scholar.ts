@@ -168,9 +168,6 @@ export class SemanticScholarService {
         allPapers.push(...result.papers);
 
         console.log(`Year ${year}: Found ${result.papers.length} papers`);
-
-        // Small delay between year searches to be respectful
-        await this.delay(500);
       } catch (error: any) {
         console.error(`Error searching year ${year}:`, error.message);
         // Continue with other years
@@ -208,11 +205,6 @@ export class SemanticScholarService {
       offset += result.papers.length;
 
       console.log(`Progress: ${allPapers.length}/${Math.min(result.total, maxTotal)} papers`);
-
-      if (hasMore) {
-        // Small delay between pages
-        await this.delay(500);
-      }
     }
 
     return allPapers;
