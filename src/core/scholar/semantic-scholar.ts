@@ -53,9 +53,7 @@ interface SemanticScholarResponse {
 export class SemanticScholarService {
   private config: SemanticScholarConfig;
   private baseUrl: string;
-  private requestCount: number = 0;
-  private requestWindowStart: number = Date.now();
-  private readonly maxRequestsPer5Min = 4500; // Stay under 5000 limit
+  private lastRequestTime: number = 0;
 
   constructor(config: SemanticScholarConfig = {}) {
     this.config = config;
@@ -64,12 +62,24 @@ export class SemanticScholarService {
 
   /**
    * Search for papers using Semantic Scholar API
+   *
+   * IMPORTANT: The Semantic Scholar API has a hard limit of 1000 results per query
+   * (offset + limit ≤ 1000). If you need more results, consider:
+   * - Breaking your query into smaller, more specific searches
+   * - Using the bulk search endpoint or Datasets API for large-scale data extraction
    */
   async search(params: SemanticScholarSearchParams, retryCount: number = 0, maxRetries: number = 3): Promise<{
     papers: Paper[];
     total: number;
     hasMore: boolean;
   }> {
+    // Warn if trying to exceed the 1000-result limit
+    const requestedOffset = params.offset || 0;
+    const requestedLimit = params.limit || 100;
+    if (requestedOffset + requestedLimit > 1000) {
+      console.warn(`⚠️  WARNING: Semantic Scholar API limits results to 1000 per query. Requested offset (${requestedOffset}) + limit (${requestedLimit}) = ${requestedOffset + requestedLimit} exceeds this limit.`);
+    }
+
     // Rate limiting check
     await this.checkRateLimit();
 
@@ -114,8 +124,6 @@ export class SemanticScholarService {
         }
       );
 
-      this.requestCount++;
-
       const papers = response.data.data.map(paper => this.mapToPaper(paper));
 
       console.log(`Found ${papers.length} papers (${response.data.total} total available)`);
@@ -135,8 +143,9 @@ export class SemanticScholarService {
             hasMore: false
           };
         }
-        console.error(`Rate limit exceeded, waiting before retry... (attempt ${retryCount + 1}/${maxRetries})`);
-        await this.delay(60000); // Wait 1 minute
+        const waitTime = 10000; // Wait 10 seconds (API should recover quickly)
+        console.error(`Rate limit exceeded, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        await this.delay(waitTime);
         return this.search(params, retryCount + 1, maxRetries); // Retry with incremented count
       }
 
@@ -286,26 +295,29 @@ export class SemanticScholarService {
 
   /**
    * Check rate limit and wait if necessary
+   *
+   * Current Semantic Scholar API rate limits (as of 2024):
+   * - Unauthenticated: 1,000 requests/second (shared across all users)
+   * - Authenticated: 1 request/second (dedicated, per API key)
+   *
+   * We enforce the authenticated limit (1 RPS) when an API key is present.
+   * For unauthenticated requests, we don't enforce delays (the shared 1000 RPS is sufficient).
    */
   private async checkRateLimit(): Promise<void> {
-    const now = Date.now();
-    const windowElapsed = now - this.requestWindowStart;
+    // Only enforce rate limiting for authenticated requests (1 RPS)
+    if (this.config.apiKey) {
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      const minDelay = 1000; // 1 second = 1 RPS
 
-    // Reset counter every 5 minutes
-    if (windowElapsed >= 5 * 60 * 1000) {
-      this.requestCount = 0;
-      this.requestWindowStart = now;
-      return;
-    }
+      if (timeSinceLastRequest < minDelay) {
+        const waitTime = minDelay - timeSinceLastRequest;
+        await this.delay(waitTime);
+      }
 
-    // If approaching limit, wait until window resets
-    if (this.requestCount >= this.maxRequestsPer5Min) {
-      const waitTime = (5 * 60 * 1000) - windowElapsed;
-      console.log(`Rate limit approaching, waiting ${Math.ceil(waitTime / 1000)}s...`);
-      await this.delay(waitTime);
-      this.requestCount = 0;
-      this.requestWindowStart = Date.now();
+      this.lastRequestTime = Date.now();
     }
+    // For unauthenticated requests, no delay needed (1000 RPS shared is plenty)
   }
 
   /**
@@ -319,19 +331,21 @@ export class SemanticScholarService {
    * Get current rate limit status
    */
   getRateLimitStatus(): {
-    requestCount: number;
-    windowStart: Date;
-    windowElapsed: number;
-    remainingRequests: number;
+    authenticated: boolean;
+    rateLimit: string;
+    lastRequestTime: Date | null;
+    timeSinceLastRequest: number;
   } {
     const now = Date.now();
-    const windowElapsed = now - this.requestWindowStart;
+    const timeSinceLastRequest = this.lastRequestTime > 0 ? now - this.lastRequestTime : 0;
 
     return {
-      requestCount: this.requestCount,
-      windowStart: new Date(this.requestWindowStart),
-      windowElapsed,
-      remainingRequests: Math.max(0, this.maxRequestsPer5Min - this.requestCount)
+      authenticated: !!this.config.apiKey,
+      rateLimit: this.config.apiKey
+        ? '1 request/second (authenticated)'
+        : '1000 requests/second (shared, unauthenticated)',
+      lastRequestTime: this.lastRequestTime > 0 ? new Date(this.lastRequestTime) : null,
+      timeSinceLastRequest
     };
   }
 }

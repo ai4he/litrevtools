@@ -98,8 +98,8 @@ React + TypeScript + Tailwind CSS application built with Vite. Uses Socket.IO cl
 
 ### 1. Semantic Scholar API Integration
 
-- **Rate Limiting**: Automatic rate limit handling (4,500 requests per 5 minutes)
-- **Pagination**: Handles large result sets with automatic pagination
+- **Rate Limiting**: Automatic rate limit handling (1 RPS for authenticated, 1000 RPS shared for unauthenticated)
+- **Pagination**: Handles result sets up to 1000 papers per query (API hard limit)
 - **Retry Logic**: Automatic retry with exponential backoff on failures
 - **Rich Metadata**: Extracts title, authors, abstract, citations, venue, DOI, PDF links, etc.
 - **Real-time Progress**: Emits events via callbacks/WebSocket during extraction
@@ -302,7 +302,11 @@ See `docs/DEPLOYMENT.md` for detailed instructions.
 ## Important Notes
 
 - **API Rate Limits**:
-  - Semantic Scholar: 100 req/5min (no key), 5,000 req/5min (with API key)
+  - Semantic Scholar:
+    - Unauthenticated: 1,000 requests/second (shared across all users)
+    - Authenticated (with API key): 1 request/second (dedicated, per key)
+    - **Result limit**: Maximum 1,000 results per query (offset + limit ≤ 1000)
+    - For larger datasets, use bulk search endpoint or Datasets API
   - Gemini free tier: 60 req/min, 1,500 req/day - use multiple API keys for large reviews
 - **Database Migrations**: No migration system yet - schema changes require manual SQL or fresh database
 - **Frontend Proxy**: In dev mode, Vite proxy (port 5173) forwards to Express (port 3000)
