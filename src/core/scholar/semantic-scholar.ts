@@ -109,7 +109,8 @@ export class SemanticScholarService {
           params: queryParams,
           headers: this.config.apiKey ? {
             'x-api-key': this.config.apiKey
-          } : {}
+          } : {},
+          timeout: 30000 // 30 second timeout to prevent hanging
         }
       );
 
@@ -139,7 +140,28 @@ export class SemanticScholarService {
         return this.search(params, retryCount + 1, maxRetries); // Retry with incremented count
       }
 
-      console.error(`Semantic Scholar API error: ${error.message}`);
+      // Handle timeout errors
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        if (retryCount >= maxRetries) {
+          console.error(`Request timeout. Max retries (${maxRetries}) reached. Returning empty results.`);
+          return {
+            papers: [],
+            total: 0,
+            hasMore: false
+          };
+        }
+        console.error(`Request timeout, retrying... (attempt ${retryCount + 1}/${maxRetries})`);
+        await this.delay(5000); // Wait 5 seconds before retry
+        return this.search(params, retryCount + 1, maxRetries);
+      }
+
+      // Handle network errors
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        console.error(`Network error: ${error.message}. Check your internet connection.`);
+        throw new Error(`Network error: Cannot reach Semantic Scholar API. Please check your internet connection.`);
+      }
+
+      console.error(`Semantic Scholar API error: ${error.message}`, error.response?.data || '');
       throw new Error(`Semantic Scholar API error: ${error.message}`);
     }
   }
