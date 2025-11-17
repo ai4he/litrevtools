@@ -47,7 +47,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     'Literature reviews of any kind are not allowed.'
   );
   const [batchSize, setBatchSize] = useState(20);
-  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite-preview-09-2025' | 'gemini-2.5-flash-preview-09-2025'>('gemini-2.5-flash-lite-preview-09-2025');
+  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite' | 'gemini-2.5-flash'>('gemini-2.5-flash-lite');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -375,8 +375,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
                 onChange={(e) => setLlmModel(e.target.value as any)}
                 className="input-field w-full"
               >
-                <option value="gemini-2.5-flash-lite-preview-09-2025">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
-                <option value="gemini-2.5-flash-preview-09-2025">Gemini 2.5 Flash (More Capable)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Choose the Gemini model for semantic filtering. Flash Lite is faster and more efficient, Flash is more capable.
