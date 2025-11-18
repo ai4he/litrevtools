@@ -32,7 +32,7 @@
     "deploy:stop": "pm2 stop litrevtools-web",
     "deploy:logs": "pm2 logs litrevtools-web",
     "deploy:status": "pm2 list | grep litrevtools-web",
-    "deploy": "npm run build && npm run deploy:restart && npm run deploy:status"
+    "deploy": "npm run web:build && npm run deploy:restart && npm run deploy:status"
   },
   "keywords": [
     "prisma",
