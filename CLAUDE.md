@@ -156,7 +156,8 @@ SQLite database with tables:
 # AI/LLM Configuration
 GEMINI_API_KEY=your_gemini_api_key              # Single key
 GEMINI_API_KEYS=key1,key2,key3                  # Multiple keys (comma-separated)
-GEMINI_MODEL=gemini-2.0-flash-exp               # Default model
+GEMINI_MODEL=gemini-2.5-flash-lite              # Default model (tested 2025-11-18)
+                                                 # Alternative: gemini-2.5-flash (slower but more capable)
 PAPER_BATCH_SIZE=15                             # Papers per batch for iterative generation
 
 # Google OAuth (for web platform)

@@ -71,9 +71,35 @@ export class LitRevDatabase {
         category TEXT,
         llm_confidence REAL,
         llm_reasoning TEXT,
+        systematic_filtering_inclusion INTEGER,
+        systematic_filtering_inclusion_reasoning TEXT,
+        systematic_filtering_exclusion INTEGER,
+        systematic_filtering_exclusion_reasoning TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
     `);
+
+    // Add systematic_filtering columns to existing databases (migration)
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN systematic_filtering_inclusion INTEGER`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN systematic_filtering_inclusion_reasoning TEXT`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN systematic_filtering_exclusion INTEGER`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN systematic_filtering_exclusion_reasoning TEXT`);
+    } catch (e) {
+      // Column already exists
+    }
 
     // Original papers table (stores Step 1 papers before semantic filtering)
     this.db.exec(`
@@ -491,8 +517,10 @@ export class LitRevDatabase {
       INSERT OR REPLACE INTO papers (
         id, session_id, title, authors, year, abstract, url, citations,
         source, pdf_url, venue, doi, keywords, extracted_at, included,
-        exclusion_reason, category, llm_confidence, llm_reasoning
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        exclusion_reason, category, llm_confidence, llm_reasoning,
+        systematic_filtering_inclusion, systematic_filtering_inclusion_reasoning,
+        systematic_filtering_exclusion, systematic_filtering_exclusion_reasoning
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -514,7 +542,11 @@ export class LitRevDatabase {
       paper.exclusionReason || null,
       paper.category || null,
       paper.llmConfidence || null,
-      paper.llmReasoning || null
+      paper.llmReasoning || null,
+      paper.systematic_filtering_inclusion !== undefined ? (paper.systematic_filtering_inclusion ? 1 : 0) : null,
+      paper.systematic_filtering_inclusion_reasoning || null,
+      paper.systematic_filtering_exclusion !== undefined ? (paper.systematic_filtering_exclusion ? 1 : 0) : null,
+      paper.systematic_filtering_exclusion_reasoning || null
     );
 
     // Update session counts
@@ -831,7 +863,11 @@ export class LitRevDatabase {
       exclusionReason: row.exclusion_reason,
       category: row.category,
       llmConfidence: row.llm_confidence,
-      llmReasoning: row.llm_reasoning
+      llmReasoning: row.llm_reasoning,
+      systematic_filtering_inclusion: row.systematic_filtering_inclusion !== null ? (row.systematic_filtering_inclusion === 1) : undefined,
+      systematic_filtering_inclusion_reasoning: row.systematic_filtering_inclusion_reasoning,
+      systematic_filtering_exclusion: row.systematic_filtering_exclusion !== null ? (row.systematic_filtering_exclusion === 1) : undefined,
+      systematic_filtering_exclusion_reasoning: row.systematic_filtering_exclusion_reasoning
     };
   }
 

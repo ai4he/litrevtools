@@ -11,16 +11,16 @@ import { APIKeyManager } from './api-key-manager';
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
   private keyManager?: APIKeyManager;
-  private defaultModel = 'gemini-2.0-flash-exp'; // Stable model with better rate limits
+  private defaultModel = 'gemini-2.5-flash'; // Updated to working model (tested 2025-11-18)
   private modelName: string = this.defaultModel;
   private lastRequestTime: number = 0;
   private minRequestInterval: number = 1000; // Minimum 1 second between requests
 
   // Fallback models to try when primary model's quota is exhausted
+  // Updated 2025-11-18: Only using models verified as working via API tests
   private fallbackModels: string[] = [
-    'gemini-2.0-flash-exp',    // Primary: Stable with good rate limits
-    'gemini-2.5-flash',         // Fallback 1: Latest model, might have different quotas
-    'gemini-1.5-flash',         // Fallback 2: Proven stable, older version
+    'gemini-2.5-flash',         // Primary: Latest stable model with good rate limits
+    'gemini-2.5-flash-lite',    // Fallback 1: Lighter version, faster responses
   ];
   private currentModelIndex: number = 0;
   private hasTriedModelFallback: boolean = false;
