@@ -16,10 +16,30 @@ export class GeminiProvider extends BaseLLMProvider {
   private lastRequestTime: number = 0;
   private minRequestInterval: number = 1000; // Minimum 1 second between requests
 
+  // Fallback models to try when primary model's quota is exhausted
+  private fallbackModels: string[] = [
+    'gemini-2.0-flash-exp',    // Primary: Stable with good rate limits
+    'gemini-2.5-flash',         // Fallback 1: Latest model, might have different quotas
+    'gemini-1.5-flash',         // Fallback 2: Proven stable, older version
+  ];
+  private currentModelIndex: number = 0;
+  private hasTriedModelFallback: boolean = false;
+
   async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
     await super.initialize(apiKey, config);
 
     this.modelName = config?.model || this.defaultModel;
+
+    // Set up fallback models list with the configured model as primary
+    if (config?.model && config.model !== this.defaultModel) {
+      // If a custom model is specified, make it the primary and add others as fallbacks
+      this.fallbackModels = [
+        config.model,
+        ...this.fallbackModels.filter(m => m !== config.model)
+      ];
+    }
+    // Set current model to the first in the fallback list
+    this.modelName = this.fallbackModels[this.currentModelIndex];
 
     // Use provided key manager or API key
     if (config?.keyManager) {
@@ -41,6 +61,31 @@ export class GeminiProvider extends BaseLLMProvider {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: this.modelName });
+  }
+
+  /**
+   * Try to switch to the next fallback model
+   * Returns true if a new model is available, false if all models exhausted
+   */
+  private tryNextModel(): boolean {
+    if (this.currentModelIndex >= this.fallbackModels.length - 1) {
+      // All models exhausted
+      return false;
+    }
+
+    this.currentModelIndex++;
+    this.modelName = this.fallbackModels[this.currentModelIndex];
+    this.hasTriedModelFallback = true;
+
+    console.log(`[Model Fallback] Switching to model: ${this.modelName} (attempt ${this.currentModelIndex + 1}/${this.fallbackModels.length})`);
+
+    // Reset all rate-limited keys when switching models (different models have different quotas)
+    if (this.keyManager) {
+      this.keyManager.resetRateLimitedKeys();
+      console.log('[Model Fallback] Reset all API keys for new model');
+    }
+
+    return true;
   }
 
   async request(prompt: string, temperature: number = 0.3): Promise<string> {
@@ -75,6 +120,11 @@ export class GeminiProvider extends BaseLLMProvider {
           this.keyManager.markSuccess();
         }
 
+        // Log successful model usage (only when using fallback)
+        if (this.hasTriedModelFallback) {
+          console.log(`[Model Fallback] Successfully using fallback model: ${this.modelName}`);
+        }
+
         return text;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
@@ -92,17 +142,25 @@ export class GeminiProvider extends BaseLLMProvider {
 
           // Check if we have more keys to try
           if (!this.keyManager.hasAvailableKeys()) {
-            // No more keys available
-            if (isRateLimitError && attempt < maxAttempts - 1) {
-              // For rate limit errors, wait longer before final retry
-              const backoffDelay = Math.min(120000, Math.pow(2, attempt) * 5000); // Max 2 minutes
-              console.log(`All keys rate limited. Waiting ${backoffDelay / 1000}s before retry ${attempt + 1}/${maxAttempts}`);
-              await this.delay(backoffDelay);
-              // Try to reset rate limited keys that may have recovered
-              this.keyManager.resetRateLimitedKeys();
-              continue;
+            // No more keys available for current model
+            if (isRateLimitError) {
+              // Try switching to a fallback model
+              if (this.tryNextModel()) {
+                console.log(`[Model Fallback] All keys exhausted for current model. Retrying with ${this.modelName}`);
+                // Reset attempt counter for new model
+                attempt = -1; // Will be incremented to 0 in next iteration
+                continue;
+              } else if (attempt < maxAttempts - 1) {
+                // All models exhausted, try waiting before final retry
+                const backoffDelay = Math.min(120000, Math.pow(2, attempt) * 5000); // Max 2 minutes
+                console.log(`All models and keys exhausted. Waiting ${backoffDelay / 1000}s before final retry ${attempt + 1}/${maxAttempts}`);
+                await this.delay(backoffDelay);
+                // Reset all keys across all models for final attempt
+                this.keyManager.resetRateLimitedKeys();
+                continue;
+              }
             }
-            throw new Error(`Gemini API request failed - all keys exhausted: ${this.sanitizeError(lastError.message)}`);
+            throw new Error(`Gemini API request failed - all keys and models exhausted: ${this.sanitizeError(lastError.message)}`);
           }
 
           // Exponential backoff with jitter for retries
@@ -151,19 +209,37 @@ export class GeminiProvider extends BaseLLMProvider {
     // Remove internal details and stack traces
     const cleanMessage = message.split('\n')[0];
 
+    const modelInfo = this.hasTriedModelFallback
+      ? ` (Tried models: ${this.fallbackModels.slice(0, this.currentModelIndex + 1).join(', ')})`
+      : '';
+
     if (cleanMessage.toLowerCase().includes('429') || cleanMessage.toLowerCase().includes('rate limit')) {
-      return 'Rate limit exceeded. Please wait and try again, or add more API keys.';
+      return `Rate limit exceeded${modelInfo}. Please wait and try again, or add more API keys.`;
     }
 
     if (cleanMessage.toLowerCase().includes('quota')) {
-      return 'API quota exceeded. Please check your API key limits or add more keys.';
+      return `API quota exceeded${modelInfo}. Please check your API key limits or add more keys.`;
     }
 
     if (cleanMessage.toLowerCase().includes('resource has been exhausted')) {
-      return 'API resource exhausted. Rate limit reached.';
+      return `API resource exhausted${modelInfo}. Rate limit reached.`;
     }
 
     return cleanMessage;
+  }
+
+  /**
+   * Get the current model name being used
+   */
+  getCurrentModel(): string {
+    return this.modelName;
+  }
+
+  /**
+   * Get list of all available fallback models
+   */
+  getAvailableModels(): string[] {
+    return [...this.fallbackModels];
   }
 
   async batchRequest(
@@ -220,7 +296,8 @@ export class GeminiProvider extends BaseLLMProvider {
         const baseDelayPerRequest = 4000;
         const delayMs = Math.max(2000, baseDelayPerRequest / Math.max(1, keyCount));
 
-        console.log(`Batch ${Math.floor(i / batchSize) + 1} complete. Waiting ${Math.round(delayMs / 1000)}s before next batch (${keyCount} active keys)`);
+        const modelInfo = this.hasTriedModelFallback ? ` [Using: ${this.modelName}]` : '';
+        console.log(`Batch ${Math.floor(i / batchSize) + 1} complete${modelInfo}. Waiting ${Math.round(delayMs / 1000)}s before next batch (${keyCount} active keys)`);
         await this.delay(delayMs);
       }
     }
