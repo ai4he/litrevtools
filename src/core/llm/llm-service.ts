@@ -379,15 +379,14 @@ export class LLMService {
 
   /**
    * Process batch requests with concurrent batch handling
+   * Now supports true parallel processing across all available API keys
    */
   private async processBatchRequests(requests: LLMRequest[]): Promise<LLMResponse[]> {
     if (!this.provider) {
       throw new Error('LLM provider not initialized');
     }
 
-    const allResponses: LLMResponse[] = [];
     const batchSize = this.config.batchSize;
-    const maxConcurrent = this.config.maxConcurrentBatches;
 
     // Split into batches
     const batches: LLMRequest[][] = [];
@@ -395,23 +394,25 @@ export class LLMService {
       batches.push(requests.slice(i, i + batchSize));
     }
 
-    // Process batches with concurrency control
-    for (let i = 0; i < batches.length; i += maxConcurrent) {
-      const concurrentBatches = batches.slice(i, i + maxConcurrent);
+    const availableKeyCount = this.keyManager?.getAllAvailableKeys().length || 1;
+    console.log(`[Parallel LLM] Processing ${requests.length} requests in ${batches.length} batches using ${availableKeyCount} API keys in parallel`);
 
-      const batchPromises = concurrentBatches.map(batch =>
-        this.provider!.batchRequest(batch, this.config.temperature)
-      );
+    // Process ALL batches in parallel - the GeminiProvider will distribute requests across keys
+    const batchPromises = batches.map(batch =>
+      this.provider!.batchRequest(batch, this.config.temperature)
+    );
 
-      const batchResults = await Promise.all(batchPromises);
-      allResponses.push(...batchResults.flat());
-    }
+    const batchResults = await Promise.all(batchPromises);
+    const allResponses = batchResults.flat();
+
+    console.log(`[Parallel LLM] Completed processing ${allResponses.length} requests`);
 
     return allResponses;
   }
 
   /**
    * Process batch requests with progress tracking
+   * Now supports true parallel processing across all available API keys
    */
   private async processBatchRequestsWithProgress(
     requests: LLMRequest[],
@@ -424,9 +425,7 @@ export class LLMService {
       throw new Error('LLM provider not initialized');
     }
 
-    const allResponses: LLMResponse[] = [];
     const batchSize = this.config.batchSize;
-    const maxConcurrent = this.config.maxConcurrentBatches;
 
     // Split into batches
     const batches: LLMRequest[][] = [];
@@ -435,62 +434,72 @@ export class LLMService {
     }
 
     const totalBatches = batches.length;
-    let processedPapers = 0;
+    const availableKeyCount = this.keyManager?.getAllAvailableKeys().length || 1;
 
-    // Process batches with concurrency control and progress tracking
-    for (let i = 0; i < batches.length; i += maxConcurrent) {
-      const concurrentBatches = batches.slice(i, i + maxConcurrent);
-      const currentBatchIndex = i / maxConcurrent + 1;
+    console.log(`[Parallel LLM] Processing ${requests.length} papers in ${totalBatches} batches using ${availableKeyCount} API keys in parallel`);
 
-      // Calculate progress
-      const timeElapsed = Date.now() - startTime;
-      const papersPerMs = processedPapers > 0 ? processedPapers / timeElapsed : 0;
-      const remainingPapers = totalPapers - processedPapers;
-      const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
+    // Report initial progress
+    if (progressCallback) {
+      progressCallback({
+        phase,
+        totalPapers,
+        processedPapers: 0,
+        currentBatch: 1,
+        totalBatches,
+        papersInCurrentBatch: requests.length,
+        timeElapsed: Date.now() - startTime,
+        estimatedTimeRemaining: 0
+      });
+    }
 
-      // Report progress before processing
-      if (progressCallback) {
-        progressCallback({
-          phase,
-          totalPapers,
-          processedPapers,
-          currentBatch: Math.floor(i / maxConcurrent) + 1,
-          totalBatches: Math.ceil(batches.length / maxConcurrent),
-          papersInCurrentBatch: concurrentBatches.reduce((sum, batch) => sum + batch.length, 0),
-          timeElapsed,
-          estimatedTimeRemaining
-        });
-      }
+    // Process ALL batches in parallel - the GeminiProvider will distribute requests across keys
+    const batchPromises = batches.map((batch, batchIndex) =>
+      this.provider!.batchRequest(batch, this.config.temperature).then(results => {
+        // Log completion of each batch
+        const completedCount = (batchIndex + 1) * batchSize;
+        const timeElapsed = Date.now() - startTime;
+        const papersPerMs = completedCount / timeElapsed;
+        const remainingPapers = totalPapers - completedCount;
+        const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
 
-      // Process concurrent batches
-      const batchPromises = concurrentBatches.map(batch =>
-        this.provider!.batchRequest(batch, this.config.temperature)
-      );
+        console.log(`[Parallel LLM] Batch ${batchIndex + 1}/${totalBatches} completed (${results.length} papers)`);
 
-      const batchResults = await Promise.all(batchPromises);
-      allResponses.push(...batchResults.flat());
+        // Report progress for this batch completion
+        if (progressCallback) {
+          progressCallback({
+            phase,
+            totalPapers,
+            processedPapers: Math.min(completedCount, totalPapers),
+            currentBatch: batchIndex + 1,
+            totalBatches,
+            papersInCurrentBatch: 0, // Batch completed
+            timeElapsed,
+            estimatedTimeRemaining
+          });
+        }
 
-      // Update processed count
-      processedPapers += concurrentBatches.reduce((sum, batch) => sum + batch.length, 0);
+        return results;
+      })
+    );
 
-      // Report progress after processing
-      if (progressCallback) {
-        const newTimeElapsed = Date.now() - startTime;
-        const newPapersPerMs = processedPapers / newTimeElapsed;
-        const newRemainingPapers = totalPapers - processedPapers;
-        const newEstimatedTimeRemaining = newPapersPerMs > 0 ? Math.round(newRemainingPapers / newPapersPerMs) : 0;
+    // Wait for all batches to complete
+    const batchResults = await Promise.all(batchPromises);
+    const allResponses = batchResults.flat();
 
-        progressCallback({
-          phase,
-          totalPapers,
-          processedPapers,
-          currentBatch: Math.floor(i / maxConcurrent) + 1,
-          totalBatches: Math.ceil(batches.length / maxConcurrent),
-          papersInCurrentBatch: 0, // Batch completed
-          timeElapsed: newTimeElapsed,
-          estimatedTimeRemaining: newEstimatedTimeRemaining
-        });
-      }
+    console.log(`[Parallel LLM] All ${totalBatches} batches completed. Processed ${allResponses.length} papers.`);
+
+    // Report final progress
+    if (progressCallback) {
+      progressCallback({
+        phase,
+        totalPapers,
+        processedPapers: totalPapers,
+        currentBatch: totalBatches,
+        totalBatches,
+        papersInCurrentBatch: 0,
+        timeElapsed: Date.now() - startTime,
+        estimatedTimeRemaining: 0
+      });
     }
 
     return allResponses;

@@ -50,10 +50,11 @@ export class GeminiProvider extends BaseLLMProvider {
   }
 
   /**
-   * Get a model instance with the current API key
+   * Get a model instance with the specified API key
+   * @param specificKey Optional specific API key to use (for parallel processing)
    */
-  private getModel(): GenerativeModel {
-    const apiKey = this.keyManager?.getCurrentKey() || this.apiKey;
+  private getModel(specificKey?: string): GenerativeModel {
+    const apiKey = specificKey || this.keyManager?.getCurrentKey() || this.apiKey;
 
     if (!apiKey) {
       throw new Error('No API key available');
@@ -88,16 +89,20 @@ export class GeminiProvider extends BaseLLMProvider {
     return true;
   }
 
-  async request(prompt: string, temperature: number = 0.3): Promise<string> {
+  async request(prompt: string, temperature: number = 0.3, specificKey?: string): Promise<string> {
     let lastError: Error | null = null;
     const maxAttempts = 5; // Increased from 3 to 5
+    const usingSpecificKey = !!specificKey;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        // Rate limiting: ensure minimum interval between requests
-        await this.respectRateLimit();
+        // Rate limiting: ensure minimum interval between requests (only when not using specific key)
+        // When using specific keys, each key has its own rate limit
+        if (!usingSpecificKey) {
+          await this.respectRateLimit();
+        }
 
-        const model = this.getModel();
+        const model = this.getModel(specificKey);
 
         const result = await model.generateContent({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -117,7 +122,11 @@ export class GeminiProvider extends BaseLLMProvider {
 
         // Mark key as successful
         if (this.keyManager) {
-          this.keyManager.markSuccess();
+          if (specificKey) {
+            this.keyManager.markKeySuccess(specificKey);
+          } else {
+            this.keyManager.markSuccess();
+          }
         }
 
         // Log successful model usage (only when using fallback)
@@ -138,7 +147,17 @@ export class GeminiProvider extends BaseLLMProvider {
 
         // Handle error and rotate key if available
         if (this.keyManager) {
-          await this.keyManager.handleError(error);
+          // Track error for the specific key if provided
+          if (specificKey) {
+            await this.keyManager.handleKeyError(specificKey, error);
+          } else {
+            await this.keyManager.handleError(error);
+          }
+
+          // For specific keys, fail fast (don't retry with different keys)
+          if (usingSpecificKey) {
+            throw new Error(`Gemini API request failed with specific key: ${this.sanitizeError(lastError.message)}`);
+          }
 
           // Check if we have more keys to try
           if (!this.keyManager.hasAvailableKeys()) {
@@ -246,60 +265,55 @@ export class GeminiProvider extends BaseLLMProvider {
     requests: LLMRequest[],
     temperature: number = 0.3
   ): Promise<LLMResponse[]> {
-    const responses: LLMResponse[] = [];
+    // Get all available API keys for parallel processing
+    const availableKeys = this.keyManager?.getAllAvailableKeys() || [];
+    const usingParallelKeys = availableKeys.length > 1;
 
-    // Reduced batch size to avoid overwhelming the API
-    // Process sequentially to better handle rate limits
-    const batchSize = 3; // Reduced from 10 to 3 for better rate limit handling
+    if (usingParallelKeys) {
+      console.log(`[Parallel LLM] Processing ${requests.length} requests across ${availableKeys.length} API keys in parallel`);
+    }
 
-    for (let i = 0; i < requests.length; i += batchSize) {
-      const batch = requests.slice(i, i + batchSize);
+    // Process all requests in parallel, distributing across available keys
+    const requestPromises = requests.map(async (req, index) => {
+      try {
+        // Distribute requests across available keys using round-robin
+        const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
 
-      const batchPromises = batch.map(async (req) => {
-        try {
-          const text = await this.request(req.prompt, temperature);
-
-          // Parse the response based on task type
-          const result = this.parseResponse(text, req.taskType);
-
-          return {
-            id: req.id,
-            taskType: req.taskType,
-            result,
-            confidence: this.extractConfidence(text),
-            tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
-          } as LLMResponse;
-        } catch (error) {
-          // Return graceful error response
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`Error processing request ${req.id}:`, errorMessage);
-
-          return {
-            id: req.id,
-            taskType: req.taskType,
-            result: null,
-            error: this.sanitizeError(errorMessage)
-          } as LLMResponse;
+        if (specificKey && index < availableKeys.length) {
+          console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
         }
-      });
 
-      const batchResults = await Promise.all(batchPromises);
-      responses.push(...batchResults);
+        const text = await this.request(req.prompt, temperature, specificKey);
 
-      // Longer delay between batches to avoid rate limits
-      // Gemini free tier: 15 RPM (requests per minute) = 1 request per 4 seconds
-      // With multiple keys, we can process faster
-      if (i + batchSize < requests.length) {
-        const keyCount = this.keyManager?.getActiveKeyCount() || 1;
-        // Base delay: 4 seconds per request, scaled by number of active keys
-        // With 1 key: ~4s, with 3 keys: ~1.5s, with 5 keys: ~1s
-        const baseDelayPerRequest = 4000;
-        const delayMs = Math.max(2000, baseDelayPerRequest / Math.max(1, keyCount));
+        // Parse the response based on task type
+        const result = this.parseResponse(text, req.taskType);
 
-        const modelInfo = this.hasTriedModelFallback ? ` [Using: ${this.modelName}]` : '';
-        console.log(`Batch ${Math.floor(i / batchSize) + 1} complete${modelInfo}. Waiting ${Math.round(delayMs / 1000)}s before next batch (${keyCount} active keys)`);
-        await this.delay(delayMs);
+        return {
+          id: req.id,
+          taskType: req.taskType,
+          result,
+          confidence: this.extractConfidence(text),
+          tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
+        } as LLMResponse;
+      } catch (error) {
+        // Return graceful error response
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error processing request ${req.id}:`, errorMessage);
+
+        return {
+          id: req.id,
+          taskType: req.taskType,
+          result: null,
+          error: this.sanitizeError(errorMessage)
+        } as LLMResponse;
       }
+    });
+
+    // Wait for all requests to complete in parallel
+    const responses = await Promise.all(requestPromises);
+
+    if (usingParallelKeys) {
+      console.log(`[Parallel LLM] Completed ${responses.length} requests using ${availableKeys.length} keys in parallel`);
     }
 
     return responses;

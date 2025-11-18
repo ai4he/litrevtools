@@ -73,6 +73,108 @@ export class APIKeyManager {
   }
 
   /**
+   * Get all currently available API keys for parallel processing
+   * Returns an array of active keys that can be used simultaneously
+   */
+  getAllAvailableKeys(): string[] {
+    const availableKeys: string[] = [];
+
+    for (const keyInfo of this.keys) {
+      // Include active keys
+      if (keyInfo.status === 'active') {
+        availableKeys.push(keyInfo.key);
+        continue;
+      }
+
+      // Check if rate-limited keys have recovered
+      if (keyInfo.status === 'rate_limited' &&
+          keyInfo.rateLimitResetAt &&
+          keyInfo.rateLimitResetAt <= new Date()) {
+        keyInfo.status = 'active';
+        keyInfo.errorCount = 0;
+        availableKeys.push(keyInfo.key);
+      }
+    }
+
+    return availableKeys;
+  }
+
+  /**
+   * Get a specific API key by round-robin distribution
+   * Useful for distributing requests across all available keys
+   * @param index The request index (will be mapped to a key using modulo)
+   */
+  getKeyByIndex(index: number): string | null {
+    const availableKeys = this.getAllAvailableKeys();
+
+    if (availableKeys.length === 0) {
+      return null;
+    }
+
+    // Use modulo to distribute requests evenly across available keys
+    const keyIndex = index % availableKeys.length;
+    return availableKeys[keyIndex];
+  }
+
+  /**
+   * Mark a specific API key as successfully used
+   * @param apiKey The API key that was used successfully
+   */
+  markKeySuccess(apiKey: string): void {
+    const keyInfo = this.keys.find(k => k.key === apiKey);
+    if (!keyInfo) return;
+
+    keyInfo.lastUsed = new Date();
+    keyInfo.requestCount++;
+    keyInfo.errorCount = 0;
+
+    // If key was in error state, mark as active again
+    if (keyInfo.status !== 'quota_exceeded' && keyInfo.status !== 'invalid') {
+      keyInfo.status = 'active';
+    }
+  }
+
+  /**
+   * Handle error for a specific API key
+   * @param apiKey The API key that encountered an error
+   * @param error The error that occurred
+   */
+  async handleKeyError(apiKey: string, error: any): Promise<void> {
+    const keyInfo = this.keys.find(k => k.key === apiKey);
+    if (!keyInfo) return;
+
+    keyInfo.errorCount++;
+    keyInfo.lastUsed = new Date();
+
+    // Determine error type
+    const errorMessage = error?.message?.toLowerCase() || '';
+
+    if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+      keyInfo.status = 'rate_limited';
+      // Gemini rate limits typically reset every minute
+      // Set conservative reset time of 90 seconds to be safe
+      keyInfo.rateLimitResetAt = new Date(Date.now() + 90000);
+      console.log(`Key ${keyInfo.label} rate limited, will reset at ${keyInfo.rateLimitResetAt.toISOString()}`);
+    } else if (errorMessage.includes('quota') || errorMessage.includes('exceeded')) {
+      keyInfo.status = 'quota_exceeded';
+      // Quota exceeded might need longer to reset (could be daily quota)
+      keyInfo.rateLimitResetAt = new Date(Date.now() + 3600000); // 1 hour
+      console.log(`Key ${keyInfo.label} quota exceeded, will reset at ${keyInfo.rateLimitResetAt.toISOString()}`);
+    } else if (errorMessage.includes('invalid') || errorMessage.includes('unauthorized') || errorMessage.includes('401')) {
+      keyInfo.status = 'invalid';
+      console.log(`Key ${keyInfo.label} marked as invalid`);
+    } else {
+      keyInfo.status = 'error';
+      console.log(`Key ${keyInfo.label} encountered error (count: ${keyInfo.errorCount})`);
+
+      // Only mark as unusable if error count exceeds threshold
+      if (keyInfo.errorCount >= 3) {
+        console.log(`Key ${keyInfo.label} disabled due to repeated errors`);
+      }
+    }
+  }
+
+  /**
    * Mark current key as having an error and rotate if needed
    */
   async handleError(error: any): Promise<void> {
