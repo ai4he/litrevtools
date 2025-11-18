@@ -87,14 +87,18 @@ export class APIKeyManager {
 
     if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
       currentKey.status = 'rate_limited';
-      // Estimate reset time (usually 60 seconds for most APIs)
-      currentKey.rateLimitResetAt = new Date(Date.now() + 60000);
+      // Gemini rate limits typically reset every minute
+      // Set conservative reset time of 90 seconds to be safe
+      currentKey.rateLimitResetAt = new Date(Date.now() + 90000);
 
       if (this.enableRotation) {
         await this.rotateToNextKey();
       }
     } else if (errorMessage.includes('quota') || errorMessage.includes('exceeded')) {
       currentKey.status = 'quota_exceeded';
+      // Quota exceeded might need longer to reset (could be daily quota)
+      // Mark for manual review
+      currentKey.rateLimitResetAt = new Date(Date.now() + 3600000); // 1 hour
 
       if (this.enableRotation) {
         await this.rotateToNextKey();

@@ -11,8 +11,10 @@ import { APIKeyManager } from './api-key-manager';
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
   private keyManager?: APIKeyManager;
-  private defaultModel = 'gemini-2.5-flash'; // Fast and cost-effective for batch processing
+  private defaultModel = 'gemini-2.0-flash-exp'; // Stable model with better rate limits
   private modelName: string = this.defaultModel;
+  private lastRequestTime: number = 0;
+  private minRequestInterval: number = 1000; // Minimum 1 second between requests
 
   async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
     await super.initialize(apiKey, config);
@@ -43,10 +45,13 @@ export class GeminiProvider extends BaseLLMProvider {
 
   async request(prompt: string, temperature: number = 0.3): Promise<string> {
     let lastError: Error | null = null;
-    const maxAttempts = 3;
+    const maxAttempts = 5; // Increased from 3 to 5
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
+        // Rate limiting: ensure minimum interval between requests
+        await this.respectRateLimit();
+
         const model = this.getModel();
 
         const result = await model.generateContent({
@@ -73,6 +78,13 @@ export class GeminiProvider extends BaseLLMProvider {
         return text;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
+        const errorMessage = lastError.message.toLowerCase();
+
+        // Determine if this is a rate limit error
+        const isRateLimitError = errorMessage.includes('rate limit') ||
+                                  errorMessage.includes('429') ||
+                                  errorMessage.includes('quota') ||
+                                  errorMessage.includes('resource has been exhausted');
 
         // Handle error and rotate key if available
         if (this.keyManager) {
@@ -80,19 +92,78 @@ export class GeminiProvider extends BaseLLMProvider {
 
           // Check if we have more keys to try
           if (!this.keyManager.hasAvailableKeys()) {
-            throw new Error(`Gemini API request failed - all keys exhausted: ${lastError.message}`);
+            // No more keys available
+            if (isRateLimitError && attempt < maxAttempts - 1) {
+              // For rate limit errors, wait longer before final retry
+              const backoffDelay = Math.min(120000, Math.pow(2, attempt) * 5000); // Max 2 minutes
+              console.log(`All keys rate limited. Waiting ${backoffDelay / 1000}s before retry ${attempt + 1}/${maxAttempts}`);
+              await this.delay(backoffDelay);
+              // Try to reset rate limited keys that may have recovered
+              this.keyManager.resetRateLimitedKeys();
+              continue;
+            }
+            throw new Error(`Gemini API request failed - all keys exhausted: ${this.sanitizeError(lastError.message)}`);
           }
 
-          // Wait a bit before retry
-          await this.delay(1000 * (attempt + 1));
+          // Exponential backoff with jitter for retries
+          const baseDelay = isRateLimitError ? 5000 : 2000; // Longer delay for rate limits
+          const exponentialDelay = Math.pow(2, attempt) * baseDelay;
+          const jitter = Math.random() * 1000; // Random jitter up to 1 second
+          const totalDelay = Math.min(30000, exponentialDelay + jitter); // Max 30 seconds
+
+          console.log(`Retry attempt ${attempt + 1}/${maxAttempts} after ${Math.round(totalDelay / 1000)}s`);
+          await this.delay(totalDelay);
         } else {
-          // No key manager, throw immediately
-          throw new Error(`Gemini API request failed: ${lastError.message}`);
+          // No key manager, use exponential backoff and retry
+          if (isRateLimitError && attempt < maxAttempts - 1) {
+            const backoffDelay = Math.min(60000, Math.pow(2, attempt) * 5000);
+            console.log(`Rate limited. Waiting ${backoffDelay / 1000}s before retry ${attempt + 1}/${maxAttempts}`);
+            await this.delay(backoffDelay);
+            continue;
+          }
+          throw new Error(`Gemini API request failed: ${this.sanitizeError(lastError.message)}`);
         }
       }
     }
 
-    throw new Error(`Gemini API request failed after ${maxAttempts} attempts: ${lastError?.message || 'Unknown error'}`);
+    throw new Error(`Gemini API request failed after ${maxAttempts} attempts: ${this.sanitizeError(lastError?.message || 'Unknown error')}`);
+  }
+
+  /**
+   * Respect rate limiting by ensuring minimum interval between requests
+   */
+  private async respectRateLimit(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      await this.delay(waitTime);
+    }
+
+    this.lastRequestTime = Date.now();
+  }
+
+  /**
+   * Sanitize error messages to make them more user-friendly
+   */
+  private sanitizeError(message: string): string {
+    // Remove internal details and stack traces
+    const cleanMessage = message.split('\n')[0];
+
+    if (cleanMessage.toLowerCase().includes('429') || cleanMessage.toLowerCase().includes('rate limit')) {
+      return 'Rate limit exceeded. Please wait and try again, or add more API keys.';
+    }
+
+    if (cleanMessage.toLowerCase().includes('quota')) {
+      return 'API quota exceeded. Please check your API key limits or add more keys.';
+    }
+
+    if (cleanMessage.toLowerCase().includes('resource has been exhausted')) {
+      return 'API resource exhausted. Rate limit reached.';
+    }
+
+    return cleanMessage;
   }
 
   async batchRequest(
@@ -101,8 +172,10 @@ export class GeminiProvider extends BaseLLMProvider {
   ): Promise<LLMResponse[]> {
     const responses: LLMResponse[] = [];
 
-    // Process requests in parallel with rate limiting
-    const batchSize = 10; // Gemini has generous rate limits
+    // Reduced batch size to avoid overwhelming the API
+    // Process sequentially to better handle rate limits
+    const batchSize = 3; // Reduced from 10 to 3 for better rate limit handling
+
     for (let i = 0; i < requests.length; i += batchSize) {
       const batch = requests.slice(i, i + batchSize);
 
@@ -121,11 +194,15 @@ export class GeminiProvider extends BaseLLMProvider {
             tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
           } as LLMResponse;
         } catch (error) {
+          // Return graceful error response
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          console.error(`Error processing request ${req.id}:`, errorMessage);
+
           return {
             id: req.id,
             taskType: req.taskType,
             result: null,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: this.sanitizeError(errorMessage)
           } as LLMResponse;
         }
       });
@@ -133,12 +210,17 @@ export class GeminiProvider extends BaseLLMProvider {
       const batchResults = await Promise.all(batchPromises);
       responses.push(...batchResults);
 
-      // Delay between batches to respect rate limits
-      // With key rotation (multiple API keys), we can process faster
-      // Each key supports 15 RPM, so with N keys we get N * 15 RPM
+      // Longer delay between batches to avoid rate limits
+      // Gemini free tier: 15 RPM (requests per minute) = 1 request per 4 seconds
+      // With multiple keys, we can process faster
       if (i + batchSize < requests.length) {
         const keyCount = this.keyManager?.getActiveKeyCount() || 1;
-        const delayMs = Math.max(1000, 5000 / keyCount); // Scale delay by number of keys, min 1s
+        // Base delay: 4 seconds per request, scaled by number of active keys
+        // With 1 key: ~4s, with 3 keys: ~1.5s, with 5 keys: ~1s
+        const baseDelayPerRequest = 4000;
+        const delayMs = Math.max(2000, baseDelayPerRequest / Math.max(1, keyCount));
+
+        console.log(`Batch ${Math.floor(i / batchSize) + 1} complete. Waiting ${Math.round(delayMs / 1000)}s before next batch (${keyCount} active keys)`);
         await this.delay(delayMs);
       }
     }
