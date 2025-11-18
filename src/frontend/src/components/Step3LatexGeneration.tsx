@@ -67,7 +67,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [outputsGenerated, setOutputsGenerated] = useState(false);
-  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite-preview-09-2025' | 'gemini-2.5-flash-preview-09-2025'>('gemini-2.5-flash-lite-preview-09-2025');
+  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite' | 'gemini-2.5-flash'>('gemini-2.5-flash-lite');
   const [batchSize, setBatchSize] = useState(15);
   const { socket } = useSocket();
 
@@ -323,8 +323,8 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
                 onChange={(e) => setLlmModel(e.target.value as any)}
                 className="input-field w-full"
               >
-                <option value="gemini-2.5-flash-lite-preview-09-2025">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
-                <option value="gemini-2.5-flash-preview-09-2025">Gemini 2.5 Flash (More Capable)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Choose the Gemini model for LaTeX generation. Flash Lite is faster and more efficient, Flash is more capable.
