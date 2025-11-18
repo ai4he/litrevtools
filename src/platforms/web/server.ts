@@ -339,7 +339,7 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
     const llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
-      model: model || 'gemini-2.0-flash-exp', // Use specified model or default
+      model: model || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite', // Use specified model, env var, or working default
       batchSize: batchSize || 20, // Use configurable batch size, default to 20
       maxConcurrentBatches: 5,
       timeout: 30000,
