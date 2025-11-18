@@ -47,7 +47,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     'Literature reviews of any kind are not allowed.'
   );
   const [batchSize, setBatchSize] = useState(20);
-  const [llmModel, setLlmModel] = useState<'gemini-2.0-flash-exp' | 'gemini-2.5-flash'>('gemini-2.0-flash-exp');
+  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('gemini-2.5-flash-lite');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -375,11 +375,12 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
                 onChange={(e) => setLlmModel(e.target.value as any)}
                 className="input-field w-full"
               >
-                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental (Default - Stable & Reliable)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Latest, More Capable)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
+                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental (Legacy - Not Recommended)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Choose the Gemini model for semantic filtering. 2.0 Flash Experimental has better rate limits and stability. 2.5 Flash is the latest model with more advanced capabilities.
+                Choose the Gemini model for semantic filtering. 2.5 Flash Lite is the default (faster, tested and working). 2.5 Flash has more advanced capabilities. Avoid 2.0 models (deprecated).
               </p>
             </div>
 
