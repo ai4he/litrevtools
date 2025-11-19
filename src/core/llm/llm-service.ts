@@ -380,6 +380,10 @@ export class LLMService {
   /**
    * Process batch requests with concurrent batch handling
    * Now supports true parallel processing across all available API keys
+   *
+   * NOTE: This parallel processing is used ONLY for Step 2 (Semantic Filtering).
+   * Step 3 (Paper Generation) uses sequential processing because each iteration
+   * depends on the output of the previous iteration.
    */
   private async processBatchRequests(requests: LLMRequest[]): Promise<LLMResponse[]> {
     if (!this.provider) {
@@ -413,6 +417,10 @@ export class LLMService {
   /**
    * Process batch requests with progress tracking
    * Now supports true parallel processing across all available API keys
+   *
+   * NOTE: This parallel processing is used ONLY for Step 2 (Semantic Filtering).
+   * Step 3 (Paper Generation) uses sequential processing because each iteration
+   * depends on the output of the previous iteration.
    */
   private async processBatchRequestsWithProgress(
     requests: LLMRequest[],
@@ -557,6 +565,7 @@ Authors: ${paper.authors.join(', ')}
 Year: ${paper.year}
 Abstract: ${paper.abstract || 'No abstract available'}
 ${paper.venue ? `Venue: ${paper.venue}` : ''}
+${paper.url ? `URL: ${paper.url}` : ''}
 
 **Task:**
 Determine if this paper MEETS the inclusion criteria described above.
@@ -590,6 +599,7 @@ Authors: ${paper.authors.join(', ')}
 Year: ${paper.year}
 Abstract: ${paper.abstract || 'No abstract available'}
 ${paper.venue ? `Venue: ${paper.venue}` : ''}
+${paper.url ? `URL: ${paper.url}` : ''}
 
 **Task:**
 Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).

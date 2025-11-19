@@ -21,6 +21,10 @@ export class LaTeXGenerator {
   /**
    * Generate complete LaTeX research paper using iterative drafting
    * Processes papers in batches, regenerating the entire paper each time
+   *
+   * NOTE: This process is SEQUENTIAL (Step 3: Paper Generation).
+   * Each batch regenerates the full paper using the output from the previous batch
+   * as input, so batches cannot be processed in parallel like Step 2 (Semantic Filtering).
    */
   async generate(
     papers: Paper[],
