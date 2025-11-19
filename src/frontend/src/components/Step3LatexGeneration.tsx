@@ -74,7 +74,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
     zip: false
   });
   const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
-  const [batchSize, setBatchSize] = useState(15);
+  const [batchSize, setBatchSize] = useState(30);
   const [tempSessionId, setTempSessionId] = useState<string | null>(null); // Store temp session ID from CSV upload
   const { socket } = useSocket();
 
@@ -305,13 +305,17 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   };
 
   const handleDownload = async (type: OutputType, filename: string) => {
-    if (!sessionId) return;
+    // Use active session ID (tempSessionId for CSV upload, sessionId for regular flow)
+    const activeSessionId = tempSessionId || sessionId;
+    if (!activeSessionId) return;
+
+    console.log('[Step3 Download] Downloading', type, 'for session:', activeSessionId);
 
     try {
       setDownloading((prev) => new Set(prev).add(type));
       setError(null);
 
-      const blob = await sessionAPI.download(sessionId, type);
+      const blob = await sessionAPI.download(activeSessionId, type);
       downloadBlob(blob, filename);
     } catch (err: any) {
       console.error('Download failed:', err);
@@ -527,7 +531,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       )}
 
       {/* Download Buttons */}
-      {outputsGenerated && !isGenerating && sessionId && (
+      {outputsGenerated && !isGenerating && (sessionId || tempSessionId) && (
         <div className="space-y-4">
           <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
             <h4 className="font-semibold text-green-900 mb-2">Outputs Generated!</h4>

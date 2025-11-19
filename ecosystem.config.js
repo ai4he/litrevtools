@@ -22,6 +22,7 @@ module.exports = {
       // Environment variables
       env: {
         NODE_ENV: 'production',
+        PAPER_BATCH_SIZE: '30',
       },
 
       // Logging

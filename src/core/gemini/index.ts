@@ -3,7 +3,7 @@
  * Now supports multiple API keys with automatic rotation
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { Paper, PRISMAData } from '../types';
 
 export interface GeminiConfig {
@@ -120,6 +120,106 @@ export class GeminiService {
     }
 
     return result;
+  }
+
+  /**
+   * Make a request with structured JSON output using Gemini's native schema validation
+   * This guarantees valid JSON without needing to parse/clean
+   */
+  private async requestWithRetryStructured(
+    prompt: string,
+    useCheapModel: boolean = false
+  ): Promise<any> {
+    const maxAttemptsPerKey = 2;
+    const maxTotalAttempts = this.apiKeys.length * maxAttemptsPerKey;
+    let attempt = 0;
+
+    // Use cheaper model for retries/fixes to save quota
+    const modelToUse = useCheapModel ? 'gemini-flash-lite-latest' : this.modelName;
+
+    // Define the JSON schema for paper generation
+    const paperSchema = {
+      type: SchemaType.OBJECT,
+      required: ['abstract', 'introduction', 'methodology', 'results', 'discussion', 'conclusion'],
+      properties: {
+        abstract: {
+          type: SchemaType.STRING,
+          description: 'Abstract of the systematic review'
+        },
+        introduction: {
+          type: SchemaType.STRING,
+          description: 'Introduction section with LaTeX formatting'
+        },
+        methodology: {
+          type: SchemaType.STRING,
+          description: 'Methodology section with LaTeX formatting'
+        },
+        results: {
+          type: SchemaType.STRING,
+          description: 'Results section with LaTeX formatting'
+        },
+        discussion: {
+          type: SchemaType.STRING,
+          description: 'Discussion section with LaTeX formatting'
+        },
+        conclusion: {
+          type: SchemaType.STRING,
+          description: 'Conclusion section with LaTeX formatting'
+        }
+      }
+    };
+
+    while (attempt < maxTotalAttempts) {
+      const currentKey = this.apiKeys[this.currentKeyIndex];
+
+      try {
+        const genAI = new GoogleGenerativeAI(currentKey);
+        const model = genAI.getGenerativeModel({
+          model: modelToUse,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: paperSchema as any  // Type assertion for SDK compatibility
+          }
+        });
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        // With structured output, this should always be valid JSON
+        return JSON.parse(text);
+      } catch (error) {
+        attempt++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        console.error(`[GeminiService] Structured request failed with key ${this.currentKeyIndex + 1}/${this.apiKeys.length} (attempt ${attempt}/${maxTotalAttempts}): ${errorMessage.substring(0, 100)}`);
+
+        // Check if it's a quota/rate limit error
+        const isQuotaError = errorMessage.toLowerCase().includes('quota') ||
+                            errorMessage.toLowerCase().includes('rate limit') ||
+                            errorMessage.toLowerCase().includes('429');
+
+        if (isQuotaError && this.apiKeys.length > 1) {
+          // Rotate to next key
+          this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
+          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
+
+          // Wait a bit before retrying
+          await this.delay(2000);
+          continue;
+        }
+
+        // For other errors or last attempt, throw
+        if (attempt >= maxTotalAttempts) {
+          throw new Error(`Gemini structured request failed after ${maxTotalAttempts} attempts: ${errorMessage}`);
+        }
+
+        // Wait before retry
+        await this.delay(3000);
+      }
+    }
+
+    throw new Error('Gemini structured request failed: max attempts exceeded');
   }
 
   /**
@@ -599,6 +699,113 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
   }
 
   /**
+   * Generate content with automatic retry and LLM self-correction on JSON errors
+   * This method sends feedback to the LLM about what went wrong so it can fix it
+   */
+  private async generateWithRetryAndFeedback(
+    initialPrompt: string,
+    maxRetries: number = 3,
+    debugPrefix: string = 'generation'
+  ): Promise<any> {
+    let lastError: string = '';
+    let lastResponse: string = '';
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[GeminiService] ${debugPrefix} attempt ${attempt}/${maxRetries}`);
+
+        // Build the prompt - for retries, use focused JSON repair instead of full regeneration
+        let prompt = initialPrompt;
+        if (attempt > 1 && lastError && lastResponse) {
+          // Check if response appears truncated (common issue with large responses)
+          const isTruncated = lastError.includes('Unterminated string') ||
+                             lastError.includes('Unexpected end of JSON') ||
+                             !lastResponse.trim().endsWith('}');
+
+          if (isTruncated) {
+            // For truncated responses, ask LLM to complete ONLY the missing end
+            // This is much more likely to succeed than regenerating everything
+            const lastBracket = lastResponse.lastIndexOf('{');
+            const truncatedAt = Math.max(0, lastResponse.length - 500);
+            const contextSnippet = lastResponse.substring(truncatedAt);
+
+            prompt = `The previous JSON response was truncated mid-generation. Your task is to COMPLETE the truncated JSON, NOT regenerate everything.
+
+ERROR: ${lastError}
+
+CONTEXT (last 500 chars of truncated response):
+...${contextSnippet}
+
+INSTRUCTIONS:
+1. The response was cut off mid-sentence
+2. Generate ONLY the completion needed to properly close the JSON
+3. Continue from where it was cut off
+4. Properly close all open strings with quotes
+5. Add any missing closing sections
+6. End with proper JSON closing: "}
+
+Output format - provide ONLY the continuation text needed:
+[the text to complete the truncated part]
+"
+}
+
+Be concise - only output what's needed to complete and close the JSON properly.`;
+          } else {
+            // For other JSON errors, ask to fix formatting
+            prompt = `You previously generated a JSON response that has formatting errors. Your task is to FIX the JSON formatting errors WITHOUT changing the content.
+
+ERROR DETAILS: ${lastError}
+
+YOUR PREVIOUS RESPONSE (with formatting errors):
+${lastResponse.substring(0, 50000)}${lastResponse.length > 50000 ? '\n... [response truncated for brevity]' : ''}
+
+INSTRUCTIONS:
+1. Take the exact content from above
+2. Fix ONLY the JSON formatting issues (do NOT change the actual content/text)
+3. Ensure all strings are properly terminated with closing quotes
+4. Ensure all backslashes in LaTeX commands are doubled (\\\\cite not \\cite)
+5. Remove or properly escape any control characters
+6. Return valid JSON with the exact same content, just properly formatted
+
+Return the corrected JSON object with the same structure:
+{
+  "abstract": "...",
+  "introduction": "...",
+  "methodology": "...",
+  "results": "...",
+  "discussion": "...",
+  "conclusion": "..."
+}
+
+IMPORTANT: Keep all the content identical - only fix the JSON formatting errors!`;
+          }
+        }
+
+        // Generate response using structured output API
+        // Use cheaper model for retries to save quota
+        const useCheapModel = attempt > 1;
+
+        console.log(`[GeminiService] Using ${useCheapModel ? 'cheap model (gemini-flash-lite-latest)' : 'main model'} for attempt ${attempt}`);
+
+        const result = await this.requestWithRetryStructured(prompt, useCheapModel);
+
+        // With structured output, we get the parsed object directly!
+        console.log(`[GeminiService] ✅ Successfully received structured JSON on attempt ${attempt}`);
+        return result;
+      } catch (error: any) {
+        if (attempt >= maxRetries) {
+          throw error;
+        }
+        lastError = error.message;
+        console.log(`[GeminiService] Attempt ${attempt} failed, will retry with feedback...`);
+        await this.delay(3000);
+      }
+    }
+
+    throw new Error(`${debugPrefix} failed after ${maxRetries} attempts`);
+  }
+
+  /**
    * Regenerate paper with additional papers, integrating them into existing content
    * Takes previous draft and new papers, returns updated draft
    */
@@ -729,7 +936,7 @@ VERIFY: Check that ALL backslashes are doubled (\\\\) in JSON before returning!
 `;
 
     console.log(`[GeminiService] regeneratePaperWithNewPapers - Full prompt length: ${prompt.length} characters`);
-    console.log(`[GeminiService] Sending regeneration prompt to Gemini...`);
+    console.log(`[GeminiService] Sending regeneration prompt to Gemini with retry-and-feedback...`);
 
     // Write prompt to file for debugging
     try {
@@ -742,70 +949,8 @@ VERIFY: Check that ALL backslashes are doubled (\\\\) in JSON before returning!
       console.error(`[GeminiService] Failed to write debug prompt:`, err);
     }
 
-    const text = (await this.requestWithRetry(prompt)).trim();
-
-    console.log(`[GeminiService] Received regeneration response, length: ${text.length} characters`);
-
-    // Save response for debugging
-    try {
-      const fs = require('fs');
-      const debugPath = `./data/outputs/debug_regeneration_response_${Date.now()}.txt`;
-      fs.writeFileSync(debugPath, text, 'utf-8');
-      console.log(`[GeminiService] Debug: Regeneration response written to ${debugPath}`);
-    } catch (err) {
-      console.error(`[GeminiService] Failed to write debug response:`, err);
-    }
-
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error(`[GeminiService] No JSON found in regeneration response. First 500 chars:\n${text.substring(0, 500)}`);
-      throw new Error('Failed to find JSON in regenerated paper response');
-    }
-
-    let jsonStr = jsonMatch[0];
-
-    // Try to parse JSON, if it fails due to escaping issues, try to fix them
-    try {
-      return JSON.parse(jsonStr);
-    } catch (parseError: any) {
-      console.error(`[GeminiService] Regeneration JSON parse error: ${parseError.message}`);
-      console.error(`[GeminiService] Attempting to fix escaping issues...`);
-
-      // Save problematic JSON for debugging
-      try {
-        const fs = require('fs');
-        const debugPath = `./data/outputs/debug_failed_regeneration_json_${Date.now()}.txt`;
-        fs.writeFileSync(debugPath, jsonStr, 'utf-8');
-        console.log(`[GeminiService] Debug: Failed regeneration JSON written to ${debugPath}`);
-      } catch (err) {
-        // Ignore
-      }
-
-      // Use robust JSON cleaner to fix escaping and control characters
-      try {
-        const cleaned = this.cleanJSONString(jsonStr);
-
-        console.log(`[GeminiService] Attempting to parse cleaned regeneration JSON...`);
-
-        // Save cleaned JSON for debugging
-        try {
-          const fs = require('fs');
-          const debugPath = `./data/outputs/debug_cleaned_regeneration_json_${Date.now()}.txt`;
-          fs.writeFileSync(debugPath, cleaned, 'utf-8');
-          console.log(`[GeminiService] Debug: Cleaned regeneration JSON written to ${debugPath}`);
-        } catch (err) {
-          // Ignore
-        }
-
-        const parsed = JSON.parse(cleaned);
-        console.log(`[GeminiService] Successfully parsed regeneration JSON after cleaning!`);
-        return parsed;
-      } catch (fixError: any) {
-        console.error(`[GeminiService] Failed to fix regeneration JSON: ${fixError.message}`);
-        throw new Error(`Regeneration JSON parsing failed: ${parseError.message}. Auto-fix also failed: ${fixError.message}. Check debug files for details.`);
-      }
-    }
+    // Use retry-with-feedback mechanism (will retry up to 3 times, informing LLM of errors)
+    return await this.generateWithRetryAndFeedback(prompt, 3, 'regeneration');
   }
 
   /**
