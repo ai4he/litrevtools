@@ -102,6 +102,11 @@ export class OutputManager {
         const totalBatches = Math.ceil(includedCount / this.paperBatchSize);
 
         console.log(`[OutputManager] Starting LaTeX generation for ${includedCount} papers in ${totalBatches} batches...`);
+
+        // Get LLM provider for tracking
+        const llmProvider = this.gemini.getLLMProvider();
+        const keyManager = llmProvider?.getKeyManager?.();
+
         onProgress?.({
           status: 'running',
           stage: 'latex',
@@ -117,7 +122,13 @@ export class OutputManager {
             currentDocumentSize: 0,
             estimatedFinalSize: 0
           },
-          progress: Math.round((completedStages / totalStages) * 100)
+          progress: Math.round((completedStages / totalStages) * 100),
+          currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
+          currentApiKey: keyManager ? {
+            index: keyManager.getCurrentKeyIndex(),
+            total: keyManager.getTotalKeys(),
+            switches: 0
+          } : undefined
         });
 
         const latexPath = path.join(sessionDir, 'paper.tex');
@@ -125,8 +136,11 @@ export class OutputManager {
 
         // Track start time for output generation
         const outputStartTime = Date.now();
+        let previousActivity = '';
+        let lastKeySwitches = 0;
+        let lastModelFallbacks = 0;
 
-        // Pass batch progress callback
+        // Pass batch progress callback with enhanced tracking
         await latexGen.generate(
           session.papers,
           session.parameters,
@@ -138,8 +152,19 @@ export class OutputManager {
               ? Math.round((timeElapsed / papersProcessed) * papersRemaining)
               : 0;
 
-            console.log(`[OutputManager] LaTeX batch ${currentBatch}/${totalBatches} - ${papersProcessed}/${includedCount} papers processed`);
-            onProgress?.({
+            // Determine current action based on batch state
+            let currentAction = `Processing batch ${currentBatch}/${totalBatches}`;
+            if (currentBatch === 1) {
+              currentAction = 'Generating initial paper draft';
+            } else {
+              currentAction = `Regenerating paper with batch ${currentBatch} papers`;
+            }
+
+            // Track API key switches
+            const currentKeySwitches = llmProvider?.keyRotationCount || 0;
+            const currentModelFallbacks = llmProvider?.modelFallbackCount || 0;
+
+            const baseProgress: OutputProgress = {
               status: 'running',
               stage: 'latex',
               currentTask: `Generating LaTeX paper - Batch ${currentBatch}/${totalBatches} (${papersProcessed}/${includedCount} papers)`,
@@ -156,7 +181,46 @@ export class OutputManager {
               },
               progress: Math.round((completedStages / totalStages) * 100),
               timeElapsed,
-              estimatedTimeRemaining
+              estimatedTimeRemaining,
+              previousActivity,
+              currentAction,
+              currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
+              modelFallbacks: currentModelFallbacks
+            };
+
+            // Add API key tracking if available
+            if (keyManager) {
+              baseProgress.currentApiKey = {
+                index: keyManager.getCurrentKeyIndex(),
+                total: keyManager.getTotalKeys(),
+                switches: currentKeySwitches
+              };
+            }
+
+            console.log(`[OutputManager] LaTeX batch ${currentBatch}/${totalBatches} - ${papersProcessed}/${includedCount} papers processed`);
+            onProgress?.(baseProgress);
+
+            // Update previous activity for next iteration
+            previousActivity = currentAction;
+            lastKeySwitches = currentKeySwitches;
+            lastModelFallbacks = currentModelFallbacks;
+          },
+          // Token streaming callback
+          (tokensReceived: number, streamSpeed: number) => {
+            onProgress?.({
+              status: 'running',
+              stage: 'latex',
+              currentTask: `Generating LaTeX content...`,
+              totalStages,
+              completedStages,
+              progress: Math.round((completedStages / totalStages) * 100),
+              currentAction: 'Receiving LLM response',
+              tokenStreaming: {
+                enabled: true,
+                tokensReceived,
+                streamingSpeed: streamSpeed
+              },
+              currentModel: llmProvider?.getCurrentModel?.() || 'unknown'
             });
           }
         );

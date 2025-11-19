@@ -94,6 +94,34 @@ export interface OutputProgress {
   progress: number;
   timeElapsed?: number;
   estimatedTimeRemaining?: number;
+
+  // Enhanced activity tracking for Step 3
+  previousActivity?: string; // Last completed activity
+  currentAction?: string; // Detailed current sub-task (e.g., "Generating introduction section", "Fixing LaTeX syntax errors")
+
+  // API key tracking
+  currentApiKey?: {
+    index: number; // Which API key is currently being used (0-based)
+    total: number; // Total number of API keys available
+    switches: number; // Number of times API keys have been rotated
+  };
+
+  // Token streaming (real-time LLM response tracking)
+  tokenStreaming?: {
+    enabled: boolean; // Whether streaming is active
+    tokensReceived: number; // Number of tokens received so far
+    estimatedTotal?: number; // Estimated total tokens (if available)
+    streamingSpeed?: number; // Tokens per second
+  };
+
+  // Output processing states
+  isFixingOutput?: boolean; // Whether LaTeX output is being fixed/cleaned
+  isWaiting?: boolean; // Whether process is waiting (e.g., rate limit cooldown)
+  waitReason?: string; // Reason for waiting (e.g., "Rate limit - retrying in 5s")
+
+  // Model information
+  currentModel?: string; // Which LLM model is being used
+  modelFallbacks?: number; // Number of times model has switched due to failures
 }
 
 export interface SearchSession {

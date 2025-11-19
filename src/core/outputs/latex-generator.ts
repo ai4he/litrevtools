@@ -38,7 +38,8 @@ export class LaTeXGenerator {
       papersRemaining: number,
       currentDocSize: number,
       estimatedFinalSize: number
-    ) => void
+    ) => void,
+    onTokenStreaming?: (tokensReceived: number, streamSpeed: number) => void
   ): Promise<string> {
     console.log(`[LaTeXGenerator] Total papers received: ${papers.length}`);
     const includedPapers = papers.filter(p => p.included);
