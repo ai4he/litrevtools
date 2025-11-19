@@ -91,8 +91,9 @@ export class GeminiProvider extends BaseLLMProvider {
 
   async request(prompt: string, temperature: number = 0.3, specificKey?: string): Promise<string> {
     let lastError: Error | null = null;
-    const maxAttempts = 5; // Increased from 3 to 5
+    const maxAttempts = 5;
     const usingSpecificKey = !!specificKey;
+    let keyRotationCycles = 0; // Track how many times we've cycled through all keys
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
@@ -120,7 +121,7 @@ export class GeminiProvider extends BaseLLMProvider {
         const cost = this.estimateCost(estimatedTokens);
         this.updateStats(estimatedTokens, cost);
 
-        // Mark key as successful
+        // Mark key as successful and reset error count
         if (this.keyManager) {
           if (specificKey) {
             this.keyManager.markKeySuccess(specificKey);
@@ -139,11 +140,23 @@ export class GeminiProvider extends BaseLLMProvider {
         lastError = error instanceof Error ? error : new Error('Unknown error');
         const errorMessage = lastError.message.toLowerCase();
 
-        // Determine if this is a rate limit error
+        // Classify error type
+        const isNetworkError = errorMessage.includes('network') ||
+                               errorMessage.includes('timeout') ||
+                               errorMessage.includes('econnrefused') ||
+                               errorMessage.includes('enotfound') ||
+                               errorMessage.includes('fetch failed');
+
         const isRateLimitError = errorMessage.includes('rate limit') ||
                                   errorMessage.includes('429') ||
-                                  errorMessage.includes('quota') ||
                                   errorMessage.includes('resource has been exhausted');
+
+        const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
+
+        const isAuthError = errorMessage.includes('invalid') ||
+                            errorMessage.includes('unauthorized') ||
+                            errorMessage.includes('401') ||
+                            errorMessage.includes('403');
 
         // Handle error and rotate key if available
         if (this.keyManager) {
@@ -161,29 +174,48 @@ export class GeminiProvider extends BaseLLMProvider {
 
           // Check if we have more keys to try
           if (!this.keyManager.hasAvailableKeys()) {
+            keyRotationCycles++;
+            console.log(`[Key Rotation] Completed cycle ${keyRotationCycles} - all keys exhausted`);
+
             // No more keys available for current model
-            if (isRateLimitError) {
+            if (isRateLimitError || isQuotaError) {
+              // Quotas reset every minute, so wait and retry if we haven't exceeded max cycles
+              if (keyRotationCycles <= 3 && attempt < maxAttempts - 1) {
+                // Wait 15-30 seconds for quotas to reset
+                const waitTime = 15000 + (keyRotationCycles * 5000); // 15s, 20s, 25s
+                console.log(`[Key Rotation] Waiting ${waitTime / 1000}s for quota reset (cycle ${keyRotationCycles}/3)`);
+                await this.delay(waitTime);
+
+                // Reset all rate-limited keys - quotas should have reset
+                this.keyManager.resetRateLimitedKeys();
+                console.log(`[Key Rotation] Reset all rate-limited keys - retrying`);
+                continue;
+              }
+
               // Try switching to a fallback model
               if (this.tryNextModel()) {
                 console.log(`[Model Fallback] All keys exhausted for current model. Retrying with ${this.modelName}`);
+                keyRotationCycles = 0; // Reset cycle counter for new model
                 // Reset attempt counter for new model
                 attempt = -1; // Will be incremented to 0 in next iteration
                 continue;
-              } else if (attempt < maxAttempts - 1) {
-                // All models exhausted, try waiting before final retry
-                const backoffDelay = Math.min(120000, Math.pow(2, attempt) * 5000); // Max 2 minutes
-                console.log(`All models and keys exhausted. Waiting ${backoffDelay / 1000}s before final retry ${attempt + 1}/${maxAttempts}`);
-                await this.delay(backoffDelay);
-                // Reset all keys across all models for final attempt
-                this.keyManager.resetRateLimitedKeys();
-                continue;
               }
             }
+
+            // All strategies exhausted
             throw new Error(`Gemini API request failed - all keys and models exhausted: ${this.sanitizeError(lastError.message)}`);
           }
 
           // Exponential backoff with jitter for retries
-          const baseDelay = isRateLimitError ? 5000 : 2000; // Longer delay for rate limits
+          let baseDelay: number;
+          if (isNetworkError) {
+            baseDelay = 1000; // Quick retry for network errors
+          } else if (isRateLimitError || isQuotaError) {
+            baseDelay = 3000; // Moderate delay for quota errors
+          } else {
+            baseDelay = 2000; // Default delay
+          }
+
           const exponentialDelay = Math.pow(2, attempt) * baseDelay;
           const jitter = Math.random() * 1000; // Random jitter up to 1 second
           const totalDelay = Math.min(30000, exponentialDelay + jitter); // Max 30 seconds
@@ -192,7 +224,7 @@ export class GeminiProvider extends BaseLLMProvider {
           await this.delay(totalDelay);
         } else {
           // No key manager, use exponential backoff and retry
-          if (isRateLimitError && attempt < maxAttempts - 1) {
+          if ((isRateLimitError || isQuotaError) && attempt < maxAttempts - 1) {
             const backoffDelay = Math.min(60000, Math.pow(2, attempt) * 5000);
             console.log(`Rate limited. Waiting ${backoffDelay / 1000}s before retry ${attempt + 1}/${maxAttempts}`);
             await this.delay(backoffDelay);
@@ -275,45 +307,85 @@ export class GeminiProvider extends BaseLLMProvider {
 
     // Process all requests in parallel, distributing across available keys
     const requestPromises = requests.map(async (req, index) => {
-      try {
-        // Distribute requests across available keys using round-robin
-        const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
+      const maxRetries = 3; // Retry failed requests up to 3 times
+      let lastError: Error | null = null;
 
-        if (specificKey && index < availableKeys.length) {
-          console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
+      for (let retry = 0; retry < maxRetries; retry++) {
+        try {
+          // Distribute requests across available keys using round-robin
+          const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
+
+          if (specificKey && index < availableKeys.length && retry === 0) {
+            console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
+          }
+
+          const text = await this.request(req.prompt, temperature, specificKey);
+
+          // Parse the response based on task type
+          const result = this.parseResponse(text, req.taskType);
+
+          return {
+            id: req.id,
+            taskType: req.taskType,
+            result,
+            confidence: this.extractConfidence(text),
+            tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
+          } as LLMResponse;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unknown error');
+          const errorMessage = lastError.message.toLowerCase();
+
+          // Classify error type
+          const isNetworkError = errorMessage.includes('network') ||
+                                 errorMessage.includes('timeout') ||
+                                 errorMessage.includes('econnrefused') ||
+                                 errorMessage.includes('enotfound') ||
+                                 errorMessage.includes('fetch failed');
+
+          const isRateLimitError = errorMessage.includes('rate limit') ||
+                                    errorMessage.includes('429') ||
+                                    errorMessage.includes('resource has been exhausted');
+
+          const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
+
+          const isRetryableError = isNetworkError || isRateLimitError || isQuotaError;
+
+          // Log error
+          console.error(`[Batch Request] Error processing request ${req.id} (attempt ${retry + 1}/${maxRetries}):`, errorMessage.substring(0, 100));
+
+          // Retry if it's a retryable error and we have retries left
+          if (isRetryableError && retry < maxRetries - 1) {
+            // Wait before retrying
+            const retryDelay = isNetworkError ? 2000 : 5000; // Shorter delay for network errors
+            console.log(`[Batch Request] Retrying request ${req.id} after ${retryDelay / 1000}s`);
+            await this.delay(retryDelay);
+            continue;
+          }
+
+          // If we've exhausted retries or it's a non-retryable error, give up
+          break;
         }
-
-        const text = await this.request(req.prompt, temperature, specificKey);
-
-        // Parse the response based on task type
-        const result = this.parseResponse(text, req.taskType);
-
-        return {
-          id: req.id,
-          taskType: req.taskType,
-          result,
-          confidence: this.extractConfidence(text),
-          tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
-        } as LLMResponse;
-      } catch (error) {
-        // Return graceful error response
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`Error processing request ${req.id}:`, errorMessage);
-
-        return {
-          id: req.id,
-          taskType: req.taskType,
-          result: null,
-          error: this.sanitizeError(errorMessage)
-        } as LLMResponse;
       }
+
+      // All retries exhausted - return error response WITHOUT the API error message
+      // This ensures no API error messages leak into the CSV
+      console.error(`[Batch Request] Failed to process request ${req.id} after ${maxRetries} attempts`);
+
+      return {
+        id: req.id,
+        taskType: req.taskType,
+        result: null,
+        error: 'evaluation_failed' // Generic error marker, not the actual API error message
+      } as LLMResponse;
     });
 
     // Wait for all requests to complete in parallel
     const responses = await Promise.all(requestPromises);
 
     if (usingParallelKeys) {
-      console.log(`[Parallel LLM] Completed ${responses.length} requests using ${availableKeys.length} keys in parallel`);
+      const successCount = responses.filter(r => !r.error).length;
+      const failureCount = responses.filter(r => r.error).length;
+      console.log(`[Parallel LLM] Completed ${responses.length} requests using ${availableKeys.length} keys in parallel (${successCount} succeeded, ${failureCount} failed)`);
     }
 
     return responses;

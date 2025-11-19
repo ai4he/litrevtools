@@ -143,29 +143,59 @@ export class APIKeyManager {
     const keyInfo = this.keys.find(k => k.key === apiKey);
     if (!keyInfo) return;
 
-    keyInfo.errorCount++;
     keyInfo.lastUsed = new Date();
 
-    // Determine error type
+    // Determine error type from message and status code
     const errorMessage = error?.message?.toLowerCase() || '';
+    const isNetworkError = errorMessage.includes('network') ||
+                           errorMessage.includes('timeout') ||
+                           errorMessage.includes('econnrefused') ||
+                           errorMessage.includes('enotfound') ||
+                           errorMessage.includes('fetch failed');
 
-    if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+    const isRateLimitError = errorMessage.includes('rate limit') ||
+                             errorMessage.includes('429') ||
+                             errorMessage.includes('resource has been exhausted');
+
+    const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
+
+    const isAuthError = errorMessage.includes('invalid') ||
+                        errorMessage.includes('unauthorized') ||
+                        errorMessage.includes('401') ||
+                        errorMessage.includes('403');
+
+    // Handle different error types appropriately
+    if (isAuthError) {
+      // Permanent error - mark key as invalid and don't increment error count
+      keyInfo.status = 'invalid';
+      console.log(`Key ${keyInfo.label} marked as invalid (authentication failed)`);
+    } else if (isRateLimitError) {
       keyInfo.status = 'rate_limited';
-      // Gemini rate limits typically reset every minute
-      // Set conservative reset time of 90 seconds to be safe
-      keyInfo.rateLimitResetAt = new Date(Date.now() + 90000);
+      keyInfo.errorCount++;
+      // Gemini rate limits reset every minute (60 req/min for free tier)
+      // Set reset time to 60 seconds
+      keyInfo.rateLimitResetAt = new Date(Date.now() + 60000);
       console.log(`Key ${keyInfo.label} rate limited, will reset at ${keyInfo.rateLimitResetAt.toISOString()}`);
-    } else if (errorMessage.includes('quota') || errorMessage.includes('exceeded')) {
+    } else if (isQuotaError) {
       keyInfo.status = 'quota_exceeded';
-      // Quota exceeded might need longer to reset (could be daily quota)
+      keyInfo.errorCount++;
+      // Daily quota - longer reset time (but still check after 1 hour in case it's per-hour)
       keyInfo.rateLimitResetAt = new Date(Date.now() + 3600000); // 1 hour
       console.log(`Key ${keyInfo.label} quota exceeded, will reset at ${keyInfo.rateLimitResetAt.toISOString()}`);
-    } else if (errorMessage.includes('invalid') || errorMessage.includes('unauthorized') || errorMessage.includes('401')) {
-      keyInfo.status = 'invalid';
-      console.log(`Key ${keyInfo.label} marked as invalid`);
+    } else if (isNetworkError) {
+      // Transient network error - don't change status, just increment error count
+      keyInfo.errorCount++;
+      console.log(`Key ${keyInfo.label} encountered network error (count: ${keyInfo.errorCount})`);
+      // Only mark as error if persistent network issues
+      if (keyInfo.errorCount >= 5) {
+        keyInfo.status = 'error';
+        console.log(`Key ${keyInfo.label} disabled due to repeated network errors`);
+      }
     } else {
+      // Unknown error - treat conservatively
+      keyInfo.errorCount++;
       keyInfo.status = 'error';
-      console.log(`Key ${keyInfo.label} encountered error (count: ${keyInfo.errorCount})`);
+      console.log(`Key ${keyInfo.label} encountered error: ${errorMessage.substring(0, 100)} (count: ${keyInfo.errorCount})`);
 
       // Only mark as unusable if error count exceeds threshold
       if (keyInfo.errorCount >= 3) {
@@ -181,39 +211,59 @@ export class APIKeyManager {
     const currentKey = this.keys[this.currentKeyIndex];
     if (!currentKey) return;
 
-    currentKey.errorCount++;
     currentKey.lastUsed = new Date();
 
-    // Determine error type
+    // Determine error type from message and status code
     const errorMessage = error?.message?.toLowerCase() || '';
+    const isNetworkError = errorMessage.includes('network') ||
+                           errorMessage.includes('timeout') ||
+                           errorMessage.includes('econnrefused') ||
+                           errorMessage.includes('enotfound') ||
+                           errorMessage.includes('fetch failed');
 
-    if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
-      currentKey.status = 'rate_limited';
-      // Gemini rate limits typically reset every minute
-      // Set conservative reset time of 90 seconds to be safe
-      currentKey.rateLimitResetAt = new Date(Date.now() + 90000);
+    const isRateLimitError = errorMessage.includes('rate limit') ||
+                             errorMessage.includes('429') ||
+                             errorMessage.includes('resource has been exhausted');
 
-      if (this.enableRotation) {
-        await this.rotateToNextKey();
-      }
-    } else if (errorMessage.includes('quota') || errorMessage.includes('exceeded')) {
-      currentKey.status = 'quota_exceeded';
-      // Quota exceeded might need longer to reset (could be daily quota)
-      // Mark for manual review
-      currentKey.rateLimitResetAt = new Date(Date.now() + 3600000); // 1 hour
+    const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
 
-      if (this.enableRotation) {
-        await this.rotateToNextKey();
-      }
-    } else if (errorMessage.includes('invalid') || errorMessage.includes('unauthorized') || errorMessage.includes('401')) {
+    const isAuthError = errorMessage.includes('invalid') ||
+                        errorMessage.includes('unauthorized') ||
+                        errorMessage.includes('401') ||
+                        errorMessage.includes('403');
+
+    // Handle different error types appropriately
+    if (isAuthError) {
       currentKey.status = 'invalid';
-
       if (this.enableRotation) {
+        await this.rotateToNextKey();
+      }
+    } else if (isRateLimitError) {
+      currentKey.status = 'rate_limited';
+      currentKey.errorCount++;
+      // Gemini rate limits reset every minute
+      currentKey.rateLimitResetAt = new Date(Date.now() + 60000);
+      if (this.enableRotation) {
+        await this.rotateToNextKey();
+      }
+    } else if (isQuotaError) {
+      currentKey.status = 'quota_exceeded';
+      currentKey.errorCount++;
+      currentKey.rateLimitResetAt = new Date(Date.now() + 3600000); // 1 hour
+      if (this.enableRotation) {
+        await this.rotateToNextKey();
+      }
+    } else if (isNetworkError) {
+      // Transient network error - don't rotate immediately
+      currentKey.errorCount++;
+      // Only rotate if persistent network issues
+      if (currentKey.errorCount >= 5 && this.enableRotation) {
+        currentKey.status = 'error';
         await this.rotateToNextKey();
       }
     } else {
       currentKey.status = 'error';
-
+      currentKey.errorCount++;
       // Only rotate if error count exceeds threshold
       if (currentKey.errorCount >= 3 && this.enableRotation) {
         await this.rotateToNextKey();
