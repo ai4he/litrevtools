@@ -173,9 +173,41 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
           batchSize,
           latexPrompt: latexPrompt.trim() || undefined
         });
+      } else if (uploadedFile) {
+        // Handle CSV upload case
+        console.log('[Step3] Reading CSV file:', uploadedFile.name);
+
+        // Read CSV file content
+        const csvContent = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error('Failed to read CSV file'));
+          reader.readAsText(uploadedFile);
+        });
+
+        console.log('[Step3] Sending CSV to API (length:', csvContent.length, 'chars)');
+
+        // Import axios for this specific call
+        const axios = (await import('axios')).default;
+
+        // Send CSV to new endpoint
+        const response = await axios.post('/api/generate/csv', {
+          csvContent,
+          model: llmModel,
+          batchSize,
+          latexPrompt: latexPrompt.trim() || undefined
+        });
+
+        // Set the temporary session ID returned from the server
+        const tempSessionId = response.data.sessionId;
+        console.log('[Step3] Received session ID from CSV upload:', tempSessionId);
+
+        // Subscribe to WebSocket events for this session
+        if (socket) {
+          socket.emit('subscribe', tempSessionId);
+        }
       } else {
-        // TODO: Handle CSV upload case
-        throw new Error('CSV upload not yet implemented');
+        throw new Error('No session or CSV file available');
       }
     } catch (err: any) {
       console.error('Generation failed:', err);

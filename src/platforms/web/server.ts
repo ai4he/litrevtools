@@ -427,6 +427,124 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
   }
 });
 
+// Generate outputs from CSV upload
+app.post('/api/generate/csv', async (req, res) => {
+  try {
+    const { csvContent, model, batchSize, latexPrompt } = req.body;
+
+    if (!csvContent || !csvContent.trim()) {
+      res.status(400).json({ success: false, error: 'CSV content is required' });
+      return;
+    }
+
+    // Parse CSV content to create papers
+    const papers = await parseCsvToPapers(csvContent);
+
+    if (papers.length === 0) {
+      res.status(400).json({ success: false, error: 'No valid papers found in CSV' });
+      return;
+    }
+
+    // Create a temporary session ID for this upload
+    const tempSessionId = `csv-upload-${Date.now()}`;
+
+    // Helper function to emit or buffer events
+    const emitOrBuffer = (sid: string, event: string, data: any) => {
+      const eventName = `${event}:${sid}`;
+      const room = io.sockets.adapter.rooms.get(`session:${sid}`);
+
+      if (room && room.size > 0) {
+        io.to(`session:${sid}`).emit(eventName, data);
+      } else {
+        if (!eventBuffer.has(sid)) {
+          eventBuffer.set(sid, []);
+        }
+        eventBuffer.get(sid)!.push({ event: eventName, data });
+      }
+    };
+
+    // Return immediately with temp session ID
+    res.json({ success: true, sessionId: tempSessionId, message: 'Output generation started' });
+
+    // Create a session in the database with the papers
+    const sessionParams = {
+      name: `CSV Upload - ${new Date().toLocaleString()}`,
+      inclusionKeywords: ['csv', 'upload'],
+      exclusionKeywords: [],
+      maxResults: papers.length,
+      startYear: Math.min(...papers.map(p => p.year)),
+      endYear: Math.max(...papers.map(p => p.year)),
+      llmConfig: {
+        enabled: true,
+        provider: 'gemini' as const,
+        model: model || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+        batchSize: batchSize || 15,
+        maxConcurrentBatches: 5,
+        timeout: 30000,
+        retryAttempts: 3,
+        temperature: 0.3,
+        fallbackStrategy: 'rule_based' as const,
+        enableKeyRotation: true
+      }
+    };
+
+    // Create the session using the database directly
+    const { LitRevDatabase } = await import('../../core/database');
+    const dbPath = process.env.DATABASE_PATH || './data/litrevtools.db';
+    const db = new LitRevDatabase(dbPath);
+
+    // Create session
+    const actualSessionId = db.createSession(sessionParams);
+
+    // Copy session ID from temp to actual
+    console.log(`[Server] Created session ${actualSessionId} for CSV upload (temp ID: ${tempSessionId})`);
+
+    // Add all papers to the session
+    for (const paper of papers) {
+      db.addPaper(actualSessionId, paper);
+    }
+
+    console.log(`[Server] Added ${papers.length} papers to session ${actualSessionId}`);
+
+    // Use the actual session ID for generation
+    const sessionIdToUse = actualSessionId;
+
+    // Start output generation with progress
+    litrev.generateOutputs(sessionIdToUse, (progress) => {
+      // Emit to both temp and actual session ID (for client compatibility)
+      emitOrBuffer(tempSessionId, 'output-progress', progress);
+      emitOrBuffer(sessionIdToUse, 'output-progress', progress);
+
+      // When completed, emit the outputs
+      if (progress.status === 'completed') {
+        const updatedSession = litrev.getSession(sessionIdToUse);
+        emitOrBuffer(tempSessionId, 'outputs', updatedSession?.outputs);
+        emitOrBuffer(sessionIdToUse, 'outputs', updatedSession?.outputs);
+      }
+    }).catch((error: any) => {
+      console.error('[Server] CSV output generation failed:', error);
+      emitOrBuffer(tempSessionId, 'output-progress', {
+        status: 'error',
+        stage: 'error',
+        currentTask: 'Output generation failed',
+        progress: 0,
+        error: error.message
+      });
+      emitOrBuffer(sessionIdToUse, 'output-progress', {
+        status: 'error',
+        stage: 'error',
+        currentTask: 'Output generation failed',
+        progress: 0,
+        error: error.message
+      });
+    });
+
+  } catch (error: any) {
+    console.error('[Server] CSV output generation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Helper function to parse CSV content to papers
 async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
   const lines = csvContent.split('\n').filter(line => line.trim());

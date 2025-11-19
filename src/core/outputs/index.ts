@@ -53,6 +53,7 @@ export class OutputManager {
 
     try {
       // Generate CSV files (both raw and labeled)
+      console.log('[OutputManager] Starting CSV generation...');
       onProgress?.({
         status: 'running',
         stage: 'csv',
@@ -75,8 +76,10 @@ export class OutputManager {
       // Set the labeled CSV as the primary output for backward compatibility
       outputs.csv = labeledCsvPath;
       completedStages++;
+      console.log(`[OutputManager] CSV generation complete (${completedStages}/${totalStages})`);
 
       // Generate BibTeX
+      console.log('[OutputManager] Starting BibTeX generation...');
       onProgress?.({
         status: 'running',
         stage: 'bibtex',
@@ -91,12 +94,14 @@ export class OutputManager {
       await bibtexGen.generate(session.papers, bibtexPath);
       outputs.bibtex = bibtexPath;
       completedStages++;
+      console.log(`[OutputManager] BibTeX generation complete (${completedStages}/${totalStages})`);
 
       // Generate LaTeX paper (only if Gemini API is available)
       try {
         const includedCount = session.papers.filter(p => p.included).length;
         const totalBatches = Math.ceil(includedCount / this.paperBatchSize);
 
+        console.log(`[OutputManager] Starting LaTeX generation for ${includedCount} papers in ${totalBatches} batches...`);
         onProgress?.({
           status: 'running',
           stage: 'latex',
@@ -133,6 +138,7 @@ export class OutputManager {
               ? Math.round((timeElapsed / papersProcessed) * papersRemaining)
               : 0;
 
+            console.log(`[OutputManager] LaTeX batch ${currentBatch}/${totalBatches} - ${papersProcessed}/${includedCount} papers processed`);
             onProgress?.({
               status: 'running',
               stage: 'latex',
@@ -155,6 +161,7 @@ export class OutputManager {
           }
         );
         outputs.latex = latexPath;
+        console.log(`[OutputManager] LaTeX generation complete`);
       } catch (error: any) {
         console.error('[OutputManager] LaTeX generation failed:', error);
         console.error('[OutputManager] Error details:', {
@@ -164,8 +171,10 @@ export class OutputManager {
         // Skip LaTeX generation if no API key or generation fails
       }
       completedStages++;
+      console.log(`[OutputManager] LaTeX stage complete (${completedStages}/${totalStages})`);
 
       // Generate PRISMA diagram and table
+      console.log('[OutputManager] Starting PRISMA generation...');
       onProgress?.({
         status: 'running',
         stage: 'prisma',
@@ -184,8 +193,10 @@ export class OutputManager {
       await prismaGen.generateTable(session.prismaData, prismaTablePath);
       outputs.prismaTable = prismaTablePath;
       completedStages++;
+      console.log(`[OutputManager] PRISMA generation complete (${completedStages}/${totalStages})`);
 
       // Generate ZIP
+      console.log('[OutputManager] Starting ZIP generation...');
       onProgress?.({
         status: 'running',
         stage: 'zip',
@@ -212,11 +223,13 @@ export class OutputManager {
       await this.createZip(sessionDir, zipPath, filesToZip);
       outputs.zip = zipPath;
       completedStages++;
+      console.log(`[OutputManager] ZIP generation complete (${completedStages}/${totalStages})`);
 
       // Update database with output file paths
       this.database.updateOutputFiles(sessionId, outputs);
 
       // Final completion
+      console.log('[OutputManager] All outputs generated successfully!');
       onProgress?.({
         status: 'completed',
         stage: 'completed',
@@ -228,6 +241,12 @@ export class OutputManager {
 
       return outputs;
     } catch (error: any) {
+      console.error('[OutputManager] Output generation failed:', error);
+      console.error('[OutputManager] Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+
       onProgress?.({
         status: 'error',
         stage: 'completed',

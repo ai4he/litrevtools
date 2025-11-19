@@ -251,6 +251,7 @@ export interface LLMConfig {
   temperature: number; // Model temperature for creative tasks (default: 0.3)
   fallbackStrategy: FallbackStrategy; // Strategy when all keys exhausted (default: rule_based)
   enableKeyRotation: boolean; // Enable automatic key rotation (default: true)
+  modelSelectionStrategy?: 'speed' | 'quality'; // Auto model selection strategy (default: 'speed' for filtering, 'quality' for generation)
 }
 
 /**

@@ -26,28 +26,54 @@ export class GeminiProvider extends BaseLLMProvider {
   public currentRetryCount: number = 0;
   public successfulRequestCount: number = 0; // Track actual successful API calls
 
-  // Fallback models sorted by free tier quota (highest to lowest)
+  // Fallback models with different strategies
   // Tested 2025-11-19 with 22 API keys - all models verified as working
-  // Strategy: Start with highest RPM/TPM for maximum throughput
   // NOTE: gemini-3-pro-preview-11-2025 is only available on Vertex AI (paid), not free tier
-  private fallbackModels: string[] = [
+
+  // SPEED Strategy: For Step 2 (semantic filtering) - prioritize throughput and quota
+  private speedModels: string[] = [
     'gemini-2.0-flash-lite',          // RPM: 30, TPM: 1M, RPD: 200 - HIGHEST throughput
     'gemini-2.5-flash-lite',          // RPM: 15, TPM: 250K, RPD: 1000 - HIGH daily quota
     'gemini-2.0-flash',               // RPM: 15, TPM: 1M, RPD: 200 - HIGH throughput
     'gemini-2.5-flash',               // RPM: 10, TPM: 250K, RPD: 250 - GOOD quota
     'gemini-2.5-pro',                 // RPM: 2, TPM: 125K, RPD: 50 - FALLBACK
   ];
+
+  // QUALITY Strategy: For Step 3 (LaTeX generation) - prioritize intelligence first
+  private qualityModels: string[] = [
+    'gemini-2.5-pro',                 // SMARTEST - best for complex writing tasks
+    'gemini-2.5-flash',               // Good balance of quality and speed
+    'gemini-2.0-flash',               // Fast but capable
+    'gemini-2.5-flash-lite',          // High quota, decent quality
+    'gemini-2.0-flash-lite',          // Fastest, fallback
+  ];
+
+  private fallbackModels: string[] = this.speedModels; // Default to speed strategy
   private currentModelIndex: number = 0;
   private hasTriedModelFallback: boolean = false;
 
-  async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
+  async initialize(apiKey: string, config?: {
+    model?: string;
+    keyManager?: APIKeyManager;
+    modelSelectionStrategy?: 'speed' | 'quality';
+  }): Promise<void> {
     await super.initialize(apiKey, config);
+
+    // Select model strategy based on configuration
+    const strategy = config?.modelSelectionStrategy || 'speed'; // Default to speed
+    if (strategy === 'quality') {
+      this.fallbackModels = this.qualityModels;
+      console.log('[Gemini Provider] Using QUALITY strategy - prioritizing intelligent models');
+    } else {
+      this.fallbackModels = this.speedModels;
+      console.log('[Gemini Provider] Using SPEED strategy - prioritizing fast models with high quota');
+    }
 
     // Check if auto model selection is enabled
     if (config?.model === 'auto') {
       this.autoSelectModel = true;
-      this.modelName = this.fallbackModels[0]; // Start with highest throughput model
-      console.log('[Gemini Provider] Auto model selection enabled - will dynamically select best model based on quota');
+      this.modelName = this.fallbackModels[0]; // Start with first model in selected strategy
+      console.log(`[Gemini Provider] Auto model selection enabled with ${strategy} strategy - starting with ${this.modelName}`);
     } else {
       this.modelName = config?.model || this.defaultModel;
 

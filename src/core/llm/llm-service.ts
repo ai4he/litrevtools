@@ -183,7 +183,8 @@ export class LLMService {
     const initKey = keys[0]; // Provide first key as fallback
     await this.provider.initialize(initKey, {
       model: this.config.model,
-      keyManager: this.keyManager
+      keyManager: this.keyManager,
+      modelSelectionStrategy: this.config.modelSelectionStrategy || 'speed' // Default to speed for filtering
     });
 
     // Run health check during initialization to identify working keys upfront
