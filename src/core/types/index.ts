@@ -241,7 +241,7 @@ export type FallbackStrategy =
 export interface LLMConfig {
   enabled: boolean; // Use LLM for intelligent tasks (default: true)
   provider: 'gemini' | 'openai' | 'anthropic'; // LLM provider (default: gemini)
-  model?: string; // Model name (default depends on provider)
+  model?: string; // Model name (default depends on provider), use 'auto' for automatic selection based on quota
   apiKey?: string; // Primary API key for the LLM provider (backward compatibility)
   apiKeys?: string[]; // Multiple API keys for rotation
   batchSize: number; // Number of items to process in a batch (default: 10)
@@ -283,6 +283,7 @@ export interface LLMResponse {
   confidence?: number; // Confidence score 0-1
   error?: string;
   tokensUsed?: number;
+  context?: any; // Context from the original request (e.g., batch papers)
 }
 
 export interface GoogleAuthConfig {

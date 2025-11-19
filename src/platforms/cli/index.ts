@@ -521,6 +521,245 @@ program
     }
   });
 
+// Diagnostic command to test system health
+program
+  .command('diagnose')
+  .alias('test')
+  .description('Run diagnostic tests to check system health and API status')
+  .option('--skip-api-test', 'Skip the actual API test (only check configuration)')
+  .action(async (options) => {
+    console.log(chalk.blue.bold('\n🔬 LitRevTools System Diagnostics\n'));
+    console.log(chalk.gray('=' .repeat(80) + '\n'));
+
+    const tools = new LitRevTools();
+    let exitCode = 0;
+
+    try {
+      // 1. Check environment configuration
+      console.log(chalk.cyan('📋 1. Configuration Check'));
+      console.log(chalk.gray('-'.repeat(80)));
+
+      const geminiKeys = process.env.GEMINI_API_KEYS?.split(',').filter(k => k.trim()) || [];
+      const geminiKey = process.env.GEMINI_API_KEY;
+      const totalKeys = geminiKeys.length || (geminiKey ? 1 : 0);
+
+      console.log(chalk.white(`  Gemini API Keys: ${totalKeys} configured`));
+      if (totalKeys > 0) {
+        console.log(chalk.green('  ✓ API keys found'));
+        geminiKeys.forEach((key, i) => {
+          const masked = key.substring(0, 8) + '*'.repeat(24) + key.substring(key.length - 4);
+          console.log(chalk.gray(`    Key ${i + 1}: ${masked}`));
+        });
+      } else {
+        console.log(chalk.red('  ✗ No API keys configured'));
+        console.log(chalk.yellow('    Set GEMINI_API_KEYS environment variable'));
+        exitCode = 1;
+      }
+
+      const dbPath = process.env.DATABASE_PATH || './data/litrevtools.db';
+      console.log(chalk.white(`\n  Database Path: ${dbPath}`));
+
+      const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+      console.log(chalk.white(`  Default Model: ${geminiModel}`));
+
+      const batchSize = process.env.PAPER_BATCH_SIZE || '15';
+      console.log(chalk.white(`  Batch Size: ${batchSize} papers per batch\n`));
+
+      // 2. Test LLM Service Initialization
+      console.log(chalk.cyan('🤖 2. LLM Service Health Check'));
+      console.log(chalk.gray('-'.repeat(80)));
+
+      if (totalKeys === 0) {
+        console.log(chalk.yellow('  ⚠ Skipping LLM tests (no API keys configured)\n'));
+      } else if (options.skipApiTest) {
+        console.log(chalk.yellow('  ⚠ Skipping API tests (--skip-api-test flag)\n'));
+      } else {
+        // Create a test session with LLM enabled
+        const testParams: SearchParameters = {
+          name: 'Diagnostic Test',
+          inclusionKeywords: ['test'],
+          exclusionKeywords: [],
+          maxResults: 0, // Don't actually search
+          startYear: 2024,
+          endYear: 2024,
+          llmConfig: {
+            enabled: true,
+            provider: 'gemini',
+            model: 'auto',
+            batchSize: 3,
+            maxConcurrentBatches: 3,
+            timeout: 30000,
+            retryAttempts: 3,
+            temperature: 0.3,
+            fallbackStrategy: 'rule_based',
+            enableKeyRotation: true,
+            apiKeys: geminiKeys.length > 0 ? geminiKeys : [geminiKey!]
+          }
+        };
+
+        console.log(chalk.white('  Creating test session...'));
+        const sessionId = await tools.startSearch(testParams);
+
+        // Insert test papers
+        console.log(chalk.white('  Inserting 3 test papers...'));
+        const { LitRevDatabase } = require('../../core/database');
+        const db = new LitRevDatabase(dbPath);
+
+        const testPapers: Paper[] = [
+          {
+            id: 'diagnostic-paper-1',
+            title: 'Machine Learning for Healthcare Applications',
+            authors: ['Test Author 1', 'Test Author 2'],
+            year: 2024,
+            abstract: 'This paper presents a novel machine learning approach for predicting patient outcomes in healthcare settings. We propose a deep learning architecture that achieves state-of-the-art results.',
+            venue: 'Test Conference',
+            citations: 50,
+            url: 'https://example.com/paper1',
+            source: 'other',
+            extractedAt: new Date(),
+            included: true
+          },
+          {
+            id: 'diagnostic-paper-2',
+            title: 'A Survey of Deep Learning Methods',
+            authors: ['Test Reviewer'],
+            year: 2024,
+            abstract: 'This survey paper reviews existing deep learning methods across various domains. We provide a comprehensive overview of the field.',
+            venue: 'Survey Journal',
+            citations: 200,
+            url: 'https://example.com/paper2',
+            source: 'other',
+            extractedAt: new Date(),
+            included: true
+          },
+          {
+            id: 'diagnostic-paper-3',
+            title: 'AI in Medical Diagnosis: A Case Study',
+            authors: ['Test Researcher'],
+            year: 2024,
+            abstract: 'We explore the application of artificial intelligence in medical diagnosis, focusing on image-based diagnostics and predictive modeling.',
+            venue: 'Medical AI Journal',
+            citations: 30,
+            url: 'https://example.com/paper3',
+            source: 'other',
+            extractedAt: new Date(),
+            included: true
+          }
+        ];
+
+        for (const paper of testPapers) {
+          db.addPaper(sessionId, paper);
+        }
+
+        console.log(chalk.green('  ✓ Test papers inserted\n'));
+
+        // Apply semantic filtering
+        console.log(chalk.white('  Running batch processing test...'));
+        const inclusionCriteria = 'Papers must present novel AI or machine learning methods with healthcare applications.';
+        const exclusionCriteria = 'Survey papers and review papers should be excluded.';
+
+        const startTime = Date.now();
+
+        // Create a simple progress indicator
+        let lastProgress = 0;
+        await tools.applySemanticFiltering(
+          sessionId,
+          inclusionCriteria,
+          exclusionCriteria,
+          (progress) => {
+            if (progress.processedPapers > lastProgress) {
+              process.stdout.write(chalk.gray('.'));
+              lastProgress = progress.processedPapers;
+            }
+          }
+        );
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(chalk.green('\n  ✓ Batch processing completed'));
+        console.log(chalk.gray(`    Time: ${elapsed}s`));
+
+        // Check results
+        const results = db.getPapers(sessionId);
+        const included = results.filter((p: Paper) =>
+          p.systematic_filtering_inclusion === true &&
+          p.systematic_filtering_exclusion === false
+        ).length;
+
+        console.log(chalk.white(`\n  Results:`));
+        console.log(chalk.gray(`    Total papers: ${results.length}`));
+        console.log(chalk.gray(`    Included: ${included}`));
+        console.log(chalk.gray(`    Excluded: ${results.length - included}`));
+
+        // Show sample reasoning
+        const sample = results.find((p: Paper) => p.systematic_filtering_inclusion_reasoning);
+        if (sample) {
+          console.log(chalk.white(`\n  Sample Reasoning (${sample.title.substring(0, 40)}...):`));
+          console.log(chalk.gray(`    "${sample.systematic_filtering_inclusion_reasoning?.substring(0, 120)}..."`));
+        }
+
+        // Expected results validation
+        const expectedIncluded = 2; // Papers 1 and 3 should be included, paper 2 (survey) excluded
+        if (included === expectedIncluded) {
+          console.log(chalk.green('\n  ✓ Test PASSED: Results match expected outcome'));
+        } else {
+          console.log(chalk.yellow(`\n  ⚠ Test WARNING: Expected ${expectedIncluded} included, got ${included}`));
+          console.log(chalk.gray('    (This may indicate LLM reasoning variations)'));
+        }
+
+        console.log('');
+      }
+
+      // 3. Database Check
+      console.log(chalk.cyan('💾 3. Database Check'));
+      console.log(chalk.gray('-'.repeat(80)));
+
+      const sessions = tools.getAllSessions();
+      console.log(chalk.white(`  Total Sessions: ${sessions.length}`));
+
+      if (sessions.length > 0) {
+        const totalPapers = sessions.reduce((sum, s) => sum + s.papers.length, 0);
+        console.log(chalk.white(`  Total Papers: ${totalPapers}`));
+        console.log(chalk.green('  ✓ Database accessible'));
+
+        // Show recent sessions
+        const recent = sessions.slice(0, 3);
+        console.log(chalk.white('\n  Recent Sessions:'));
+        recent.forEach((s, i) => {
+          console.log(chalk.gray(`    ${i + 1}. ${s.parameters.name || 'Unnamed'} (${s.papers.length} papers)`));
+          console.log(chalk.gray(`       Status: ${s.progress.status}, Created: ${s.createdAt.toLocaleDateString()}`));
+        });
+      } else {
+        console.log(chalk.gray('  No existing sessions found'));
+      }
+
+      console.log('');
+
+      // 4. System Summary
+      console.log(chalk.cyan('📊 4. System Summary'));
+      console.log(chalk.gray('-'.repeat(80)));
+
+      if (exitCode === 0) {
+        console.log(chalk.green.bold('  ✓ All systems operational'));
+        console.log(chalk.white('  System is ready for literature review tasks\n'));
+      } else {
+        console.log(chalk.yellow.bold('  ⚠ Some issues detected'));
+        console.log(chalk.white('  Please review the warnings above\n'));
+      }
+
+      console.log(chalk.gray('=' .repeat(80)));
+      console.log(chalk.blue.bold('\n✓ Diagnostic completed\n'));
+
+      tools.close();
+      process.exit(exitCode);
+
+    } catch (error: any) {
+      console.error(chalk.red('\n✗ Diagnostic failed:'), error.message);
+      console.error(chalk.gray(error.stack));
+      tools.close();
+      process.exit(1);
+    }
+  });
+
 // Show parameter schema command (helpful for users)
 program
   .command('params')

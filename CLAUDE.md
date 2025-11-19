@@ -50,6 +50,8 @@ npm run deploy:status         # Check PM2 status
 ```bash
 npm test                      # Run Jest tests
 npm run lint                  # Run ESLint
+npm run cli diagnose          # Run system diagnostics (tests API keys, batch processing, database)
+npm run cli test              # Alias for diagnose
 ```
 
 ## Architecture

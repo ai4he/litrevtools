@@ -18,6 +18,13 @@ interface SemanticFilteringProgress {
   timeElapsed?: number;
   estimatedTimeRemaining?: number;
   error?: string;
+  // Real-time status fields
+  currentAction?: string;
+  currentModel?: string;
+  healthyKeysCount?: number;
+  retryCount?: number;
+  keyRotations?: number;
+  modelFallbacks?: number;
 }
 
 interface Step2SemanticFilteringProps {
@@ -47,7 +54,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     'Literature reviews of any kind are not allowed.'
   );
   const [batchSize, setBatchSize] = useState(20);
-  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('gemini-2.5-flash-lite');
+  const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const { socket } = useSocket();
@@ -375,12 +382,23 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
                 onChange={(e) => setLlmModel(e.target.value as any)}
                 className="input-field w-full"
               >
-                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
+                <option value="auto">🤖 Auto (Recommended - Automatically selects best model based on available quota)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fast & Efficient)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
                 <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental (Legacy - Not Recommended)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Choose the Gemini model for semantic filtering. 2.5 Flash Lite is the default (faster, tested and working). 2.5 Flash has more advanced capabilities. Avoid 2.0 models (deprecated).
+                {llmModel === 'auto' ? (
+                  <>
+                    <strong>Auto Mode:</strong> The system will automatically select the best model based on available API quota across all your keys.
+                    This ensures maximum throughput and minimizes rate limit errors. The system will rotate between API keys and switch models as needed.
+                  </>
+                ) : (
+                  <>
+                    <strong>Manual Mode:</strong> Using {llmModel}. The system will stick to this model and only rotate API keys when rate limits are hit.
+                    Switch to "Auto" mode for better quota management across all your API keys.
+                  </>
+                )}
               </p>
             </div>
 
@@ -449,16 +467,62 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
 
       {/* Progress */}
       {progress && isFiltering && (
-        <ProgressCard
-          title="Semantic Filtering in Progress"
-          currentTask={progress.currentTask}
-          progress={progress.progress}
-          stage={progress.phase}
-          timeElapsed={progress.timeElapsed}
-          estimatedTimeRemaining={progress.estimatedTimeRemaining}
-          batchProgress={batchProgress}
-          error={progress.error}
-        />
+        <div className="space-y-4">
+          <ProgressCard
+            title="Semantic Filtering in Progress"
+            currentTask={progress.currentTask}
+            progress={progress.progress}
+            stage={progress.phase}
+            timeElapsed={progress.timeElapsed}
+            estimatedTimeRemaining={progress.estimatedTimeRemaining}
+            batchProgress={batchProgress}
+            error={progress.error}
+          />
+
+          {/* Real-time Status Details */}
+          {(progress.currentModel || progress.retryCount || progress.keyRotations || progress.modelFallbacks) && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-sm font-medium text-blue-900 mb-2">📊 Real-time Status</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                {progress.currentModel && (
+                  <div className="bg-white p-2 rounded shadow-sm">
+                    <div className="text-gray-500 font-medium">Current Model</div>
+                    <div className="text-gray-900 font-mono">{progress.currentModel}</div>
+                  </div>
+                )}
+                {progress.healthyKeysCount !== undefined && (
+                  <div className="bg-white p-2 rounded shadow-sm">
+                    <div className="text-gray-500 font-medium">Healthy Keys</div>
+                    <div className="text-green-600 font-bold text-lg">{progress.healthyKeysCount}</div>
+                  </div>
+                )}
+                {progress.retryCount !== undefined && progress.retryCount > 0 && (
+                  <div className="bg-white p-2 rounded shadow-sm">
+                    <div className="text-gray-500 font-medium">Retries</div>
+                    <div className="text-yellow-600 font-bold text-lg">{progress.retryCount}</div>
+                  </div>
+                )}
+                {progress.keyRotations !== undefined && progress.keyRotations > 0 && (
+                  <div className="bg-white p-2 rounded shadow-sm">
+                    <div className="text-gray-500 font-medium">Key Rotations</div>
+                    <div className="text-blue-600 font-bold text-lg">{progress.keyRotations}</div>
+                  </div>
+                )}
+                {progress.modelFallbacks !== undefined && progress.modelFallbacks > 0 && (
+                  <div className="bg-white p-2 rounded shadow-sm">
+                    <div className="text-gray-500 font-medium">Model Fallbacks</div>
+                    <div className="text-purple-600 font-bold text-lg">{progress.modelFallbacks}</div>
+                  </div>
+                )}
+              </div>
+              {progress.currentAction && progress.currentAction !== progress.currentTask && (
+                <div className="mt-3 text-xs text-blue-800 bg-blue-100 px-3 py-2 rounded">
+                  <span className="font-medium">Action:</span> {progress.currentAction}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Completion */}

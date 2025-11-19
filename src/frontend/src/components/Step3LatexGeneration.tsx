@@ -67,7 +67,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [outputsGenerated, setOutputsGenerated] = useState(false);
-  const [llmModel, setLlmModel] = useState<'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('gemini-2.5-flash-lite');
+  const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [batchSize, setBatchSize] = useState(15);
   const { socket } = useSocket();
 
@@ -323,12 +323,23 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
                 onChange={(e) => setLlmModel(e.target.value as any)}
                 className="input-field w-full"
               >
-                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Default - Fast & Efficient)</option>
+                <option value="auto">🤖 Auto (Recommended - Automatically selects best model based on available quota)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fast & Efficient)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
                 <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental (Legacy - Not Recommended)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Choose the Gemini model for LaTeX generation. 2.5 Flash Lite is the default (faster, tested and working). 2.5 Flash has more advanced capabilities. Avoid 2.0 models (deprecated).
+                {llmModel === 'auto' ? (
+                  <>
+                    <strong>Auto Mode:</strong> The system will automatically select the best model based on available API quota across all your keys.
+                    This ensures maximum throughput and minimizes rate limit errors. The system will rotate between API keys and switch models as needed.
+                  </>
+                ) : (
+                  <>
+                    <strong>Manual Mode:</strong> Using {llmModel}. The system will stick to this model and only rotate API keys when rate limits are hit.
+                    Switch to "Auto" mode for better quota management across all your API keys.
+                  </>
+                )}
               </p>
             </div>
 

@@ -19,6 +19,13 @@ export interface LLMFilteringProgress {
   papersInCurrentBatch: number;
   timeElapsed: number;
   estimatedTimeRemaining: number;
+  // Detailed status for real-time feedback
+  currentAction?: string; // e.g., "Processing batch 3/10", "Retrying with key rotation", "Fallback to gemini-2.5-flash"
+  currentModel?: string; // Current model being used
+  healthyKeysCount?: number; // Number of healthy keys available
+  retryCount?: number; // Number of retries for current request
+  keyRotations?: number; // Number of key rotations performed
+  modelFallbacks?: number; // Number of model fallbacks performed
 }
 
 export type LLMProgressCallback = (progress: LLMFilteringProgress) => void;
@@ -29,6 +36,66 @@ export class LLMService {
   private keyManager?: APIKeyManager;
   private onKeyExhausted?: () => Promise<string | null>;
   private healthyKeys: string[] = []; // Store verified healthy keys from initialization
+
+  /**
+   * Forbidden phrases that indicate templated/generic reasoning
+   */
+  private readonly FORBIDDEN_PHRASES = [
+    'manual review',
+    'cannot determine',
+    'insufficient information',
+    'appears to meet',
+    'seems to',
+    'might be',
+    'based on paper metadata',
+    'recommend manual review',
+    'appears to',
+    'seems like',
+    'may be',
+    'could be',
+    'possibly',
+    'perhaps'
+  ];
+
+  /**
+   * Check if reasoning contains forbidden templated phrases
+   */
+  private isTemplatedReasoning(reasoning: string): boolean {
+    if (!reasoning || reasoning.trim().length < 50) {
+      // Too short to be detailed
+      return true;
+    }
+
+    const lowerReasoning = reasoning.toLowerCase();
+
+    // Check for forbidden phrases
+    for (const phrase of this.FORBIDDEN_PHRASES) {
+      if (lowerReasoning.includes(phrase.toLowerCase())) {
+        return true;
+      }
+    }
+
+    // Check if reasoning is too generic (doesn't reference paper specifics)
+    const hasSpecificContent =
+      lowerReasoning.includes('abstract') ||
+      lowerReasoning.includes('title') ||
+      lowerReasoning.includes('paper') ||
+      lowerReasoning.includes('author') ||
+      lowerReasoning.includes('method') ||
+      lowerReasoning.includes('study') ||
+      lowerReasoning.includes('research') ||
+      lowerReasoning.includes('approach') ||
+      lowerReasoning.includes('focus') ||
+      lowerReasoning.includes('present') ||
+      lowerReasoning.includes('describe') ||
+      lowerReasoning.includes('discuss');
+
+    if (!hasSpecificContent) {
+      return true; // Reasoning doesn't reference paper content
+    }
+
+    return false;
+  }
 
   constructor(config?: Partial<LLMConfig>) {
     // Default configuration with Gemini as default provider
@@ -219,21 +286,91 @@ export class LLMService {
       throw new Error('No healthy API keys available. Health check during initialization found no working keys.');
     }
 
-    console.log(`[LLM Service] Starting semantic filtering with ${this.healthyKeys.length} verified healthy keys`);
+    // Display detailed diagnostics before starting batch processing
+    console.log('\n' + '='.repeat(80));
+    console.log('🔍 PRE-PROCESSING DIAGNOSTICS');
+    console.log('='.repeat(80));
+
+    // Show available models
+    const geminiProvider = this.provider as any;
+    const isAutoMode = geminiProvider?.isAutoModelSelection?.() || false;
+    const currentModel = geminiProvider?.getCurrentModel?.() || 'unknown';
+    const availableModels = geminiProvider?.fallbackModels || [currentModel];
+
+    console.log('\n📋 MODEL CONFIGURATION:');
+    console.log(`   Mode: ${isAutoMode ? '🤖 AUTO (will select based on quota)' : '🔒 MANUAL (fixed model)'}`);
+    if (isAutoMode) {
+      console.log(`   Available Models (in priority order):`);
+      availableModels.forEach((model: string, index: number) => {
+        const isCurrent = model === currentModel;
+        console.log(`      ${index + 1}. ${model}${isCurrent ? ' ⭐ (starting model)' : ''}`);
+      });
+    } else {
+      console.log(`   Fixed Model: ${currentModel}`);
+    }
+
+    // Show API keys with their status
+    console.log('\n🔑 API KEYS STATUS:');
+    console.log(`   Total Keys: ${this.healthyKeys.length} healthy keys available`);
+
+    if (this.keyManager) {
+      const keyStats = this.keyManager.getKeyStatistics();
+      const healthyKeyStats = keyStats.filter(k => k.healthCheck?.isHealthy);
+
+      healthyKeyStats.forEach((keyInfo, index) => {
+        const quotaStatus = this.keyManager!.getQuotaStatus?.();
+        const keyQuota = quotaStatus?.find(q => q.label === keyInfo.label);
+        const quotaRemaining = keyQuota?.quotaRemaining || 0;
+
+        console.log(`      ${index + 1}. ${keyInfo.label} (${keyInfo.key})`);
+        console.log(`         Status: ✅ Healthy`);
+        console.log(`         Quota Remaining: ${quotaRemaining.toFixed(1)}%`);
+        console.log(`         Requests Made: ${keyInfo.requestCount || 0}`);
+      });
+    }
+
+    // Show processing plan
+    const totalBatches = Math.ceil(papers.length / this.config.batchSize);
+    console.log('\n📊 PROCESSING PLAN:');
+    console.log(`   Total Papers: ${papers.length}`);
+    console.log(`   Batch Size: ${this.config.batchSize} papers per batch`);
+    console.log(`   Total Batches: ${totalBatches}`);
+    console.log(`   Parallel Processing: ✅ Enabled (all batches run in parallel)`);
+    console.log(`   Key Distribution: Round-robin across ${this.healthyKeys.length} healthy keys`);
+
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 STARTING SEMANTIC FILTERING');
+    console.log('='.repeat(80) + '\n');
+
+    // Reset provider statistics for this filtering session
+    const geminiProviderForReset = this.provider as any;
+    if (geminiProviderForReset?.resetStatistics) {
+      geminiProviderForReset.resetStatistics();
+    }
 
     let processedPapers = [...papers];
     const startTime = Date.now();
 
     // Evaluate inclusion criteria if provided
     if (inclusionCriteriaPrompt && inclusionCriteriaPrompt.trim()) {
-      const inclusionRequests: LLMRequest[] = papers.map(paper => ({
-        id: `${paper.id}_inclusion`,
-        taskType: 'semantic_filtering',
-        prompt: this.buildInclusionFilteringPrompt(paper, inclusionCriteriaPrompt),
-        context: { paper, criteriaType: 'inclusion' }
-      }));
+      // Group papers into batches for efficient API usage
+      const batchSize = this.config.batchSize;
+      const paperBatches: Paper[][] = [];
 
-      const totalBatches = Math.ceil(inclusionRequests.length / this.config.batchSize);
+      for (let i = 0; i < papers.length; i += batchSize) {
+        paperBatches.push(papers.slice(i, i + batchSize));
+      }
+
+      console.log(`\n[Batch Processing] Grouped ${papers.length} papers into ${paperBatches.length} batches of up to ${batchSize} papers each`);
+      console.log(`[Batch Processing] This will make ${paperBatches.length} API calls instead of ${papers.length} (${Math.round((1 - paperBatches.length / papers.length) * 100)}% reduction)`);
+
+      // Create ONE request per batch (not per paper!)
+      const inclusionRequests: LLMRequest[] = paperBatches.map((batch, batchIndex) => ({
+        id: `inclusion_batch_${batchIndex}`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildBatchInclusionFilteringPrompt(batch, inclusionCriteriaPrompt),
+        context: { papers: batch, batchIndex, criteriaType: 'inclusion' }
+      }));
 
       const inclusionResponses = await this.processBatchRequestsWithProgress(
         inclusionRequests,
@@ -243,26 +380,93 @@ export class LLMService {
         progressCallback
       );
 
-      processedPapers = processedPapers.map(paper => {
-        const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
+      // Parse batch responses and assign to individual papers
+      const paperDecisions = new Map<string, { decision: boolean; reasoning: string }>();
 
-        // With the robust Gemini provider, we should ALWAYS get a response
-        // The provider will retry indefinitely until it succeeds
+      console.log(`[Batch Processing] Parsing ${inclusionResponses.length} batch responses for inclusion criteria...`);
+
+      for (const response of inclusionResponses) {
         if (!response) {
-          throw new Error(`CRITICAL: No response for paper ${paper.id}. This should never happen with robust LLM provider.`);
+          console.warn(`[LLM Service] Null response in batch responses`);
+          continue;
         }
 
-        // If there's an error marker, the provider failed despite infinite retries (extremely rare)
         if (response.error) {
-          throw new Error(`CRITICAL: LLM provider failed after infinite retries for paper ${paper.id}. Check system logs.`);
+          console.warn(`[LLM Service] Error in batch response ${response.id}:`, response.error);
+          continue;
         }
 
-        const meetsInclusion = response.result?.decision === 'include' || response.result?.meets_criteria === true;
-        const reasoning = response.result?.reasoning;
+        // Parse batch response - should contain decisions for all papers in the batch
+        const batchResults = response.result?.papers || [];
+        const batchPapers = response.context?.papers || [];
 
-        // The LLM should ALWAYS provide reasoning due to strengthened prompts
+        if (batchResults.length === 0) {
+          console.warn(`[LLM Service] Batch ${response.id} returned no paper results. Raw result:`, JSON.stringify(response.result).substring(0, 200));
+        }
+
+        console.log(`[Batch Processing] Batch ${response.id}: Expected ${batchPapers.length} papers, received ${batchResults.length} decisions`);
+
+        for (const paperResult of batchResults) {
+          if (!paperResult.id) {
+            console.warn(`[LLM Service] Paper result missing ID:`, paperResult);
+            continue;
+          }
+
+          // First try exact ID match
+          let paperId = paperResult.id;
+
+          // If ID match fails and we have an index, try to match by index
+          if (!batchPapers.find((p: Paper) => p.id === paperId) && paperResult.index !== undefined) {
+            const paperByIndex = batchPapers[paperResult.index - 1];
+            if (paperByIndex) {
+              console.log(`[Batch Processing] Matched paper by index ${paperResult.index}: ${paperByIndex.id}`);
+              paperId = paperByIndex.id;
+            }
+          }
+
+          paperDecisions.set(paperId, {
+            decision: paperResult.decision === 'include' || paperResult.meets_criteria === true,
+            reasoning: paperResult.reasoning || 'No reasoning provided'
+          });
+        }
+      }
+
+      console.log(`[Batch Processing] Extracted decisions for ${paperDecisions.size} papers from batch responses`);
+
+      processedPapers = processedPapers.map(paper => {
+        const decision = paperDecisions.get(paper.id);
+
+        // Handle missing decision gracefully - provide default values
+        if (!decision) {
+          console.warn(`[LLM Service] No decision found for paper ${paper.id}. Using default inclusion (true).`);
+          return {
+            ...paper,
+            systematic_filtering_inclusion: true,
+            systematic_filtering_inclusion_reasoning: `No LLM decision received for this paper. Defaulting to included for manual review. Title: "${paper.title}"`
+          };
+        }
+
+        const meetsInclusion = decision.decision;
+        const reasoning = decision.reasoning;
+
+        // Validate reasoning quality
         if (!reasoning || reasoning.trim().length === 0) {
-          throw new Error(`CRITICAL: LLM did not provide reasoning for paper ${paper.id} despite enforced prompts. Check prompt configuration.`);
+          console.warn(`[LLM Service] No reasoning provided for paper ${paper.id}. Using conservative default.`);
+          return {
+            ...paper,
+            systematic_filtering_inclusion: true, // Conservative: include for manual review
+            systematic_filtering_inclusion_reasoning: `No LLM reasoning provided. Paper included by default for manual review. Title: "${paper.title}"`
+          };
+        }
+
+        // Check for templated/generic reasoning
+        if (this.isTemplatedReasoning(reasoning)) {
+          console.warn(`[LLM Service] Templated reasoning detected for paper ${paper.id}: "${reasoning.substring(0, 100)}...". Using conservative default.`);
+          return {
+            ...paper,
+            systematic_filtering_inclusion: true, // Conservative: include for manual review
+            systematic_filtering_inclusion_reasoning: `LLM provided generic reasoning. Paper included by default for manual review. Original LLM response: "${reasoning}"`
+          };
         }
 
         return {
@@ -275,14 +479,23 @@ export class LLMService {
 
     // Evaluate exclusion criteria if provided
     if (exclusionCriteriaPrompt && exclusionCriteriaPrompt.trim()) {
-      const exclusionRequests: LLMRequest[] = papers.map(paper => ({
-        id: `${paper.id}_exclusion`,
-        taskType: 'semantic_filtering',
-        prompt: this.buildExclusionFilteringPrompt(paper, exclusionCriteriaPrompt),
-        context: { paper, criteriaType: 'exclusion' }
-      }));
+      // Group papers into batches for efficient API usage
+      const batchSize = this.config.batchSize;
+      const paperBatches: Paper[][] = [];
 
-      const totalBatches = Math.ceil(exclusionRequests.length / this.config.batchSize);
+      for (let i = 0; i < papers.length; i += batchSize) {
+        paperBatches.push(papers.slice(i, i + batchSize));
+      }
+
+      console.log(`\n[Batch Processing] Grouped ${papers.length} papers into ${paperBatches.length} batches for exclusion criteria`);
+
+      // Create ONE request per batch (not per paper!)
+      const exclusionRequests: LLMRequest[] = paperBatches.map((batch, batchIndex) => ({
+        id: `exclusion_batch_${batchIndex}`,
+        taskType: 'semantic_filtering',
+        prompt: this.buildBatchExclusionFilteringPrompt(batch, exclusionCriteriaPrompt),
+        context: { papers: batch, batchIndex, criteriaType: 'exclusion' }
+      }));
 
       const exclusionResponses = await this.processBatchRequestsWithProgress(
         exclusionRequests,
@@ -292,26 +505,93 @@ export class LLMService {
         progressCallback
       );
 
-      processedPapers = processedPapers.map(paper => {
-        const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
+      // Parse batch responses and assign to individual papers
+      const paperDecisions = new Map<string, { decision: boolean; reasoning: string }>();
 
-        // With the robust Gemini provider, we should ALWAYS get a response
-        // The provider will retry indefinitely until it succeeds
+      console.log(`[Batch Processing] Parsing ${exclusionResponses.length} batch responses for exclusion criteria...`);
+
+      for (const response of exclusionResponses) {
         if (!response) {
-          throw new Error(`CRITICAL: No response for paper ${paper.id}. This should never happen with robust LLM provider.`);
+          console.warn(`[LLM Service] Null response in exclusion batch responses`);
+          continue;
         }
 
-        // If there's an error marker, the provider failed despite infinite retries (extremely rare)
         if (response.error) {
-          throw new Error(`CRITICAL: LLM provider failed after infinite retries for paper ${paper.id}. Check system logs.`);
+          console.warn(`[LLM Service] Error in exclusion batch response ${response.id}:`, response.error);
+          continue;
         }
 
-        const meetsExclusion = response.result?.decision === 'exclude' || response.result?.meets_criteria === true;
-        const reasoning = response.result?.reasoning;
+        // Parse batch response - should contain decisions for all papers in the batch
+        const batchResults = response.result?.papers || [];
+        const batchPapers = response.context?.papers || [];
 
-        // The LLM should ALWAYS provide reasoning due to strengthened prompts
+        if (batchResults.length === 0) {
+          console.warn(`[LLM Service] Exclusion batch ${response.id} returned no paper results. Raw result:`, JSON.stringify(response.result).substring(0, 200));
+        }
+
+        console.log(`[Batch Processing] Exclusion batch ${response.id}: Expected ${batchPapers.length} papers, received ${batchResults.length} decisions`);
+
+        for (const paperResult of batchResults) {
+          if (!paperResult.id) {
+            console.warn(`[LLM Service] Exclusion paper result missing ID:`, paperResult);
+            continue;
+          }
+
+          // First try exact ID match
+          let paperId = paperResult.id;
+
+          // If ID match fails and we have an index, try to match by index
+          if (!batchPapers.find((p: Paper) => p.id === paperId) && paperResult.index !== undefined) {
+            const paperByIndex = batchPapers[paperResult.index - 1];
+            if (paperByIndex) {
+              console.log(`[Batch Processing] Matched paper by index ${paperResult.index}: ${paperByIndex.id}`);
+              paperId = paperByIndex.id;
+            }
+          }
+
+          paperDecisions.set(paperId, {
+            decision: paperResult.decision === 'exclude' || paperResult.meets_criteria === true,
+            reasoning: paperResult.reasoning || 'No reasoning provided'
+          });
+        }
+      }
+
+      console.log(`[Batch Processing] Extracted exclusion decisions for ${paperDecisions.size} papers from batch responses`);
+
+      processedPapers = processedPapers.map(paper => {
+        const decision = paperDecisions.get(paper.id);
+
+        // Handle missing decision gracefully - provide default values
+        if (!decision) {
+          console.warn(`[LLM Service] No exclusion decision found for paper ${paper.id}. Using default exclusion (false).`);
+          return {
+            ...paper,
+            systematic_filtering_exclusion: false,
+            systematic_filtering_exclusion_reasoning: `No LLM exclusion decision received for this paper. Defaulting to not excluded for manual review. Title: "${paper.title}"`
+          };
+        }
+
+        const meetsExclusion = decision.decision;
+        const reasoning = decision.reasoning;
+
+        // Validate reasoning quality
         if (!reasoning || reasoning.trim().length === 0) {
-          throw new Error(`CRITICAL: LLM did not provide reasoning for paper ${paper.id} despite enforced prompts. Check prompt configuration.`);
+          console.warn(`[LLM Service] No reasoning provided for paper ${paper.id}. Using conservative default.`);
+          return {
+            ...paper,
+            systematic_filtering_exclusion: false, // Conservative: don't exclude without good reason
+            systematic_filtering_exclusion_reasoning: `No LLM reasoning provided. Paper not excluded by default for manual review. Title: "${paper.title}"`
+          };
+        }
+
+        // Check for templated/generic reasoning
+        if (this.isTemplatedReasoning(reasoning)) {
+          console.warn(`[LLM Service] Templated reasoning detected for paper ${paper.id}: "${reasoning.substring(0, 100)}...". Using conservative default.`);
+          return {
+            ...paper,
+            systematic_filtering_exclusion: false, // Conservative: don't exclude without good reason
+            systematic_filtering_exclusion_reasoning: `LLM provided generic reasoning. Paper not excluded by default for manual review. Original LLM response: "${reasoning}"`
+          };
         }
 
         return {
@@ -353,6 +633,21 @@ export class LLMService {
           || (exclusionCriteriaPrompt ? undefined : 'No exclusion criteria specified - not excluded')
       };
     });
+
+    // Final summary
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    const included = processedPapers.filter(p => p.included).length;
+    const excluded = processedPapers.length - included;
+
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ SEMANTIC FILTERING COMPLETE');
+    console.log('='.repeat(80));
+    console.log(`   Total Papers Analyzed: ${processedPapers.length}`);
+    console.log(`   Included Papers: ${included} (${((included / processedPapers.length) * 100).toFixed(1)}%)`);
+    console.log(`   Excluded Papers: ${excluded} (${((excluded / processedPapers.length) * 100).toFixed(1)}%)`);
+    console.log(`   Total Time: ${totalTime}s`);
+    console.log(`   Average Time per Paper: ${(parseFloat(totalTime) / processedPapers.length).toFixed(2)}s`);
+    console.log('='.repeat(80) + '\n');
 
     return processedPapers;
   }
@@ -488,6 +783,10 @@ export class LLMService {
 
     console.log(`[Parallel LLM] Processing ${requests.length} papers in ${totalBatches} batches using ${availableKeyCount} API keys in parallel`);
 
+    // Get provider stats for detailed progress
+    const providerForProgress = this.provider as any;
+    const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
+
     // Report initial progress
     if (progressCallback) {
       progressCallback({
@@ -498,7 +797,13 @@ export class LLMService {
         totalBatches,
         papersInCurrentBatch: requests.length,
         timeElapsed: Date.now() - startTime,
-        estimatedTimeRemaining: 0
+        estimatedTimeRemaining: 0,
+        currentAction: `Starting ${phase} filtering with ${this.healthyKeys.length} healthy keys`,
+        currentModel,
+        healthyKeysCount: this.healthyKeys.length,
+        retryCount: providerForProgress?.currentRetryCount || 0,
+        keyRotations: providerForProgress?.keyRotationCount || 0,
+        modelFallbacks: providerForProgress?.modelFallbackCount || 0
       });
     }
 
@@ -514,6 +819,22 @@ export class LLMService {
 
         console.log(`[Parallel LLM] Batch ${batchIndex + 1}/${totalBatches} completed (${results.length} papers)`);
 
+        // Get latest provider stats
+        const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
+        const retryCount = providerForProgress?.currentRetryCount || 0;
+        const keyRotations = providerForProgress?.keyRotationCount || 0;
+        const modelFallbacks = providerForProgress?.modelFallbackCount || 0;
+
+        // Build detailed action message
+        let actionMessage = `Processing batch ${batchIndex + 1}/${totalBatches}`;
+        if (keyRotations > 0 || modelFallbacks > 0 || retryCount > 0) {
+          const details = [];
+          if (keyRotations > 0) details.push(`${keyRotations} key rotations`);
+          if (modelFallbacks > 0) details.push(`${modelFallbacks} model fallbacks`);
+          if (retryCount > 0) details.push(`${retryCount} retries`);
+          actionMessage += ` (${details.join(', ')})`;
+        }
+
         // Report progress for this batch completion
         if (progressCallback) {
           progressCallback({
@@ -524,7 +845,13 @@ export class LLMService {
             totalBatches,
             papersInCurrentBatch: 0, // Batch completed
             timeElapsed,
-            estimatedTimeRemaining
+            estimatedTimeRemaining,
+            currentAction: actionMessage,
+            currentModel,
+            healthyKeysCount: this.healthyKeys.length,
+            retryCount,
+            keyRotations,
+            modelFallbacks
           });
         }
 
@@ -551,6 +878,41 @@ export class LLMService {
         estimatedTimeRemaining: 0
       });
     }
+
+    // Post-processing diagnostics
+    const providerForStats = this.provider as any;
+    const finalModel = providerForStats?.getCurrentModel?.() || 'unknown';
+    const keyRotations = providerForStats?.keyRotationCount || 0;
+    const modelFallbacks = providerForStats?.modelFallbackCount || 0;
+    const successfulCalls = providerForStats?.successfulRequestCount || 0;
+    const retries = providerForStats?.currentRetryCount || 0;
+
+    console.log('\n' + '='.repeat(80));
+    console.log(`📈 BATCH PROCESSING COMPLETE - ${phase.toUpperCase()} PHASE`);
+    console.log('='.repeat(80));
+    console.log(`   Total Papers Processed: ${allResponses.length}`);
+    console.log(`   Total Batches: ${totalBatches}`);
+    console.log(`   Time Elapsed: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+    console.log(`   Final Model Used: ${finalModel}`);
+    console.log(`\n   📊 API Call Statistics:`);
+    console.log(`      ✅ Successful API Calls: ${successfulCalls}`);
+    console.log(`      🔄 Key Rotations: ${keyRotations} (switched between keys due to rate limits)`);
+    console.log(`      🔁 Retries: ${retries} (internal retry attempts)`);
+    console.log(`      📉 Model Fallbacks: ${modelFallbacks} (switched models)`);
+    console.log(`      💡 Efficiency: ${successfulCalls} successful calls for ${allResponses.length} papers`);
+    console.log(`         (${(successfulCalls / allResponses.length).toFixed(2)} calls per paper average)`);
+
+    // Show final key status
+    if (this.keyManager) {
+      const quotaStatus = this.keyManager.getQuotaStatus?.();
+      if (quotaStatus) {
+        console.log('\n🔑 FINAL API KEY STATUS:');
+        quotaStatus.forEach((keyStatus: any) => {
+          console.log(`   ${keyStatus.label}: ${keyStatus.quotaRemaining.toFixed(1)}% quota remaining`);
+        });
+      }
+    }
+    console.log('='.repeat(80) + '\n');
 
     return allResponses;
   }
@@ -590,13 +952,73 @@ Provide your response as JSON:
   }
 
   /**
-   * Build inclusion filtering prompt for a paper
+   * Build batch inclusion filtering prompt for multiple papers
+   */
+  private buildBatchInclusionFilteringPrompt(
+    papers: Paper[],
+    inclusionCriteriaPrompt: string
+  ): string {
+    const papersJson = papers.map((paper, index) => ({
+      id: paper.id,
+      index: index + 1,
+      title: paper.title,
+      authors: paper.authors.join(', '),
+      year: paper.year,
+      abstract: paper.abstract || 'No abstract available',
+      venue: paper.venue || 'Unknown venue'
+    }));
+
+    return `You are a research assistant helping with a systematic literature review. Your task is to evaluate whether MULTIPLE papers meet specific inclusion criteria.
+
+**Inclusion Criteria:**
+${inclusionCriteriaPrompt}
+
+**Papers to Review (${papers.length} papers):**
+${JSON.stringify(papersJson, null, 2)}
+
+**Task:**
+For EACH paper in the list above, determine if it MEETS the inclusion criteria.
+
+**CRITICAL REQUIREMENTS:**
+
+1. **JSON ARRAY FORMAT**: Respond with ONLY a valid JSON array containing one object per paper
+2. **MUST PROCESS ALL PAPERS**: Your response must include a decision for ALL ${papers.length} papers
+3. **DETAILED REASONING**: For each paper, provide 2-3 sentences explaining your decision
+4. **NO FORBIDDEN PHRASES**: Never use: "manual review", "cannot determine", "insufficient information", "appears to", "seems to", "might be"
+5. **BE SPECIFIC**: Reference concrete elements from each paper's title, abstract, venue
+
+**Response Format (MUST be valid JSON array):**
+{
+  "papers": [
+    {
+      "id": "paper_id_1",
+      "meets_criteria": true or false,
+      "reasoning": "Detailed, specific analysis referencing the paper's content and how it relates to criteria. Must be 2-3 complete sentences.",
+      "confidence": 0.0 to 1.0
+    },
+    {
+      "id": "paper_id_2",
+      "meets_criteria": true or false,
+      "reasoning": "Another detailed analysis...",
+      "confidence": 0.0 to 1.0
+    }
+    // ... one object for each paper
+  ]
+}
+
+**IMPORTANT**: The response MUST contain exactly ${papers.length} paper objects, one for each paper in the input list. Match each paper by its "id" field.
+
+Respond with ONLY the JSON object above, nothing else.`;
+  }
+
+  /**
+   * Build inclusion filtering prompt for a single paper (fallback)
    */
   private buildInclusionFilteringPrompt(
     paper: Paper,
     inclusionCriteriaPrompt: string
   ): string {
-    return `You are a research assistant helping with a systematic literature review.
+    return `You are a research assistant helping with a systematic literature review. Your task is to evaluate whether a paper meets specific inclusion criteria.
 
 **Inclusion Criteria:**
 ${inclusionCriteriaPrompt}
@@ -610,33 +1032,119 @@ ${paper.venue ? `Venue: ${paper.venue}` : ''}
 ${paper.url ? `URL: ${paper.url}` : ''}
 
 **Task:**
-Determine if this paper MEETS the inclusion criteria described above.
+Carefully analyze the paper's title, abstract, and metadata to determine if it MEETS the inclusion criteria above.
 
-**CRITICAL REQUIREMENTS:**
-1. You MUST respond with ONLY valid JSON - no additional text before or after
-2. You MUST provide a detailed reasoning (2-3 sentences minimum)
-3. The reasoning MUST explain specifically why the paper meets or does not meet the inclusion criteria
-4. Never use phrases like "manual review", "cannot determine", or "insufficient information"
-5. Make the best judgment based on available information
+**CRITICAL REQUIREMENTS - READ CAREFULLY:**
+
+1. **JSON FORMAT ONLY**: Respond with ONLY valid JSON - no markdown, no code blocks, no additional text before or after
+
+2. **DETAILED REASONING REQUIRED**: You MUST provide a detailed, specific reasoning that:
+   - Is at least 2-3 complete sentences
+   - Explicitly references specific aspects of the paper (title, abstract content, methodology, etc.)
+   - Explicitly connects those aspects to the inclusion criteria
+   - Explains your logical reasoning process
+
+3. **FORBIDDEN PHRASES**: NEVER use these phrases or similar generic statements:
+   ❌ "manual review"
+   ❌ "cannot determine"
+   ❌ "insufficient information"
+   ❌ "appears to meet"
+   ❌ "seems to"
+   ❌ "might be"
+   ❌ "based on paper metadata"
+   ❌ "recommend manual review"
+
+4. **BE SPECIFIC**: Instead of generic statements, provide concrete analysis:
+   ✅ "The abstract describes a novel machine learning architecture that..."
+   ✅ "The paper focuses on healthcare applications, as evidenced by..."
+   ✅ "The methodology section indicates an experimental approach where..."
+
+5. **MAKE A DEFINITIVE JUDGMENT**: Based on the available information, make your best judgment. If the abstract is missing, analyze the title, venue, and year to make an informed decision.
 
 **Response Format (MUST be valid JSON):**
 {
   "meets_criteria": true or false,
-  "reasoning": "REQUIRED: Detailed explanation of your decision. Explain specifically why this paper meets or does not meet the inclusion criteria based on the title, abstract, and other metadata provided.",
+  "reasoning": "Write your detailed, specific analysis here. Reference concrete elements from the paper and explain how they relate to the inclusion criteria. Be definitive and specific.",
   "confidence": 0.0 to 1.0
 }
+
+**Example of GOOD reasoning:**
+"The paper presents a novel deep learning approach for medical image segmentation, which directly aligns with the inclusion criteria requiring AI methods in healthcare. The abstract specifically mentions the development of a new CNN architecture tested on clinical datasets, demonstrating both methodological innovation and practical healthcare application."
+
+**Example of BAD reasoning (DO NOT USE):**
+"Based on paper metadata, appears to meet inclusion criteria. Recommend manual review."
+
+Respond with ONLY the JSON object, nothing else.`;
+  }
+
+  /**
+   * Build batch exclusion filtering prompt for multiple papers
+   */
+  private buildBatchExclusionFilteringPrompt(
+    papers: Paper[],
+    exclusionCriteriaPrompt: string
+  ): string {
+    const papersJson = papers.map((paper, index) => ({
+      id: paper.id,
+      index: index + 1,
+      title: paper.title,
+      authors: paper.authors.join(', '),
+      year: paper.year,
+      abstract: paper.abstract || 'No abstract available',
+      venue: paper.venue || 'Unknown venue'
+    }));
+
+    return `You are a research assistant helping with a systematic literature review. Your task is to evaluate whether MULTIPLE papers meet specific exclusion criteria.
+
+**Exclusion Criteria:**
+${exclusionCriteriaPrompt}
+
+**Papers to Review (${papers.length} papers):**
+${JSON.stringify(papersJson, null, 2)}
+
+**Task:**
+For EACH paper in the list above, determine if it MEETS the exclusion criteria (i.e., should be excluded).
+
+**CRITICAL REQUIREMENTS:**
+
+1. **JSON ARRAY FORMAT**: Respond with ONLY a valid JSON array containing one object per paper
+2. **MUST PROCESS ALL PAPERS**: Your response must include a decision for ALL ${papers.length} papers
+3. **DETAILED REASONING**: For each paper, provide 2-3 sentences explaining your decision
+4. **NO FORBIDDEN PHRASES**: Never use: "manual review", "cannot determine", "insufficient information", "appears to", "seems to", "might be"
+5. **BE SPECIFIC**: Reference concrete elements from each paper's title, abstract, venue
+
+**Response Format (MUST be valid JSON array):**
+{
+  "papers": [
+    {
+      "id": "paper_id_1",
+      "meets_criteria": true or false,
+      "reasoning": "Detailed, specific analysis referencing the paper's content and how it relates to exclusion criteria. Must be 2-3 complete sentences.",
+      "confidence": 0.0 to 1.0
+    },
+    {
+      "id": "paper_id_2",
+      "meets_criteria": true or false,
+      "reasoning": "Another detailed analysis...",
+      "confidence": 0.0 to 1.0
+    }
+    // ... one object for each paper
+  ]
+}
+
+**IMPORTANT**: The response MUST contain exactly ${papers.length} paper objects, one for each paper in the input list. Match each paper by its "id" field.
 
 Respond with ONLY the JSON object above, nothing else.`;
   }
 
   /**
-   * Build exclusion filtering prompt for a paper
+   * Build exclusion filtering prompt for a single paper (fallback)
    */
   private buildExclusionFilteringPrompt(
     paper: Paper,
     exclusionCriteriaPrompt: string
   ): string {
-    return `You are a research assistant helping with a systematic literature review.
+    return `You are a research assistant helping with a systematic literature review. Your task is to evaluate whether a paper meets specific exclusion criteria.
 
 **Exclusion Criteria:**
 ${exclusionCriteriaPrompt}
@@ -650,23 +1158,49 @@ ${paper.venue ? `Venue: ${paper.venue}` : ''}
 ${paper.url ? `URL: ${paper.url}` : ''}
 
 **Task:**
-Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).
+Carefully analyze the paper's title, abstract, and metadata to determine if it MEETS the exclusion criteria above (i.e., should be excluded).
 
-**CRITICAL REQUIREMENTS:**
-1. You MUST respond with ONLY valid JSON - no additional text before or after
-2. You MUST provide a detailed reasoning (2-3 sentences minimum)
-3. The reasoning MUST explain specifically why the paper meets or does not meet the exclusion criteria
-4. Never use phrases like "manual review", "cannot determine", or "insufficient information"
-5. Make the best judgment based on available information
+**CRITICAL REQUIREMENTS - READ CAREFULLY:**
+
+1. **JSON FORMAT ONLY**: Respond with ONLY valid JSON - no markdown, no code blocks, no additional text before or after
+
+2. **DETAILED REASONING REQUIRED**: You MUST provide a detailed, specific reasoning that:
+   - Is at least 2-3 complete sentences
+   - Explicitly references specific aspects of the paper (title, abstract content, methodology, etc.)
+   - Explicitly connects those aspects to the exclusion criteria
+   - Explains your logical reasoning process
+
+3. **FORBIDDEN PHRASES**: NEVER use these phrases or similar generic statements:
+   ❌ "manual review"
+   ❌ "cannot determine"
+   ❌ "insufficient information"
+   ❌ "appears to meet"
+   ❌ "seems to"
+   ❌ "might be"
+   ❌ "based on paper metadata"
+   ❌ "recommend manual review"
+
+4. **BE SPECIFIC**: Instead of generic statements, provide concrete analysis:
+   ✅ "The title explicitly contains 'systematic review', indicating this is a literature review rather than primary research..."
+   ✅ "The abstract describes a survey of existing methods without proposing novel contributions..."
+   ✅ "The paper focuses on theoretical proofs without empirical validation, which matches the exclusion criteria for..."
+
+5. **MAKE A DEFINITIVE JUDGMENT**: Based on the available information, make your best judgment. If the abstract is missing, analyze the title, venue, and year to make an informed decision.
 
 **Response Format (MUST be valid JSON):**
 {
   "meets_criteria": true or false,
-  "reasoning": "REQUIRED: Detailed explanation of your decision. Explain specifically why this paper meets or does not meet the exclusion criteria based on the title, abstract, and other metadata provided.",
+  "reasoning": "Write your detailed, specific analysis here. Reference concrete elements from the paper and explain how they relate to the exclusion criteria. Be definitive and specific.",
   "confidence": 0.0 to 1.0
 }
 
-Respond with ONLY the JSON object above, nothing else.`;
+**Example of GOOD reasoning:**
+"The paper's title includes 'A Survey of' and the abstract describes a comprehensive review of existing techniques without proposing new methods. This clearly matches the exclusion criteria which excludes review papers and surveys, as it does not present original research contributions."
+
+**Example of BAD reasoning (DO NOT USE):**
+"Based on paper metadata, does not appear to meet exclusion criteria. Recommend manual review."
+
+Respond with ONLY the JSON object, nothing else.`;
   }
 
   /**

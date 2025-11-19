@@ -31,7 +31,9 @@ app.use(helmet({
   contentSecurityPolicy: false // Disable for development
 }));
 app.use(cors());
-app.use(express.json());
+// Increase body size limit to 50MB for large CSV uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static files from shared React frontend (if built)
 const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -358,9 +360,18 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
       exclusionPrompt,
       (progress) => {
         const overallProgress = (progress.processedPapers / progress.totalPapers) * 100;
+
+        // Build detailed task message with current action
+        let taskMessage = progress.currentAction || `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`;
+
+        // Add model info if available
+        if (progress.currentModel) {
+          taskMessage += ` [${progress.currentModel}]`;
+        }
+
         emitOrBuffer(tempSessionId, 'semantic-filter-progress', {
           status: 'running',
-          currentTask: `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`,
+          currentTask: taskMessage,
           progress: overallProgress,
           phase: progress.phase,
           totalPapers: progress.totalPapers,
@@ -368,7 +379,14 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
           currentBatch: progress.currentBatch,
           totalBatches: progress.totalBatches,
           timeElapsed: progress.timeElapsed,
-          estimatedTimeRemaining: progress.estimatedTimeRemaining
+          estimatedTimeRemaining: progress.estimatedTimeRemaining,
+          // New detailed status fields
+          currentAction: progress.currentAction,
+          currentModel: progress.currentModel,
+          healthyKeysCount: progress.healthyKeysCount,
+          retryCount: progress.retryCount,
+          keyRotations: progress.keyRotations,
+          modelFallbacks: progress.modelFallbacks
         });
       }
     ).then((filteredPapers) => {
@@ -673,6 +691,33 @@ app.get('/api/config', (req, res) => {
       debugMode: process.env.DEBUG_MODE === 'true'
     }
   });
+});
+
+// Usage statistics endpoint
+app.get('/api/usage-stats', (req, res) => {
+  try {
+    const { UsageTracker } = require('../../core/llm/usage-tracker');
+
+    const allStats = UsageTracker.getAllUsageStats();
+    const dailySummary = UsageTracker.getDailySummary();
+    const historicalData = UsageTracker.getHistoricalData();
+
+    res.json({
+      success: true,
+      data: {
+        currentDay: dailySummary.date,
+        totalRequests: dailySummary.totalRequests,
+        totalTokens: dailySummary.totalTokens,
+        byModel: dailySummary.byModel,
+        byKey: dailySummary.byKey,
+        detailedStats: allStats,
+        historical: historicalData
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to get usage stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Health check

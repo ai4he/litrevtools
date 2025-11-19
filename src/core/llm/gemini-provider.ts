@@ -7,6 +7,7 @@ import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { BaseLLMProvider } from './base-provider';
 import { LLMRequest, LLMResponse } from '../types';
 import { APIKeyManager } from './api-key-manager';
+import { UsageTracker } from './usage-tracker';
 
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
@@ -16,6 +17,14 @@ export class GeminiProvider extends BaseLLMProvider {
   private lastRequestTime: number = 0;
   private minRequestInterval: number = 1000; // Minimum 1 second between requests
   private verifiedHealthyKeys: string[] = []; // Pre-verified healthy keys from initialization
+  private autoSelectModel: boolean = false; // Whether to automatically select model based on quota
+
+  // Tracking statistics for real-time progress updates
+  // These track cumulative counts for the current batch/phase
+  public keyRotationCount: number = 0;
+  public modelFallbackCount: number = 0;
+  public currentRetryCount: number = 0;
+  public successfulRequestCount: number = 0; // Track actual successful API calls
 
   // Fallback models sorted by free tier quota (highest to lowest)
   // Tested 2025-11-19 with 22 API keys - all models verified as working
@@ -34,16 +43,24 @@ export class GeminiProvider extends BaseLLMProvider {
   async initialize(apiKey: string, config?: { model?: string; keyManager?: APIKeyManager }): Promise<void> {
     await super.initialize(apiKey, config);
 
-    this.modelName = config?.model || this.defaultModel;
+    // Check if auto model selection is enabled
+    if (config?.model === 'auto') {
+      this.autoSelectModel = true;
+      this.modelName = this.fallbackModels[0]; // Start with highest throughput model
+      console.log('[Gemini Provider] Auto model selection enabled - will dynamically select best model based on quota');
+    } else {
+      this.modelName = config?.model || this.defaultModel;
 
-    // Set up fallback models list with the configured model as primary
-    if (config?.model && config.model !== this.defaultModel) {
-      // If a custom model is specified, make it the primary and add others as fallbacks
-      this.fallbackModels = [
-        config.model,
-        ...this.fallbackModels.filter(m => m !== config.model)
-      ];
+      // Set up fallback models list with the configured model as primary
+      if (config?.model && config.model !== this.defaultModel && config.model !== 'auto') {
+        // If a custom model is specified, make it the primary and add others as fallbacks
+        this.fallbackModels = [
+          config.model,
+          ...this.fallbackModels.filter(m => m !== config.model)
+        ];
+      }
     }
+
     // Set current model to the first in the fallback list
     this.modelName = this.fallbackModels[this.currentModelIndex];
 
@@ -57,6 +74,24 @@ export class GeminiProvider extends BaseLLMProvider {
     } else if (!apiKey) {
       throw new Error('Gemini API key is required');
     }
+  }
+
+  /**
+   * Check if auto model selection is enabled
+   */
+  isAutoModelSelection(): boolean {
+    return this.autoSelectModel;
+  }
+
+  /**
+   * Reset statistics counters (call at start of new phase)
+   */
+  resetStatistics(): void {
+    this.keyRotationCount = 0;
+    this.modelFallbackCount = 0;
+    this.currentRetryCount = 0;
+    this.successfulRequestCount = 0;
+    console.log('[Gemini Provider] Statistics counters reset');
   }
 
   /**
@@ -150,6 +185,9 @@ export class GeminiProvider extends BaseLLMProvider {
         const response = result.response;
         const text = response.text();
 
+        // Track successful API call
+        this.successfulRequestCount++;
+
         // Estimate tokens and cost (Gemini 1.5 Flash pricing)
         const estimatedTokens = Math.ceil((prompt.length + text.length) / 4);
         const cost = this.estimateCost(estimatedTokens);
@@ -163,6 +201,14 @@ export class GeminiProvider extends BaseLLMProvider {
           if (usedKey) {
             // Record quota usage for this key
             this.keyManager.recordKeyUsage(usedKey, estimatedTokens);
+
+            // Get key label from key manager for usage tracking
+            const keyStats = this.keyManager.getKeyStatistics();
+            const keyInfo = keyStats.find(k => k.key === usedKey.substring(0, 8) + '*'.repeat(usedKey.length - 12) + usedKey.substring(usedKey.length - 4));
+            const keyLabel = keyInfo?.label || 'Unknown';
+
+            // Record usage in global usage tracker
+            UsageTracker.recordUsage(usedKey, this.modelName, estimatedTokens, keyLabel);
           }
 
           if (specificKey) {
@@ -214,8 +260,19 @@ export class GeminiProvider extends BaseLLMProvider {
             attempt = -1; // Will be incremented to 0 in next iteration
             continue;
           } else {
-            // All models exhausted
-            throw new Error(`All models failed - last error: ${this.sanitizeError(lastError.message)}`);
+            // All models exhausted with invalid model errors
+            // This is a critical error - the API might have changed
+            // Wait and retry from the beginning in case it's temporary
+            console.log(`[Critical Error] All models reported as invalid. Waiting 60s before retrying from first model...`);
+            await this.delay(60000);
+            this.currentModelIndex = 0;
+            this.modelName = this.fallbackModels[0];
+            if (this.keyManager) {
+              this.keyManager.resetRateLimitedKeys();
+            }
+            keyRotationCycles = 0;
+            attempt = -1;
+            continue;
           }
         }
 
@@ -233,32 +290,46 @@ export class GeminiProvider extends BaseLLMProvider {
 
           // If using specific key and it's a rate limit error, try recovery strategies
           if (usingSpecificKey && (isRateLimitError || isQuotaError)) {
+            this.currentRetryCount++;
+
             // Strategy 1: Try another verified healthy key if available
             if (this.verifiedHealthyKeys.length > 1) {
               const currentKeyIndex = this.verifiedHealthyKeys.indexOf(specificKey);
               const nextKeyIndex = (currentKeyIndex + 1) % this.verifiedHealthyKeys.length;
               const nextKey = this.verifiedHealthyKeys[nextKeyIndex];
 
-              console.log(`[Key Rotation] Specific key hit rate limit, trying next verified healthy key`);
+              this.keyRotationCount++;
+              console.log(`[Key Rotation #${this.keyRotationCount}] Specific key hit rate limit, trying next verified healthy key`);
               await this.delay(1000);
               return this.request(prompt, temperature, nextKey);
             }
 
             // Strategy 2: Try a different model with lower quota requirements
             if (this.tryNextModel()) {
-              console.log(`[Model Fallback] All keys rate limited for ${this.fallbackModels[this.currentModelIndex - 1]}, trying ${this.modelName}`);
+              this.modelFallbackCount++;
+              console.log(`[Model Fallback #${this.modelFallbackCount}] All keys rate limited for ${this.fallbackModels[this.currentModelIndex - 1]}, trying ${this.modelName}`);
               // Reset and retry with new model and original key
               await this.delay(2000);
               return this.request(prompt, temperature, specificKey);
             }
 
             // Strategy 3: Wait and retry with same key/model (quota will reset)
-            console.log(`[Retry] All keys and models exhausted, waiting 10s before retry...`);
-            await this.delay(10000);
-            // Reset to first model for retry
+            // Quotas reset every 60 seconds, so wait full minute before retrying
+            const waitTime = 60000; // 60 seconds
+            console.log(`[Retry #${this.currentRetryCount}] All keys and models exhausted, waiting 60s for quota reset...`);
+            await this.delay(waitTime);
+
+            // Reset all rate-limited keys and go back to first model
+            if (this.keyManager) {
+              this.keyManager.resetRateLimitedKeys();
+            }
             this.currentModelIndex = 0;
             this.modelName = this.fallbackModels[0];
-            return this.request(prompt, temperature, specificKey);
+            console.log(`[Quota Reset] Retrying from beginning with model: ${this.modelName}`);
+
+            // Try the first verified healthy key instead of the same specific key
+            const firstKey = this.verifiedHealthyKeys[0] || specificKey;
+            return this.request(prompt, temperature, firstKey);
           }
 
           // Check if we have more keys to try
@@ -279,16 +350,29 @@ export class GeminiProvider extends BaseLLMProvider {
               // All models exhausted - wait for quota reset (quotas reset every minute)
               // NEVER give up - keep retrying until we get a result
               const waitTime = 60000; // Wait 60 seconds for quotas to reset
-              console.log(`[Quota Reset] All keys and models exhausted. Waiting 60s for quota reset (cycle ${keyRotationCycles + 1})`);
+
+              console.log(`\n${'='.repeat(80)}`);
+              console.log(`⏳ RATE LIMIT RECOVERY - Cycle ${keyRotationCycles + 1}`);
+              console.log(`${'='.repeat(80)}`);
+              console.log(`   Status: All ${this.fallbackModels.length} models + all API keys are rate-limited`);
+              console.log(`   Action: Waiting 60 seconds for rate limit windows to reset...`);
+              console.log(`   Next: Will retry from first model with all keys refreshed`);
+              console.log(`   Note: This is NORMAL for large batches - do NOT stop the process`);
+              console.log(`${'='.repeat(80)}\n`);
+
               await this.delay(waitTime);
 
               // Reset all rate-limited keys and go back to first model
+              const resetCount = this.keyManager.getAllAvailableKeys().length;
               this.keyManager.resetRateLimitedKeys();
+              const availableAfterReset = this.keyManager.getAllAvailableKeys().length;
+
               this.currentModelIndex = 0;
               this.modelName = this.fallbackModels[0];
               keyRotationCycles = 0;
               attempt = -1; // Reset attempts for new cycle
-              console.log(`[Quota Reset] Retrying from beginning with model: ${this.modelName}`);
+
+              console.log(`[Recovery Complete] Reset ${availableAfterReset} keys. Retrying with model: ${this.modelName}\n`);
               continue;
             }
 
@@ -302,12 +386,25 @@ export class GeminiProvider extends BaseLLMProvider {
 
             // All models failed with non-quota errors - wait and retry from beginning
             const waitTime = 60000;
-            console.log(`[Error Recovery] All models failed. Waiting 60s before retrying (cycle ${keyRotationCycles + 1})`);
+
+            console.log(`\n${'='.repeat(80)}`);
+            console.log(`⚠️  ERROR RECOVERY - Cycle ${keyRotationCycles + 1}`);
+            console.log(`${'='.repeat(80)}`);
+            console.log(`   Status: All models encountered errors (non-rate-limit)`);
+            console.log(`   Last Error: ${lastError?.message?.substring(0, 100) || 'Unknown'}`);
+            console.log(`   Action: Waiting 60 seconds before retrying...`);
+            console.log(`   Note: System will keep retrying - do NOT stop the process`);
+            console.log(`${'='.repeat(80)}\n`);
+
             await this.delay(waitTime);
             this.currentModelIndex = 0;
             this.modelName = this.fallbackModels[0];
+            if (this.keyManager) {
+              this.keyManager.resetRateLimitedKeys();
+            }
             keyRotationCycles = 0;
             attempt = -1;
+            console.log(`[Recovery] Retrying from beginning with model: ${this.modelName}\n`);
             continue;
           }
 
@@ -449,7 +546,8 @@ export class GeminiProvider extends BaseLLMProvider {
         taskType: req.taskType,
         result,
         confidence: this.extractConfidence(text),
-        tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
+        tokensUsed: Math.ceil((req.prompt.length + text.length) / 4),
+        context: req.context
       } as LLMResponse;
     });
 
