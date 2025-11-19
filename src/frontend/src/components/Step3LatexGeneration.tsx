@@ -67,8 +67,15 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
   const [outputsGenerated, setOutputsGenerated] = useState(false);
+  const [availableOutputs, setAvailableOutputs] = useState<Record<OutputType, boolean>>({
+    csv: false,
+    bibtex: false,
+    latex: false,
+    zip: false
+  });
   const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [batchSize, setBatchSize] = useState(15);
+  const [tempSessionId, setTempSessionId] = useState<string | null>(null); // Store temp session ID from CSV upload
   const { socket } = useSocket();
 
   // Expose trigger method to parent via ref
@@ -82,53 +89,98 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
 
   // Listen for output progress events via WebSocket
   useEffect(() => {
-    if (!socket || !sessionId) {
+    // Use tempSessionId if available (CSV upload), otherwise use sessionId from props
+    const activeSessionId = tempSessionId || sessionId;
+
+    console.log('[Step3 useEffect] ========== EFFECT TRIGGERED ==========');
+    console.log('[Step3 useEffect] tempSessionId:', tempSessionId);
+    console.log('[Step3 useEffect] sessionId (prop):', sessionId);
+    console.log('[Step3 useEffect] activeSessionId:', activeSessionId);
+    console.log('[Step3 useEffect] socket:', socket ? 'connected' : 'not connected');
+
+    if (!socket || !activeSessionId) {
+      console.log('[Step3 useEffect] Skipping setup - missing socket or sessionId');
       return;
     }
 
-    console.log('[Step3] Setting up output-progress listener for session:', sessionId);
+    console.log('[Step3 useEffect] Setting up WebSocket listeners for session:', activeSessionId);
 
     // Subscribe to session updates
-    socket.emit('subscribe', sessionId);
+    console.log('[Step3 useEffect] Emitting subscribe event for:', activeSessionId);
+    socket.emit('subscribe', activeSessionId);
 
     // Listen for output progress
-    const outputProgressEvent = `output-progress:${sessionId}`;
-    const outputsEvent = `outputs:${sessionId}`;
+    const outputProgressEvent = `output-progress:${activeSessionId}`;
+    const outputsEvent = `outputs:${activeSessionId}`;
+
+    console.log('[Step3 useEffect] Registering listeners:');
+    console.log('[Step3 useEffect]   - Event:', outputProgressEvent);
+    console.log('[Step3 useEffect]   - Event:', outputsEvent);
 
     const handleOutputProgress = (progress: OutputProgress) => {
-      console.log('[Step3] Received output progress:', progress);
+      console.log('[Step3 WebSocket] ========== OUTPUT PROGRESS RECEIVED ==========');
+      console.log('[Step3 WebSocket] Progress:', {
+        status: progress.status,
+        stage: progress.stage,
+        completedStages: progress.completedStages,
+        totalStages: progress.totalStages,
+        progress: progress.progress,
+        currentTask: progress.currentTask
+      });
       setOutputProgress(progress);
 
       if (progress.status === 'running') {
+        console.log('[Step3 WebSocket] Status: RUNNING - setting isGenerating=true');
         setIsGenerating(true);
         setError(null);
       } else if (progress.status === 'completed') {
+        console.log('[Step3 WebSocket] Status: COMPLETED - marking outputs as generated');
         setIsGenerating(false);
         setOutputProgress(null); // Clear progress when done
         setOutputsGenerated(true); // Mark outputs as generated
       } else if (progress.status === 'error') {
+        console.log('[Step3 WebSocket] Status: ERROR -', progress.error);
         setIsGenerating(false);
         setError(progress.error || 'Output generation failed');
       }
     };
 
     const handleOutputsGenerated = (data: any) => {
-      console.log('[Step3] Outputs generated:', data);
+      console.log('[Step3 WebSocket] ========== OUTPUTS GENERATED ==========');
+      console.log('[Step3 WebSocket] Outputs data:', data);
+
+      // Track which outputs are actually available
+      setAvailableOutputs({
+        csv: !!data?.csv,
+        bibtex: !!data?.bibtex,
+        latex: !!data?.latex,
+        zip: !!data?.zip
+      });
+      console.log('[Step3 WebSocket] Available outputs:', {
+        csv: !!data?.csv,
+        bibtex: !!data?.bibtex,
+        latex: !!data?.latex,
+        zip: !!data?.zip
+      });
+
       setIsGenerating(false);
       setOutputProgress(null);
       setOutputsGenerated(true); // Mark outputs as generated
     };
 
+    console.log('[Step3 useEffect] Attaching event listeners...');
     socket.on(outputProgressEvent, handleOutputProgress);
     socket.on(outputsEvent, handleOutputsGenerated);
+    console.log('[Step3 useEffect] Event listeners attached successfully');
 
     return () => {
-      console.log('[Step3] Cleaning up output-progress listener');
+      console.log('[Step3 useEffect] ========== CLEANUP ==========');
+      console.log('[Step3 useEffect] Removing listeners and unsubscribing from:', activeSessionId);
       socket.off(outputProgressEvent, handleOutputProgress);
       socket.off(outputsEvent, handleOutputsGenerated);
-      socket.emit('unsubscribe', sessionId);
+      socket.emit('unsubscribe', activeSessionId);
     };
-  }, [socket, sessionId]);
+  }, [socket, sessionId, tempSessionId]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,17 +194,31 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   };
 
   const handleStartGeneration = async () => {
+    console.log('[Step3 Generation] ========== START GENERATION CLICKED ==========');
+    console.log('[Step3 Generation] dataSource:', dataSource);
+    console.log('[Step3 Generation] uploadedFile:', uploadedFile?.name);
+    console.log('[Step3 Generation] sessionId:', sessionId);
+
     if (dataSource === 'upload' && !uploadedFile) {
+      console.log('[Step3 Generation] ERROR: No file uploaded');
       setError('Please upload a CSV file');
       return;
     }
 
     if (!sessionId && dataSource !== 'upload') {
+      console.log('[Step3 Generation] ERROR: No session available');
       setError('No session available. Please complete previous steps or upload a CSV file.');
       return;
     }
 
+    // Clear temp session ID when using sessionId from props (not CSV upload)
+    if (dataSource !== 'upload') {
+      console.log('[Step3 Generation] Clearing temp session ID (using prop sessionId)');
+      setTempSessionId(null);
+    }
+
     try {
+      console.log('[Step3 Generation] Setting isGenerating=true and initial progress');
       setIsGenerating(true);
       setError(null);
       setOutputProgress({
@@ -175,17 +241,32 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
         });
       } else if (uploadedFile) {
         // Handle CSV upload case
-        console.log('[Step3] Reading CSV file:', uploadedFile.name);
+        console.log('[Step3 CSV Upload] ========== READING CSV FILE ==========');
+        console.log('[Step3 CSV Upload] File name:', uploadedFile.name);
+        console.log('[Step3 CSV Upload] File size:', uploadedFile.size, 'bytes');
 
         // Read CSV file content
         const csvContent = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = () => reject(new Error('Failed to read CSV file'));
+          reader.onload = (e) => {
+            console.log('[Step3 CSV Upload] File read successfully');
+            resolve(e.target?.result as string);
+          };
+          reader.onerror = () => {
+            console.error('[Step3 CSV Upload] ERROR reading file');
+            reject(new Error('Failed to read CSV file'));
+          };
           reader.readAsText(uploadedFile);
         });
 
-        console.log('[Step3] Sending CSV to API (length:', csvContent.length, 'chars)');
+        console.log('[Step3 CSV Upload] CSV content length:', csvContent.length, 'chars');
+        console.log('[Step3 CSV Upload] Sending POST request to /api/generate/csv');
+        console.log('[Step3 CSV Upload] Request params:', {
+          csvLength: csvContent.length,
+          model: llmModel,
+          batchSize,
+          hasLatexPrompt: !!latexPrompt?.trim()
+        });
 
         // Import axios for this specific call
         const axios = (await import('axios')).default;
@@ -198,14 +279,20 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
           latexPrompt: latexPrompt.trim() || undefined
         });
 
-        // Set the temporary session ID returned from the server
-        const tempSessionId = response.data.sessionId;
-        console.log('[Step3] Received session ID from CSV upload:', tempSessionId);
+        console.log('[Step3 CSV Upload] ========== API RESPONSE RECEIVED ==========');
+        console.log('[Step3 CSV Upload] Response:', response.data);
 
-        // Subscribe to WebSocket events for this session
-        if (socket) {
-          socket.emit('subscribe', tempSessionId);
-        }
+        // Set the temporary session ID returned from the server
+        const newTempSessionId = response.data.sessionId;
+        console.log('[Step3 CSV Upload] Temp session ID:', newTempSessionId);
+        console.log('[Step3 CSV Upload] Setting tempSessionId state to trigger useEffect...');
+
+        // Store temp session ID in state so useEffect can listen to it
+        setTempSessionId(newTempSessionId);
+
+        console.log('[Step3 CSV Upload] tempSessionId state updated - useEffect should trigger now');
+        // The useEffect will automatically subscribe when tempSessionId changes
+        // No need to manually subscribe here
       } else {
         throw new Error('No session or CSV file available');
       }
@@ -443,30 +530,60 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       {outputsGenerated && !isGenerating && sessionId && (
         <div className="space-y-4">
           <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-            <h4 className="font-semibold text-green-900 mb-2">All Outputs Generated Successfully!</h4>
+            <h4 className="font-semibold text-green-900 mb-2">Outputs Generated!</h4>
             <p className="text-sm text-green-700">
-              Your literature review is complete. Download individual files or the complete package below.
+              Your literature review outputs are ready. Download individual files or the complete package below.
             </p>
           </div>
+
+          {/* Warning if LaTeX failed */}
+          {!availableOutputs.latex && (
+            <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
+              <h4 className="font-semibold text-yellow-900 mb-2 flex items-center gap-2">
+                <AlertCircle size={20} />
+                LaTeX Generation Failed
+              </h4>
+              <p className="text-sm text-yellow-700 mb-2">
+                The LaTeX paper could not be generated due to JSON parsing errors from the AI service. This is a known issue when processing large paper sets.
+              </p>
+              <p className="text-sm text-yellow-700">
+                Other outputs (CSV, BibTeX, PRISMA, ZIP) are available for download. You can still use the CSV and BibTeX files for your literature review.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {OUTPUT_FILES.map((file) => {
               const isDownloading = downloading.has(file.type);
+              const isAvailable = availableOutputs[file.type];
+              const isDisabled = isDownloading || !isAvailable;
+
               return (
                 <button
                   key={file.type}
-                  onClick={() => handleDownload(file.type, file.filename)}
-                  disabled={isDownloading}
-                  className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => isAvailable && handleDownload(file.type, file.filename)}
+                  disabled={isDisabled}
+                  className={`flex items-center gap-4 p-4 border-2 rounded-lg transition-all text-left ${
+                    isAvailable
+                      ? 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
+                      : 'border-gray-100 bg-gray-50 cursor-not-allowed'
+                  } ${isDisabled ? 'opacity-50' : ''}`}
                 >
-                  <div className="flex-shrink-0 p-3 bg-primary-100 text-primary-600 rounded-lg">
+                  <div className={`flex-shrink-0 p-3 rounded-lg ${
+                    isAvailable ? 'bg-primary-100 text-primary-600' : 'bg-gray-200 text-gray-400'
+                  }`}>
                     {file.icon}
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900">{file.label}</h4>
-                    <p className="text-sm text-gray-500">{file.description}</p>
+                    <h4 className={`font-semibold ${isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>
+                      {file.label}
+                      {!isAvailable && <span className="ml-2 text-xs">(Not Available)</span>}
+                    </h4>
+                    <p className={`text-sm ${isAvailable ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {file.description}
+                    </p>
                   </div>
-                  <Download className="text-gray-400" size={20} />
+                  {isAvailable && <Download className="text-gray-400" size={20} />}
                 </button>
               );
             })}

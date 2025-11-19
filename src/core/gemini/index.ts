@@ -32,6 +32,97 @@ export class GeminiService {
   }
 
   /**
+   * Clean and sanitize JSON string for robust parsing
+   * Handles control characters, LaTeX escapes, and malformed JSON
+   */
+  private cleanJSONString(jsonStr: string): string {
+    let inString = false;
+    let result = '';
+    let i = 0;
+    let escaped = false;
+
+    while (i < jsonStr.length) {
+      const char = jsonStr[i];
+      const nextChar = i < jsonStr.length - 1 ? jsonStr[i + 1] : '';
+
+      // Handle escape sequences
+      if (escaped) {
+        // If previous char was backslash, this is part of an escape sequence
+        // Just add it and continue
+        result += char;
+        escaped = false;
+        i++;
+        continue;
+      }
+
+      // Check for backslash (potential escape)
+      if (char === '\\') {
+        // Check if it's a valid JSON escape sequence
+        if (nextChar === '"' || nextChar === '\\' || nextChar === '/' ||
+            nextChar === 'b' || nextChar === 'f' || nextChar === 'n' ||
+            nextChar === 'r' || nextChar === 't' || nextChar === 'u') {
+          // Valid JSON escape - keep as is
+          result += char;
+          escaped = true;
+          i++;
+          continue;
+        } else if (inString) {
+          // Invalid escape inside a string (probably LaTeX) - escape the backslash
+          result += '\\\\';
+          i++;
+          continue;
+        } else {
+          // Outside string - keep as is
+          result += char;
+          i++;
+          continue;
+        }
+      }
+
+      // Track if we're inside a string value
+      if (char === '"') {
+        inString = !inString;
+        result += char;
+        i++;
+        continue;
+      }
+
+      // If we're in a string, handle special characters
+      if (inString) {
+        // Handle literal control characters in strings
+        if (char === '\n') {
+          result += '\\n';
+          i++;
+          continue;
+        }
+        if (char === '\r') {
+          result += '\\r';
+          i++;
+          continue;
+        }
+        if (char === '\t') {
+          result += '\\t';
+          i++;
+          continue;
+        }
+        // Remove other control characters (0x00-0x1F)
+        const charCode = char.charCodeAt(0);
+        if (charCode < 0x20 && charCode !== 0x09 && charCode !== 0x0A && charCode !== 0x0D) {
+          // Skip control character
+          i++;
+          continue;
+        }
+      }
+
+      // Default: keep character as is
+      result += char;
+      i++;
+    }
+
+    return result;
+  }
+
+  /**
    * Make a request with automatic key rotation on failures
    */
   private async requestWithRetry(prompt: string): Promise<string> {
@@ -481,43 +572,24 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
         // Ignore
       }
 
-      // Fix: Properly escape all backslashes for JSON
-      // Simple approach: First, protect already-valid JSON escape sequences, then escape all other backslashes
+      // Use robust JSON cleaner to fix escaping and control characters
       try {
-        let fixed = jsonStr
-          // Temporarily protect valid JSON escape sequences
-          .replace(/\\n/g, '\u0000N\u0000')   // Protect \n
-          .replace(/\\r/g, '\u0000R\u0000')   // Protect \r
-          .replace(/\\t/g, '\u0000T\u0000')   // Protect \t
-          .replace(/\\"/g, '\u0000Q\u0000')   // Protect \"
-          .replace(/\\\\/g, '\u0000B\u0000')  // Protect \\
-          .replace(/\\f/g, '\u0000F\u0000')   // Protect \f
-          .replace(/\\b/g, '\u0000b\u0000')   // Protect \b
-          // Now escape all remaining single backslashes (these are LaTeX commands)
-          .replace(/\\/g, '\\\\')
-          // Restore the protected sequences
-          .replace(/\u0000N\u0000/g, '\\n')
-          .replace(/\u0000R\u0000/g, '\\r')
-          .replace(/\u0000T\u0000/g, '\\t')
-          .replace(/\u0000Q\u0000/g, '\\"')
-          .replace(/\u0000B\u0000/g, '\\\\')
-          .replace(/\u0000F\u0000/g, '\\f')
-          .replace(/\u0000b\u0000/g, '\\b');
+        const cleaned = this.cleanJSONString(jsonStr);
 
-        console.log(`[GeminiService] Attempting to parse fixed JSON...`);
+        console.log(`[GeminiService] Attempting to parse cleaned JSON...`);
 
-        // Save fixed JSON for debugging
+        // Save cleaned JSON for debugging
         try {
           const fs = require('fs');
-          const debugPath = './data/outputs/debug_fixed_json.txt';
-          fs.writeFileSync(debugPath, fixed, 'utf-8');
-          console.log(`[GeminiService] Debug: Fixed JSON written to ${debugPath}`);
+          const debugPath = './data/outputs/debug_cleaned_json.txt';
+          fs.writeFileSync(debugPath, cleaned, 'utf-8');
+          console.log(`[GeminiService] Debug: Cleaned JSON written to ${debugPath}`);
         } catch (err) {
           // Ignore
         }
 
-        const parsed = JSON.parse(fixed);
-        console.log(`[GeminiService] Successfully parsed after fixing escaping!`);
+        const parsed = JSON.parse(cleaned);
+        console.log(`[GeminiService] Successfully parsed after cleaning!`);
         return parsed;
       } catch (fixError: any) {
         console.error(`[GeminiService] Failed to fix JSON: ${fixError.message}`);
@@ -710,43 +782,24 @@ VERIFY: Check that ALL backslashes are doubled (\\\\) in JSON before returning!
         // Ignore
       }
 
-      // Fix: Properly escape all backslashes for JSON
-      // Simple approach: First, protect already-valid JSON escape sequences, then escape all other backslashes
+      // Use robust JSON cleaner to fix escaping and control characters
       try {
-        let fixed = jsonStr
-          // Temporarily protect valid JSON escape sequences
-          .replace(/\\n/g, '\u0000N\u0000')   // Protect \n
-          .replace(/\\r/g, '\u0000R\u0000')   // Protect \r
-          .replace(/\\t/g, '\u0000T\u0000')   // Protect \t
-          .replace(/\\"/g, '\u0000Q\u0000')   // Protect \"
-          .replace(/\\\\/g, '\u0000B\u0000')  // Protect \\
-          .replace(/\\f/g, '\u0000F\u0000')   // Protect \f
-          .replace(/\\b/g, '\u0000b\u0000')   // Protect \b
-          // Now escape all remaining single backslashes (these are LaTeX commands)
-          .replace(/\\/g, '\\\\')
-          // Restore the protected sequences
-          .replace(/\u0000N\u0000/g, '\\n')
-          .replace(/\u0000R\u0000/g, '\\r')
-          .replace(/\u0000T\u0000/g, '\\t')
-          .replace(/\u0000Q\u0000/g, '\\"')
-          .replace(/\u0000B\u0000/g, '\\\\')
-          .replace(/\u0000F\u0000/g, '\\f')
-          .replace(/\u0000b\u0000/g, '\\b');
+        const cleaned = this.cleanJSONString(jsonStr);
 
-        console.log(`[GeminiService] Attempting to parse fixed regeneration JSON...`);
+        console.log(`[GeminiService] Attempting to parse cleaned regeneration JSON...`);
 
-        // Save fixed JSON for debugging
+        // Save cleaned JSON for debugging
         try {
           const fs = require('fs');
-          const debugPath = `./data/outputs/debug_fixed_regeneration_json_${Date.now()}.txt`;
-          fs.writeFileSync(debugPath, fixed, 'utf-8');
-          console.log(`[GeminiService] Debug: Fixed regeneration JSON written to ${debugPath}`);
+          const debugPath = `./data/outputs/debug_cleaned_regeneration_json_${Date.now()}.txt`;
+          fs.writeFileSync(debugPath, cleaned, 'utf-8');
+          console.log(`[GeminiService] Debug: Cleaned regeneration JSON written to ${debugPath}`);
         } catch (err) {
           // Ignore
         }
 
-        const parsed = JSON.parse(fixed);
-        console.log(`[GeminiService] Successfully parsed regeneration JSON after fixing escaping!`);
+        const parsed = JSON.parse(cleaned);
+        console.log(`[GeminiService] Successfully parsed regeneration JSON after cleaning!`);
         return parsed;
       } catch (fixError: any) {
         console.error(`[GeminiService] Failed to fix regeneration JSON: ${fixError.message}`);

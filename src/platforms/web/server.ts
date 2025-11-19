@@ -430,23 +430,35 @@ app.post('/api/semantic-filter/csv', async (req, res) => {
 // Generate outputs from CSV upload
 app.post('/api/generate/csv', async (req, res) => {
   try {
+    console.log('[CSV Upload] ========== NEW CSV UPLOAD REQUEST ==========');
     const { csvContent, model, batchSize, latexPrompt } = req.body;
+    console.log('[CSV Upload] Request params:', {
+      csvLength: csvContent?.length,
+      model,
+      batchSize,
+      hasLatexPrompt: !!latexPrompt
+    });
 
     if (!csvContent || !csvContent.trim()) {
+      console.log('[CSV Upload] ERROR: No CSV content provided');
       res.status(400).json({ success: false, error: 'CSV content is required' });
       return;
     }
 
     // Parse CSV content to create papers
+    console.log('[CSV Upload] Step 1: Parsing CSV content...');
     const papers = await parseCsvToPapers(csvContent);
+    console.log('[CSV Upload] Step 1 Complete: Parsed', papers.length, 'papers from CSV');
 
     if (papers.length === 0) {
+      console.log('[CSV Upload] ERROR: No valid papers found in CSV');
       res.status(400).json({ success: false, error: 'No valid papers found in CSV' });
       return;
     }
 
     // Create a temporary session ID for this upload
     const tempSessionId = `csv-upload-${Date.now()}`;
+    console.log('[CSV Upload] Step 2: Created temp session ID:', tempSessionId);
 
     // Helper function to emit or buffer events
     const emitOrBuffer = (sid: string, event: string, data: any) => {
@@ -454,8 +466,10 @@ app.post('/api/generate/csv', async (req, res) => {
       const room = io.sockets.adapter.rooms.get(`session:${sid}`);
 
       if (room && room.size > 0) {
+        console.log(`[CSV Upload] Emitting ${eventName} to ${room.size} connected clients`);
         io.to(`session:${sid}`).emit(eventName, data);
       } else {
+        console.log(`[CSV Upload] Buffering ${eventName} (no clients subscribed yet)`);
         if (!eventBuffer.has(sid)) {
           eventBuffer.set(sid, []);
         }
@@ -464,9 +478,11 @@ app.post('/api/generate/csv', async (req, res) => {
     };
 
     // Return immediately with temp session ID
+    console.log('[CSV Upload] Step 3: Returning temp session ID to client');
     res.json({ success: true, sessionId: tempSessionId, message: 'Output generation started' });
 
     // Create a session in the database with the papers
+    console.log('[CSV Upload] Step 4: Creating session in database...');
     const sessionParams = {
       name: `CSV Upload - ${new Date().toLocaleString()}`,
       inclusionKeywords: ['csv', 'upload'],
@@ -495,34 +511,56 @@ app.post('/api/generate/csv', async (req, res) => {
 
     // Create session
     const actualSessionId = db.createSession(sessionParams);
+    console.log('[CSV Upload] Step 4 Complete: Created session', actualSessionId);
 
     // Copy session ID from temp to actual
-    console.log(`[Server] Created session ${actualSessionId} for CSV upload (temp ID: ${tempSessionId})`);
+    console.log(`[CSV Upload] Mapping: temp ID ${tempSessionId} -> actual ID ${actualSessionId}`);
 
     // Add all papers to the session
+    console.log('[CSV Upload] Step 5: Adding papers to session...');
     for (const paper of papers) {
       db.addPaper(actualSessionId, paper);
     }
-
-    console.log(`[Server] Added ${papers.length} papers to session ${actualSessionId}`);
+    console.log(`[CSV Upload] Step 5 Complete: Added ${papers.length} papers to session`);
 
     // Use the actual session ID for generation
     const sessionIdToUse = actualSessionId;
 
+    // Update session status to completed so generateOutputs uses generateAll instead of generateIncremental
+    console.log('[CSV Upload] Step 6: Setting session status to completed...');
+    const session = db.getSession(sessionIdToUse);
+    if (session) {
+      db.updateProgress(sessionIdToUse, {
+        ...session.progress,
+        status: 'completed',
+        progress: 100
+      });
+      console.log('[CSV Upload] Step 6 Complete: Session status set to completed');
+    }
+
     // Start output generation with progress
+    console.log('[CSV Upload] Step 7: Starting output generation...');
     litrev.generateOutputs(sessionIdToUse, (progress) => {
+      console.log('[CSV Upload] Progress callback received:', {
+        status: progress.status,
+        stage: progress.stage,
+        progress: progress.progress,
+        currentTask: progress.currentTask?.substring(0, 50)
+      });
+
       // Emit to both temp and actual session ID (for client compatibility)
       emitOrBuffer(tempSessionId, 'output-progress', progress);
       emitOrBuffer(sessionIdToUse, 'output-progress', progress);
 
       // When completed, emit the outputs
       if (progress.status === 'completed') {
+        console.log('[CSV Upload] Generation completed! Sending outputs to client.');
         const updatedSession = litrev.getSession(sessionIdToUse);
         emitOrBuffer(tempSessionId, 'outputs', updatedSession?.outputs);
         emitOrBuffer(sessionIdToUse, 'outputs', updatedSession?.outputs);
       }
     }).catch((error: any) => {
-      console.error('[Server] CSV output generation failed:', error);
+      console.error('[CSV Upload] ERROR during output generation:', error);
       emitOrBuffer(tempSessionId, 'output-progress', {
         status: 'error',
         stage: 'error',
