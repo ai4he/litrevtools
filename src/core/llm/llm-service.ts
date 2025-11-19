@@ -219,11 +219,12 @@ export class LLMService {
         const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
 
         if (!response || response.error) {
-          // When API fails, mark as not meeting criteria with graceful message
+          // When evaluation fails, mark as not evaluated with clear message
+          // Note: response.error is a generic marker, not the actual API error message
           return {
             ...paper,
             systematic_filtering_inclusion: false,
-            systematic_filtering_inclusion_reasoning: 'Unable to evaluate due to API limitations. Manual review recommended.'
+            systematic_filtering_inclusion_reasoning: 'Automatic evaluation could not be completed. Manual review recommended.'
           };
         }
 
@@ -259,11 +260,12 @@ export class LLMService {
         const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
 
         if (!response || response.error) {
-          // When API fails, mark as not meeting exclusion criteria with graceful message
+          // When evaluation fails, mark as not evaluated with clear message
+          // Note: response.error is a generic marker, not the actual API error message
           return {
             ...paper,
             systematic_filtering_exclusion: false,
-            systematic_filtering_exclusion_reasoning: 'Unable to evaluate due to API limitations. Manual review recommended.'
+            systematic_filtering_exclusion_reasoning: 'Automatic evaluation could not be completed. Manual review recommended.'
           };
         }
 
@@ -280,9 +282,9 @@ export class LLMService {
     // A paper is included if it meets inclusion criteria (or no inclusion criteria provided)
     // AND does not meet exclusion criteria (or no exclusion criteria provided)
     processedPapers = processedPapers.map(paper => {
-      // Check if evaluation was skipped due to API limitations
-      const inclusionEvalFailed = paper.systematic_filtering_inclusion_reasoning?.includes('Unable to evaluate due to API limitations');
-      const exclusionEvalFailed = paper.systematic_filtering_exclusion_reasoning?.includes('Unable to evaluate due to API limitations');
+      // Check if evaluation was not completed
+      const inclusionEvalFailed = paper.systematic_filtering_inclusion_reasoning?.includes('could not be completed');
+      const exclusionEvalFailed = paper.systematic_filtering_exclusion_reasoning?.includes('could not be completed');
 
       const meetsInclusion = inclusionCriteriaPrompt
         ? (paper.systematic_filtering_inclusion === true)
@@ -297,7 +299,7 @@ export class LLMService {
       let exclusionReason: string | undefined;
       if (!shouldInclude) {
         if (inclusionEvalFailed || exclusionEvalFailed) {
-          exclusionReason = 'Evaluation incomplete - API rate limits reached. Manual review required.';
+          exclusionReason = 'Automatic evaluation incomplete. Manual review required.';
         } else if (meetsExclusion) {
           exclusionReason = paper.systematic_filtering_exclusion_reasoning || 'Meets exclusion criteria';
         } else {
