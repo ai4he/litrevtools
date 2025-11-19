@@ -326,16 +326,25 @@ export class LitRevTools {
    * Build configuration from environment and overrides
    */
   private buildConfig(overrides?: Partial<AppConfig>): AppConfig {
-    // Get Gemini API key - support both singular and plural (for rotation)
-    const geminiApiKey = process.env.GEMINI_API_KEY ||
-                        (process.env.GEMINI_API_KEYS ? process.env.GEMINI_API_KEYS.split(',')[0].trim() : '');
+    // Get Gemini API keys - only GEMINI_API_KEYS is supported
+    let geminiApiKeys: string[] | undefined;
+
+    if (process.env.GEMINI_API_KEYS) {
+      // Multiple keys provided - use all of them
+      geminiApiKeys = process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(k => k.length > 0);
+      console.log(`[Config] Loaded ${geminiApiKeys.length} Gemini API key(s) from GEMINI_API_KEYS`);
+    } else {
+      console.warn('[Config] No GEMINI_API_KEYS found in environment. LaTeX generation and LLM features will not work.');
+      geminiApiKeys = undefined;
+    }
 
     const defaultConfig: AppConfig = {
       database: {
         path: process.env.DATABASE_PATH || './data/litrevtools.db'
       },
       gemini: {
-        apiKey: geminiApiKey,
+        apiKey: geminiApiKeys?.[0], // First key for backward compatibility
+        apiKeys: geminiApiKeys,
         model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
         paperBatchSize: parseInt(process.env.PAPER_BATCH_SIZE || '15')
       },

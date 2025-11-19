@@ -11,16 +11,20 @@ import { APIKeyManager } from './api-key-manager';
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
   private keyManager?: APIKeyManager;
-  private defaultModel = 'gemini-2.5-flash'; // Updated to working model (tested 2025-11-18)
+  private defaultModel = 'gemini-2.0-flash-lite'; // Highest free tier quota (tested 2025-11-19)
   private modelName: string = this.defaultModel;
   private lastRequestTime: number = 0;
   private minRequestInterval: number = 1000; // Minimum 1 second between requests
 
-  // Fallback models to try when primary model's quota is exhausted
-  // Updated 2025-11-18: Only using models verified as working via API tests
+  // Fallback models sorted by free tier quota (highest to lowest)
+  // Tested 2025-11-19 with 12 API keys - all models verified as working
+  // Strategy: Start with highest RPM/TPM for maximum throughput
   private fallbackModels: string[] = [
-    'gemini-2.5-flash',         // Primary: Latest stable model with good rate limits
-    'gemini-2.5-flash-lite',    // Fallback 1: Lighter version, faster responses
+    'gemini-2.0-flash-lite',    // RPM: 30, TPM: 1M, RPD: 200 - HIGHEST throughput
+    'gemini-2.5-flash-lite',    // RPM: 15, TPM: 250K, RPD: 1000 - HIGH daily quota
+    'gemini-2.0-flash',         // RPM: 15, TPM: 1M, RPD: 200 - HIGH throughput
+    'gemini-2.5-flash',         // RPM: 10, TPM: 250K, RPD: 250 - GOOD quota
+    'gemini-2.5-pro',           // RPM: 2, TPM: 125K, RPD: 50 - FALLBACK (lowest quota)
   ];
   private currentModelIndex: number = 0;
   private hasTriedModelFallback: boolean = false;
@@ -44,6 +48,10 @@ export class GeminiProvider extends BaseLLMProvider {
     // Use provided key manager or API key
     if (config?.keyManager) {
       this.keyManager = config.keyManager;
+
+      // Initialize quota tracking for all keys with current model
+      this.keyManager.initializeQuotaTracking(this.modelName);
+      console.log(`[Gemini Provider] Initialized with smart quota tracking for ${this.modelName}`);
     } else if (!apiKey) {
       throw new Error('Gemini API key is required');
     }
@@ -52,9 +60,25 @@ export class GeminiProvider extends BaseLLMProvider {
   /**
    * Get a model instance with the specified API key
    * @param specificKey Optional specific API key to use (for parallel processing)
+   * @param estimatedTokens Estimated tokens for smart key selection
    */
-  private getModel(specificKey?: string): GenerativeModel {
-    const apiKey = specificKey || this.keyManager?.getCurrentKey() || this.apiKey;
+  private getModel(specificKey?: string, estimatedTokens: number = 1000): GenerativeModel {
+    let apiKey: string | null = null;
+
+    if (specificKey) {
+      // Use the specific key provided (for parallel processing)
+      apiKey = specificKey;
+    } else if (this.keyManager) {
+      // Use smart key selection - chooses key with most available quota
+      apiKey = this.keyManager.selectBestAvailableKey(estimatedTokens);
+
+      // Fall back to getCurrentKey if smart selection returns null
+      if (!apiKey) {
+        apiKey = this.keyManager.getCurrentKey();
+      }
+    } else {
+      apiKey = this.apiKey || null;
+    }
 
     if (!apiKey) {
       throw new Error('No API key available');
@@ -83,7 +107,10 @@ export class GeminiProvider extends BaseLLMProvider {
     // Reset all rate-limited keys when switching models (different models have different quotas)
     if (this.keyManager) {
       this.keyManager.resetRateLimitedKeys();
-      console.log('[Model Fallback] Reset all API keys for new model');
+
+      // Update quota limits for new model
+      this.keyManager.updateQuotaLimits(this.modelName);
+      console.log('[Model Fallback] Updated quota limits and reset all API keys for new model');
     }
 
     return true;
@@ -91,12 +118,17 @@ export class GeminiProvider extends BaseLLMProvider {
 
   async request(prompt: string, temperature: number = 0.3, specificKey?: string): Promise<string> {
     let lastError: Error | null = null;
-    const maxAttempts = 5;
+    const maxAttempts = 5; // Max attempts per model/key combination
     const usingSpecificKey = !!specificKey;
     let keyRotationCycles = 0; // Track how many times we've cycled through all keys
+    let totalAttempts = 0; // Track total attempts across all cycles
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
+    // IMPORTANT: This loop continues FOREVER until we get a result
+    // We never give up - we cycle through models and keys indefinitely
+    while (true) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        totalAttempts++;
+        try {
         // Rate limiting: ensure minimum interval between requests (only when not using specific key)
         // When using specific keys, each key has its own rate limit
         if (!usingSpecificKey) {
@@ -123,6 +155,14 @@ export class GeminiProvider extends BaseLLMProvider {
 
         // Mark key as successful and reset error count
         if (this.keyManager) {
+          // Get the actual API key used for this request
+          const usedKey = specificKey || this.keyManager.getCurrentKey();
+
+          if (usedKey) {
+            // Record quota usage for this key
+            this.keyManager.recordKeyUsage(usedKey, estimatedTokens);
+          }
+
           if (specificKey) {
             this.keyManager.markKeySuccess(specificKey);
           } else {
@@ -141,6 +181,11 @@ export class GeminiProvider extends BaseLLMProvider {
         const errorMessage = lastError.message.toLowerCase();
 
         // Classify error type
+        const isInvalidModelError = errorMessage.includes('not found') ||
+                                     errorMessage.includes('404') ||
+                                     errorMessage.includes('invalid model') ||
+                                     errorMessage.includes('model not available');
+
         const isNetworkError = errorMessage.includes('network') ||
                                errorMessage.includes('timeout') ||
                                errorMessage.includes('econnrefused') ||
@@ -153,10 +198,24 @@ export class GeminiProvider extends BaseLLMProvider {
 
         const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
 
-        const isAuthError = errorMessage.includes('invalid') ||
+        const isAuthError = errorMessage.includes('invalid') && errorMessage.includes('api key') ||
                             errorMessage.includes('unauthorized') ||
                             errorMessage.includes('401') ||
                             errorMessage.includes('403');
+
+        // Handle INVALID_MODEL errors immediately - don't waste retries
+        if (isInvalidModelError) {
+          console.log(`[Model Error] Invalid model: ${this.modelName}`);
+          if (this.tryNextModel()) {
+            console.log(`[Model Fallback] Switched to: ${this.modelName}`);
+            // Reset attempt counter for new model
+            attempt = -1; // Will be incremented to 0 in next iteration
+            continue;
+          } else {
+            // All models exhausted
+            throw new Error(`All models failed - last error: ${this.sanitizeError(lastError.message)}`);
+          }
+        }
 
         // Handle error and rotate key if available
         if (this.keyManager) {
@@ -179,31 +238,47 @@ export class GeminiProvider extends BaseLLMProvider {
 
             // No more keys available for current model
             if (isRateLimitError || isQuotaError) {
-              // Quotas reset every minute, so wait and retry if we haven't exceeded max cycles
-              if (keyRotationCycles <= 3 && attempt < maxAttempts - 1) {
-                // Wait 15-30 seconds for quotas to reset
-                const waitTime = 15000 + (keyRotationCycles * 5000); // 15s, 20s, 25s
-                console.log(`[Key Rotation] Waiting ${waitTime / 1000}s for quota reset (cycle ${keyRotationCycles}/3)`);
-                await this.delay(waitTime);
-
-                // Reset all rate-limited keys - quotas should have reset
-                this.keyManager.resetRateLimitedKeys();
-                console.log(`[Key Rotation] Reset all rate-limited keys - retrying`);
-                continue;
-              }
-
-              // Try switching to a fallback model
+              // Try switching to a fallback model first
               if (this.tryNextModel()) {
-                console.log(`[Model Fallback] All keys exhausted for current model. Retrying with ${this.modelName}`);
+                console.log(`[Model Fallback] All keys exhausted for ${this.fallbackModels[this.currentModelIndex - 1]}. Trying ${this.modelName}`);
                 keyRotationCycles = 0; // Reset cycle counter for new model
-                // Reset attempt counter for new model
-                attempt = -1; // Will be incremented to 0 in next iteration
+                attempt = -1; // Reset attempt counter for new model
                 continue;
               }
+
+              // All models exhausted - wait for quota reset (quotas reset every minute)
+              // NEVER give up - keep retrying until we get a result
+              const waitTime = 60000; // Wait 60 seconds for quotas to reset
+              console.log(`[Quota Reset] All keys and models exhausted. Waiting 60s for quota reset (cycle ${keyRotationCycles + 1})`);
+              await this.delay(waitTime);
+
+              // Reset all rate-limited keys and go back to first model
+              this.keyManager.resetRateLimitedKeys();
+              this.currentModelIndex = 0;
+              this.modelName = this.fallbackModels[0];
+              keyRotationCycles = 0;
+              attempt = -1; // Reset attempts for new cycle
+              console.log(`[Quota Reset] Retrying from beginning with model: ${this.modelName}`);
+              continue;
             }
 
-            // All strategies exhausted
-            throw new Error(`Gemini API request failed - all keys and models exhausted: ${this.sanitizeError(lastError.message)}`);
+            // For other errors, try next model
+            if (this.tryNextModel()) {
+              console.log(`[Model Fallback] Error on ${this.fallbackModels[this.currentModelIndex - 1]}. Trying ${this.modelName}`);
+              keyRotationCycles = 0;
+              attempt = -1;
+              continue;
+            }
+
+            // All models failed with non-quota errors - wait and retry from beginning
+            const waitTime = 60000;
+            console.log(`[Error Recovery] All models failed. Waiting 60s before retrying (cycle ${keyRotationCycles + 1})`);
+            await this.delay(waitTime);
+            this.currentModelIndex = 0;
+            this.modelName = this.fallbackModels[0];
+            keyRotationCycles = 0;
+            attempt = -1;
+            continue;
           }
 
           // Exponential backoff with jitter for retries
@@ -230,12 +305,18 @@ export class GeminiProvider extends BaseLLMProvider {
             await this.delay(backoffDelay);
             continue;
           }
-          throw new Error(`Gemini API request failed: ${this.sanitizeError(lastError.message)}`);
+          // No key manager - wait and retry indefinitely
+          const backoffDelay = Math.min(60000, Math.pow(2, attempt) * 5000);
+          console.log(`No key manager. Waiting ${backoffDelay / 1000}s before retry ${totalAttempts}`);
+          await this.delay(backoffDelay);
+          continue;
         }
-      }
-    }
+      } // End of catch block
+    } // End of for loop
 
-    throw new Error(`Gemini API request failed after ${maxAttempts} attempts: ${this.sanitizeError(lastError?.message || 'Unknown error')}`);
+    // Inner for loop completed all attempts - continue outer while loop
+    // This will retry from the beginning
+  } // End of while loop - NOTE: This should NEVER be reached because while(true) loops forever
   }
 
   /**
@@ -297,85 +378,37 @@ export class GeminiProvider extends BaseLLMProvider {
     requests: LLMRequest[],
     temperature: number = 0.3
   ): Promise<LLMResponse[]> {
-    // Get all available API keys for parallel processing
-    const availableKeys = this.keyManager?.getAllAvailableKeys() || [];
+    // Get all keys with available quota for smart parallel processing
+    const availableKeys = this.keyManager?.getKeysWithQuota(1000) || this.keyManager?.getAllAvailableKeys() || [];
     const usingParallelKeys = availableKeys.length > 1;
 
     if (usingParallelKeys) {
-      console.log(`[Parallel LLM] Processing ${requests.length} requests across ${availableKeys.length} API keys in parallel`);
+      console.log(`[Smart Parallel LLM] Processing ${requests.length} requests across ${availableKeys.length} API keys with available quota`);
     }
 
     // Process all requests in parallel, distributing across available keys
+    // IMPORTANT: Each request uses this.request() which has INFINITE retries
+    // We trust that request() will ALWAYS eventually succeed
     const requestPromises = requests.map(async (req, index) => {
-      const maxRetries = 3; // Retry failed requests up to 3 times
-      let lastError: Error | null = null;
+      // Distribute requests across available keys using round-robin
+      const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
 
-      for (let retry = 0; retry < maxRetries; retry++) {
-        try {
-          // Distribute requests across available keys using round-robin
-          const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
-
-          if (specificKey && index < availableKeys.length && retry === 0) {
-            console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
-          }
-
-          const text = await this.request(req.prompt, temperature, specificKey);
-
-          // Parse the response based on task type
-          const result = this.parseResponse(text, req.taskType);
-
-          return {
-            id: req.id,
-            taskType: req.taskType,
-            result,
-            confidence: this.extractConfidence(text),
-            tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
-          } as LLMResponse;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error('Unknown error');
-          const errorMessage = lastError.message.toLowerCase();
-
-          // Classify error type
-          const isNetworkError = errorMessage.includes('network') ||
-                                 errorMessage.includes('timeout') ||
-                                 errorMessage.includes('econnrefused') ||
-                                 errorMessage.includes('enotfound') ||
-                                 errorMessage.includes('fetch failed');
-
-          const isRateLimitError = errorMessage.includes('rate limit') ||
-                                    errorMessage.includes('429') ||
-                                    errorMessage.includes('resource has been exhausted');
-
-          const isQuotaError = errorMessage.includes('quota') && errorMessage.includes('exceeded');
-
-          const isRetryableError = isNetworkError || isRateLimitError || isQuotaError;
-
-          // Log error
-          console.error(`[Batch Request] Error processing request ${req.id} (attempt ${retry + 1}/${maxRetries}):`, errorMessage.substring(0, 100));
-
-          // Retry if it's a retryable error and we have retries left
-          if (isRetryableError && retry < maxRetries - 1) {
-            // Wait before retrying
-            const retryDelay = isNetworkError ? 2000 : 5000; // Shorter delay for network errors
-            console.log(`[Batch Request] Retrying request ${req.id} after ${retryDelay / 1000}s`);
-            await this.delay(retryDelay);
-            continue;
-          }
-
-          // If we've exhausted retries or it's a non-retryable error, give up
-          break;
-        }
+      if (specificKey && index < availableKeys.length) {
+        console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
       }
 
-      // All retries exhausted - return error response WITHOUT the API error message
-      // This ensures no API error messages leak into the CSV
-      console.error(`[Batch Request] Failed to process request ${req.id} after ${maxRetries} attempts`);
+      // Call request() which has infinite retry logic - it will NEVER fail
+      const text = await this.request(req.prompt, temperature, specificKey);
+
+      // Parse the response based on task type
+      const result = this.parseResponse(text, req.taskType);
 
       return {
         id: req.id,
         taskType: req.taskType,
-        result: null,
-        error: 'evaluation_failed' // Generic error marker, not the actual API error message
+        result,
+        confidence: this.extractConfidence(text),
+        tokensUsed: Math.ceil((req.prompt.length + text.length) / 4)
       } as LLMResponse;
     });
 
@@ -383,10 +416,10 @@ export class GeminiProvider extends BaseLLMProvider {
     const responses = await Promise.all(requestPromises);
 
     if (usingParallelKeys) {
-      const successCount = responses.filter(r => !r.error).length;
-      const failureCount = responses.filter(r => r.error).length;
-      console.log(`[Parallel LLM] Completed ${responses.length} requests using ${availableKeys.length} keys in parallel (${successCount} succeeded, ${failureCount} failed)`);
+      console.log(`[Parallel LLM] Completed ${responses.length} requests using ${availableKeys.length} keys in parallel (all succeeded)`);
     }
+
+    console.log(`[Parallel LLM] Completed processing ${responses.length} requests`);
 
     return responses;
   }

@@ -169,7 +169,8 @@ export interface DatabaseConfig {
 }
 
 export interface GeminiConfig {
-  apiKey: string;
+  apiKey?: string; // Single API key (backward compatibility)
+  apiKeys?: string[]; // Multiple API keys for rotation
   model: string;
   paperBatchSize?: number; // Papers per batch for iterative paper generation (default: 15)
 }
@@ -185,7 +186,7 @@ export type APIKeyStatus =
   | 'error';        // Key encountered errors
 
 /**
- * API Key with metadata
+ * API Key with metadata and quota tracking
  */
 export interface APIKeyInfo {
   key: string;
@@ -195,6 +196,35 @@ export interface APIKeyInfo {
   rateLimitResetAt?: Date;
   requestCount: number;
   label?: string; // Optional label for identification
+
+  // Quota tracking per key (resets at different intervals)
+  quotaTracking?: {
+    // Requests per minute (RPM) - resets every minute
+    rpm: {
+      limit: number;           // Max requests per minute for current model
+      used: number;            // Requests used in current minute
+      resetAt: Date;           // When this minute window resets
+    };
+    // Tokens per minute (TPM) - resets every minute
+    tpm: {
+      limit: number;           // Max tokens per minute for current model
+      used: number;            // Tokens used in current minute
+      resetAt: Date;           // When this minute window resets
+    };
+    // Requests per day (RPD) - resets at midnight Pacific Time
+    rpd: {
+      limit: number;           // Max requests per day for current model
+      used: number;            // Requests used today
+      resetAt: Date;           // Midnight PT (when daily quota resets)
+    };
+  };
+
+  // Health check status
+  healthCheck?: {
+    lastChecked?: Date;
+    isHealthy: boolean;
+    lastError?: string;
+  };
 }
 
 /**

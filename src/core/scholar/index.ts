@@ -569,7 +569,12 @@ export class ScholarExtractor {
           ...paper,
           included: false,
           exclusionReason: reason,
-          excluded_by_keyword: true // Mark as excluded by keyword
+          excluded_by_keyword: true, // Mark as excluded by keyword
+          // Set systematic filtering fields with fallback values (LLM not available)
+          systematic_filtering_inclusion: false,
+          systematic_filtering_inclusion_reasoning: 'LLM filtering not available - excluded by rule-based keyword matching',
+          systematic_filtering_exclusion: true,
+          systematic_filtering_exclusion_reasoning: `Rule-based exclusion: ${reason}`
         };
 
         this.database.addPaper(this.sessionId, updatedPaper);
@@ -579,7 +584,12 @@ export class ScholarExtractor {
           ...paper,
           included: true,
           exclusionReason: undefined,
-          excluded_by_keyword: false
+          excluded_by_keyword: false,
+          // Set systematic filtering fields with fallback values (LLM not available)
+          systematic_filtering_inclusion: true,
+          systematic_filtering_inclusion_reasoning: 'LLM filtering not available - included by rule-based filtering (no keyword matches)',
+          systematic_filtering_exclusion: false,
+          systematic_filtering_exclusion_reasoning: 'LLM filtering not available - not excluded by rule-based keyword matching'
         };
 
         this.database.addPaper(this.sessionId, updatedPaper);

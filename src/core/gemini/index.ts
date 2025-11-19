@@ -1,22 +1,90 @@
 /**
  * Gemini AI integration for PRISMA paper generation
+ * Now supports multiple API keys with automatic rotation
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Paper, PRISMAData } from '../types';
 
 export interface GeminiConfig {
-  apiKey: string;
+  apiKey?: string; // Single API key (backward compatibility)
+  apiKeys?: string[]; // Multiple API keys for rotation
   model: string;
 }
 
 export class GeminiService {
-  private genAI: GoogleGenerativeAI;
-  private model: any;
+  private apiKeys: string[];
+  private currentKeyIndex: number = 0;
+  private modelName: string;
 
   constructor(config: GeminiConfig) {
-    this.genAI = new GoogleGenerativeAI(config.apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: config.model });
+    // Support both single key and multiple keys
+    if (config.apiKeys && config.apiKeys.length > 0) {
+      this.apiKeys = config.apiKeys;
+    } else if (config.apiKey) {
+      this.apiKeys = [config.apiKey];
+    } else {
+      throw new Error('At least one API key must be provided');
+    }
+
+    this.modelName = config.model;
+    console.log(`[GeminiService] Initialized with ${this.apiKeys.length} API key(s) for model ${this.modelName}`);
+  }
+
+  /**
+   * Make a request with automatic key rotation on failures
+   */
+  private async requestWithRetry(prompt: string): Promise<string> {
+    const maxAttemptsPerKey = 2;
+    const maxTotalAttempts = this.apiKeys.length * maxAttemptsPerKey;
+    let attempt = 0;
+
+    while (attempt < maxTotalAttempts) {
+      const currentKey = this.apiKeys[this.currentKeyIndex];
+
+      try {
+        const genAI = new GoogleGenerativeAI(currentKey);
+        const model = genAI.getGenerativeModel({ model: this.modelName });
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      } catch (error) {
+        attempt++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        console.error(`[GeminiService] Request failed with key ${this.currentKeyIndex + 1}/${this.apiKeys.length} (attempt ${attempt}/${maxTotalAttempts}): ${errorMessage.substring(0, 100)}`);
+
+        // Check if it's a quota/rate limit error
+        const isQuotaError = errorMessage.toLowerCase().includes('quota') ||
+                            errorMessage.toLowerCase().includes('rate limit') ||
+                            errorMessage.toLowerCase().includes('429');
+
+        if (isQuotaError && this.apiKeys.length > 1) {
+          // Rotate to next key
+          this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
+          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
+
+          // Wait a bit before retrying
+          await this.delay(2000);
+          continue;
+        }
+
+        // For other errors or last attempt, throw
+        if (attempt >= maxTotalAttempts) {
+          throw new Error(`Gemini request failed after ${maxTotalAttempts} attempts: ${errorMessage}`);
+        }
+
+        // Wait before retry
+        await this.delay(3000);
+      }
+    }
+
+    throw new Error('Gemini request failed: max attempts exceeded');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
@@ -53,9 +121,7 @@ Write in academic style, approximately 500-800 words.
 Return the text in LaTeX format, with proper citations using \\cite{} commands.
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -94,9 +160,7 @@ Write in academic style, approximately 600-1000 words.
 Return the text in LaTeX format.
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -129,9 +193,7 @@ Write in academic style, approximately 800-1200 words.
 Return the text in LaTeX format, with proper citations using \\cite{} commands.
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -167,9 +229,7 @@ Write in academic style, approximately 700-1000 words.
 Return the text in LaTeX format, with proper citations using \\cite{} commands.
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -203,9 +263,7 @@ Write in academic style, approximately 300-500 words.
 Return the text in LaTeX format, with proper citations using \\cite{} commands.
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -237,9 +295,7 @@ Write in academic style suitable for publication.
 Return the text in plain format (citations not needed in abstract).
 `;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await this.requestWithRetry(prompt);
   }
 
   /**
@@ -385,9 +441,7 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
       console.error(`[GeminiService] Failed to write debug prompt:`, err);
     }
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text().trim();
+    const text = (await this.requestWithRetry(prompt)).trim();
 
     console.log(`[GeminiService] Received response, length: ${text.length} characters`);
 
@@ -616,9 +670,7 @@ VERIFY: Check that ALL backslashes are doubled (\\\\) in JSON before returning!
       console.error(`[GeminiService] Failed to write debug prompt:`, err);
     }
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text().trim();
+    const text = (await this.requestWithRetry(prompt)).trim();
 
     console.log(`[GeminiService] Received regeneration response, length: ${text.length} characters`);
 
@@ -727,9 +779,7 @@ Example response format:
 `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text().trim();
+      const text = (await this.requestWithRetry(prompt)).trim();
 
       // Extract JSON from response
       const jsonMatch = text.match(/\[.*\]/s);
@@ -789,9 +839,7 @@ Example response format:
 `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text().trim();
+      const text = (await this.requestWithRetry(prompt)).trim();
 
       const jsonMatch = text.match(/\[.*\]/s);
       if (!jsonMatch) return [];

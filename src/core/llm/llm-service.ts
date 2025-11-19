@@ -193,6 +193,17 @@ export class LLMService {
       throw new Error('LLM service is not enabled or initialized');
     }
 
+    // Run health check before starting heavy tasks (only if using key manager)
+    if (this.provider && this.keyManager) {
+      console.log('[LLM Service] Running health check before filtering...');
+      const healthCheckResults = await this.keyManager.runHealthCheck();
+      console.log(`[LLM Service] Health check complete: ${healthCheckResults.healthy}/${healthCheckResults.healthy + healthCheckResults.unhealthy} keys healthy`);
+
+      if (healthCheckResults.healthy === 0) {
+        throw new Error('No healthy API keys available. Please check your API keys and try again.');
+      }
+    }
+
     let processedPapers = [...papers];
     const startTime = Date.now();
 
@@ -218,21 +229,29 @@ export class LLMService {
       processedPapers = processedPapers.map(paper => {
         const response = inclusionResponses.find(r => r.id === `${paper.id}_inclusion`);
 
-        if (!response || response.error) {
-          // When evaluation fails, mark as not evaluated with clear message
-          // Note: response.error is a generic marker, not the actual API error message
-          return {
-            ...paper,
-            systematic_filtering_inclusion: false,
-            systematic_filtering_inclusion_reasoning: 'Automatic evaluation could not be completed. Manual review recommended.'
-          };
+        // With the robust Gemini provider, we should ALWAYS get a response
+        // The provider will retry indefinitely until it succeeds
+        if (!response) {
+          throw new Error(`CRITICAL: No response for paper ${paper.id}. This should never happen with robust LLM provider.`);
+        }
+
+        // If there's an error marker, the provider failed despite infinite retries (extremely rare)
+        if (response.error) {
+          throw new Error(`CRITICAL: LLM provider failed after infinite retries for paper ${paper.id}. Check system logs.`);
         }
 
         const meetsInclusion = response.result?.decision === 'include' || response.result?.meets_criteria === true;
+        const reasoning = response.result?.reasoning;
+
+        // The LLM should ALWAYS provide reasoning due to strengthened prompts
+        if (!reasoning || reasoning.trim().length === 0) {
+          throw new Error(`CRITICAL: LLM did not provide reasoning for paper ${paper.id} despite enforced prompts. Check prompt configuration.`);
+        }
+
         return {
           ...paper,
           systematic_filtering_inclusion: meetsInclusion,
-          systematic_filtering_inclusion_reasoning: response.result?.reasoning || 'No reasoning provided'
+          systematic_filtering_inclusion_reasoning: reasoning
         };
       });
     }
@@ -259,21 +278,29 @@ export class LLMService {
       processedPapers = processedPapers.map(paper => {
         const response = exclusionResponses.find(r => r.id === `${paper.id}_exclusion`);
 
-        if (!response || response.error) {
-          // When evaluation fails, mark as not evaluated with clear message
-          // Note: response.error is a generic marker, not the actual API error message
-          return {
-            ...paper,
-            systematic_filtering_exclusion: false,
-            systematic_filtering_exclusion_reasoning: 'Automatic evaluation could not be completed. Manual review recommended.'
-          };
+        // With the robust Gemini provider, we should ALWAYS get a response
+        // The provider will retry indefinitely until it succeeds
+        if (!response) {
+          throw new Error(`CRITICAL: No response for paper ${paper.id}. This should never happen with robust LLM provider.`);
+        }
+
+        // If there's an error marker, the provider failed despite infinite retries (extremely rare)
+        if (response.error) {
+          throw new Error(`CRITICAL: LLM provider failed after infinite retries for paper ${paper.id}. Check system logs.`);
         }
 
         const meetsExclusion = response.result?.decision === 'exclude' || response.result?.meets_criteria === true;
+        const reasoning = response.result?.reasoning;
+
+        // The LLM should ALWAYS provide reasoning due to strengthened prompts
+        if (!reasoning || reasoning.trim().length === 0) {
+          throw new Error(`CRITICAL: LLM did not provide reasoning for paper ${paper.id} despite enforced prompts. Check prompt configuration.`);
+        }
+
         return {
           ...paper,
           systematic_filtering_exclusion: meetsExclusion,
-          systematic_filtering_exclusion_reasoning: response.result?.reasoning || 'No reasoning provided'
+          systematic_filtering_exclusion_reasoning: reasoning
         };
       });
     }
@@ -281,11 +308,8 @@ export class LLMService {
     // Update the overall inclusion status based on semantic filtering results
     // A paper is included if it meets inclusion criteria (or no inclusion criteria provided)
     // AND does not meet exclusion criteria (or no exclusion criteria provided)
+    // IMPORTANT: Also ensure all systematic filtering fields are set with defaults if not already set
     processedPapers = processedPapers.map(paper => {
-      // Check if evaluation was not completed
-      const inclusionEvalFailed = paper.systematic_filtering_inclusion_reasoning?.includes('could not be completed');
-      const exclusionEvalFailed = paper.systematic_filtering_exclusion_reasoning?.includes('could not be completed');
-
       const meetsInclusion = inclusionCriteriaPrompt
         ? (paper.systematic_filtering_inclusion === true)
         : true; // If no inclusion criteria, consider as meeting inclusion
@@ -296,21 +320,20 @@ export class LLMService {
 
       const shouldInclude = meetsInclusion && !meetsExclusion;
 
-      let exclusionReason: string | undefined;
-      if (!shouldInclude) {
-        if (inclusionEvalFailed || exclusionEvalFailed) {
-          exclusionReason = 'Automatic evaluation incomplete. Manual review required.';
-        } else if (meetsExclusion) {
-          exclusionReason = paper.systematic_filtering_exclusion_reasoning || 'Meets exclusion criteria';
-        } else {
-          exclusionReason = paper.systematic_filtering_inclusion_reasoning || 'Does not meet inclusion criteria';
-        }
-      }
-
       return {
         ...paper,
         included: shouldInclude,
-        exclusionReason: exclusionReason
+        // Ensure systematic filtering fields are always set (use existing or defaults)
+        systematic_filtering_inclusion: paper.systematic_filtering_inclusion !== undefined
+          ? paper.systematic_filtering_inclusion
+          : (inclusionCriteriaPrompt ? undefined : true), // Default to true if no criteria
+        systematic_filtering_inclusion_reasoning: paper.systematic_filtering_inclusion_reasoning
+          || (inclusionCriteriaPrompt ? undefined : 'No inclusion criteria specified - automatically included'),
+        systematic_filtering_exclusion: paper.systematic_filtering_exclusion !== undefined
+          ? paper.systematic_filtering_exclusion
+          : (exclusionCriteriaPrompt ? undefined : false), // Default to false if no criteria
+        systematic_filtering_exclusion_reasoning: paper.systematic_filtering_exclusion_reasoning
+          || (exclusionCriteriaPrompt ? undefined : 'No exclusion criteria specified - not excluded')
       };
     });
 
@@ -572,15 +595,21 @@ ${paper.url ? `URL: ${paper.url}` : ''}
 **Task:**
 Determine if this paper MEETS the inclusion criteria described above.
 
-**IMPORTANT:** You MUST provide a clear reasoning for your decision, regardless of whether the paper meets the criteria or not. The reasoning should explain why the paper does or does not meet the inclusion criteria based on the information provided.
+**CRITICAL REQUIREMENTS:**
+1. You MUST respond with ONLY valid JSON - no additional text before or after
+2. You MUST provide a detailed reasoning (2-3 sentences minimum)
+3. The reasoning MUST explain specifically why the paper meets or does not meet the inclusion criteria
+4. Never use phrases like "manual review", "cannot determine", or "insufficient information"
+5. Make the best judgment based on available information
 
-**Response Format:**
-Provide your response as JSON:
+**Response Format (MUST be valid JSON):**
 {
   "meets_criteria": true or false,
-  "reasoning": "REQUIRED: Detailed explanation of your decision (2-3 sentences). Explain specifically why this paper meets or does not meet the inclusion criteria.",
+  "reasoning": "REQUIRED: Detailed explanation of your decision. Explain specifically why this paper meets or does not meet the inclusion criteria based on the title, abstract, and other metadata provided.",
   "confidence": 0.0 to 1.0
-}`;
+}
+
+Respond with ONLY the JSON object above, nothing else.`;
   }
 
   /**
@@ -606,15 +635,21 @@ ${paper.url ? `URL: ${paper.url}` : ''}
 **Task:**
 Determine if this paper MEETS the exclusion criteria described above (i.e., should be excluded).
 
-**IMPORTANT:** You MUST provide a clear reasoning for your decision, regardless of whether the paper meets the exclusion criteria or not. The reasoning should explain why the paper does or does not meet the exclusion criteria based on the information provided.
+**CRITICAL REQUIREMENTS:**
+1. You MUST respond with ONLY valid JSON - no additional text before or after
+2. You MUST provide a detailed reasoning (2-3 sentences minimum)
+3. The reasoning MUST explain specifically why the paper meets or does not meet the exclusion criteria
+4. Never use phrases like "manual review", "cannot determine", or "insufficient information"
+5. Make the best judgment based on available information
 
-**Response Format:**
-Provide your response as JSON:
+**Response Format (MUST be valid JSON):**
 {
   "meets_criteria": true or false,
-  "reasoning": "REQUIRED: Detailed explanation of your decision (2-3 sentences). Explain specifically why this paper meets or does not meet the exclusion criteria.",
+  "reasoning": "REQUIRED: Detailed explanation of your decision. Explain specifically why this paper meets or does not meet the exclusion criteria based on the title, abstract, and other metadata provided.",
   "confidence": 0.0 to 1.0
-}`;
+}
+
+Respond with ONLY the JSON object above, nothing else.`;
   }
 
   /**

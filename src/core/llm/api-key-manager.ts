@@ -433,4 +433,205 @@ export class APIKeyManager {
     }
     return `${key.substring(0, 8)}${'*'.repeat(key.length - 12)}${key.substring(key.length - 4)}`;
   }
+
+  /**
+   * Initialize quota tracking for all keys based on current model
+   * Should be called when model changes or at startup
+   */
+  initializeQuotaTracking(modelName: string): void {
+    const { QuotaTracker } = require('./quota-tracker');
+
+    for (const key of this.keys) {
+      QuotaTracker.initializeQuotaTracking(key, modelName);
+    }
+
+    console.log(`[Quota Tracking] Initialized for model: ${modelName}`);
+  }
+
+  /**
+   * Update quota limits when model changes
+   */
+  updateQuotaLimits(modelName: string): void {
+    const { QuotaTracker } = require('./quota-tracker');
+
+    for (const key of this.keys) {
+      QuotaTracker.updateQuotaLimits(key, modelName);
+    }
+
+    console.log(`[Quota Tracking] Updated limits for model: ${modelName}`);
+  }
+
+  /**
+   * Record usage for a specific key (tracks RPM, TPM, RPD)
+   */
+  recordKeyUsage(apiKey: string, tokensUsed: number): void {
+    const { QuotaTracker } = require('./quota-tracker');
+    const keyInfo = this.keys.find(k => k.key === apiKey);
+
+    if (keyInfo) {
+      QuotaTracker.recordUsage(keyInfo, tokensUsed);
+    }
+  }
+
+  /**
+   * Smart key selection - chooses the key with the most available quota
+   * Returns null if no keys have available quota
+   */
+  selectBestAvailableKey(estimatedTokens: number = 1000): string | null {
+    const { QuotaTracker } = require('./quota-tracker');
+
+    let bestKey: APIKeyInfo | null = null;
+    let bestQuotaRemaining = -1;
+
+    for (const key of this.keys) {
+      // Skip unhealthy or invalid keys
+      if (key.status === 'invalid' || key.status === 'error') continue;
+      if (key.healthCheck && !key.healthCheck.isHealthy) continue;
+
+      // Check if key has available quota
+      if (!QuotaTracker.hasAvailableQuota(key, estimatedTokens)) continue;
+
+      // Get quota remaining percentage
+      const quotaRemaining = QuotaTracker.getQuotaRemaining(key);
+
+      // Select key with most quota remaining
+      if (quotaRemaining > bestQuotaRemaining) {
+        bestQuotaRemaining = quotaRemaining;
+        bestKey = key;
+      }
+    }
+
+    if (bestKey) {
+      console.log(`[Smart Selection] Selected ${bestKey.label} (${bestQuotaRemaining.toFixed(1)}% quota remaining)`);
+      return bestKey.key;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get all keys with available quota, sorted by most quota remaining
+   */
+  getKeysWithQuota(estimatedTokens: number = 1000): string[] {
+    const { QuotaTracker } = require('./quota-tracker');
+
+    const keysWithQuota = this.keys
+      .filter(k => {
+        if (k.status === 'invalid' || k.status === 'error') return false;
+        if (k.healthCheck && !k.healthCheck.isHealthy) return false;
+        return QuotaTracker.hasAvailableQuota(k, estimatedTokens);
+      })
+      .map(k => ({
+        key: k.key,
+        quotaRemaining: QuotaTracker.getQuotaRemaining(k)
+      }))
+      .sort((a, b) => b.quotaRemaining - a.quotaRemaining)
+      .map(item => item.key);
+
+    return keysWithQuota;
+  }
+
+  /**
+   * Run health check on all API keys using a simple test request
+   * Uses gemini-2.5-pro (lowest quota model) for testing to minimize cost
+   */
+  async runHealthCheck(testModel: string = 'gemini-2.5-pro'): Promise<{ healthy: number; unhealthy: number; results: Map<string, boolean> }> {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const results = new Map<string, boolean>();
+
+    console.log(`[Health Check] Starting diagnostic with model: ${testModel}`);
+
+    const testPrompt = 'Respond with only: OK';
+
+    for (const keyInfo of this.keys) {
+      try {
+        const genAI = new GoogleGenerativeAI(keyInfo.key);
+        const model = genAI.getGenerativeModel({ model: testModel });
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: testPrompt }] }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 10,
+          },
+        });
+
+        const response = result.response.text();
+
+        // Mark as healthy
+        keyInfo.healthCheck = {
+          lastChecked: new Date(),
+          isHealthy: true,
+          lastError: undefined
+        };
+        keyInfo.status = 'active';
+        keyInfo.errorCount = 0;
+
+        results.set(keyInfo.label || keyInfo.key, true);
+        console.log(`[Health Check] ✓ ${keyInfo.label} - HEALTHY`);
+
+        // Small delay between checks to avoid rate limits
+        await this.delay(500);
+
+      } catch (error: any) {
+        const errorMessage = error?.message || 'Unknown error';
+
+        // Mark as unhealthy
+        keyInfo.healthCheck = {
+          lastChecked: new Date(),
+          isHealthy: false,
+          lastError: errorMessage.substring(0, 100)
+        };
+
+        // Classify error
+        if (errorMessage.toLowerCase().includes('invalid') ||
+            errorMessage.toLowerCase().includes('unauthorized') ||
+            errorMessage.toLowerCase().includes('401') ||
+            errorMessage.toLowerCase().includes('403')) {
+          keyInfo.status = 'invalid';
+        } else if (errorMessage.toLowerCase().includes('rate limit') ||
+                   errorMessage.toLowerCase().includes('429')) {
+          keyInfo.status = 'rate_limited';
+          keyInfo.rateLimitResetAt = new Date(Date.now() + 60000);
+        } else {
+          keyInfo.status = 'error';
+        }
+
+        results.set(keyInfo.label || keyInfo.key, false);
+        console.log(`[Health Check] ✗ ${keyInfo.label} - UNHEALTHY (${errorMessage.substring(0, 50)})`);
+
+        // Small delay even on error
+        await this.delay(500);
+      }
+    }
+
+    const healthy = Array.from(results.values()).filter(v => v).length;
+    const unhealthy = results.size - healthy;
+
+    console.log(`[Health Check] Complete: ${healthy} healthy, ${unhealthy} unhealthy out of ${results.size} keys`);
+
+    return { healthy, unhealthy, results };
+  }
+
+  /**
+   * Get quota status for all keys
+   */
+  getQuotaStatus(): Array<{ label: string; status: string; quotaRemaining: number; quotaDetails: string }> {
+    const { QuotaTracker } = require('./quota-tracker');
+
+    return this.keys.map(k => ({
+      label: k.label || 'Unknown',
+      status: k.status,
+      quotaRemaining: QuotaTracker.getQuotaRemaining(k),
+      quotaDetails: QuotaTracker.formatQuotaStatus(k),
+      healthStatus: k.healthCheck?.isHealthy ? 'Healthy' : 'Unhealthy'
+    }));
+  }
+
+  /**
+   * Helper delay function
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }

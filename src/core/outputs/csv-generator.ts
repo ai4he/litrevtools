@@ -91,7 +91,6 @@ export class CSVGenerator {
       'Systematic Filtering Exclusion Reasoning': paper.systematic_filtering_exclusion_reasoning || '',
       // Overall decision
       'Included': paper.included ? 'Yes' : 'No',
-      'Exclusion Reason': paper.exclusionReason || '',
       // Legacy LLM fields (for backward compatibility)
       'LLM Confidence': paper.llmConfidence?.toFixed(2) || '',
       'LLM Reasoning': paper.llmReasoning || '',
@@ -121,7 +120,6 @@ export class CSVGenerator {
         'Systematic Filtering Exclusion',
         'Systematic Filtering Exclusion Reasoning',
         'Included',
-        'Exclusion Reason',
         'LLM Confidence',
         'LLM Reasoning',
         'Category',
