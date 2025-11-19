@@ -1,0 +1,158 @@
+{
+  "timestamp": "2025-11-19T04:54:15.982Z",
+  "totalKeys": 22,
+  "healthyKeys": 5,
+  "unhealthyKeys": 17,
+  "testModel": "gemini-2.5-pro",
+  "results": [
+    {
+      "keyNumber": 1,
+      "maskedKey": "AIzaSyBfBc...keks",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 2,
+      "maskedKey": "AIzaSyD2V3...VlOQ",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 3,
+      "maskedKey": "AIzaSyCUWz...htww",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 4,
+      "maskedKey": "AIzaSyArk2...-BHY",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 5,
+      "maskedKey": "AIzaSyDWQY...OHWE",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 6,
+      "maskedKey": "AIzaSyAb7v...DuUQ",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 7,
+      "maskedKey": "AIzaSyAevR...Knt8",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 8,
+      "maskedKey": "AIzaSyCNGD...REDo",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 9,
+      "maskedKey": "AIzaSyA-P4...8t-A",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 10,
+      "maskedKey": "AIzaSyBoKF...1Cl4",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 11,
+      "maskedKey": "AIzaSyCGbj...4a8s",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 12,
+      "maskedKey": "AIzaSyDvBi...imZI",
+      "healthy": true,
+      "responseTime": 1762
+    },
+    {
+      "keyNumber": 13,
+      "maskedKey": "AIzaSyCnQs...OBFE",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 14,
+      "maskedKey": "AIzaSyCqe8...yYpg",
+      "healthy": true,
+      "responseTime": 924
+    },
+    {
+      "keyNumber": 15,
+      "maskedKey": "AIzaSyC4m6...1d-0",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 16,
+      "maskedKey": "AIzaSyDfDk...ORco",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 17,
+      "maskedKey": "AIzaSyAzy_...TUAI",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 18,
+      "maskedKey": "AIzaSyAovd...GvoA",
+      "healthy": true,
+      "responseTime": 962
+    },
+    {
+      "keyNumber": 19,
+      "maskedKey": "AIzaSyCJuN...-8ks",
+      "healthy": true,
+      "responseTime": 1194
+    },
+    {
+      "keyNumber": 20,
+      "maskedKey": "AIzaSyDIV6...gEik",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    },
+    {
+      "keyNumber": 21,
+      "maskedKey": "AIzaSyDjnw...tDwk",
+      "healthy": true,
+      "responseTime": 1883
+    },
+    {
+      "keyNumber": 22,
+      "maskedKey": "AIzaSyBR0z...bALc",
+      "healthy": false,
+      "responseTime": null,
+      "errorType": "RATE_LIMIT"
+    }
+  ]
+}

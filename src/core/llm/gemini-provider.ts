@@ -15,16 +15,18 @@ export class GeminiProvider extends BaseLLMProvider {
   private modelName: string = this.defaultModel;
   private lastRequestTime: number = 0;
   private minRequestInterval: number = 1000; // Minimum 1 second between requests
+  private verifiedHealthyKeys: string[] = []; // Pre-verified healthy keys from initialization
 
   // Fallback models sorted by free tier quota (highest to lowest)
-  // Tested 2025-11-19 with 12 API keys - all models verified as working
+  // Tested 2025-11-19 with 22 API keys - all models verified as working
   // Strategy: Start with highest RPM/TPM for maximum throughput
+  // NOTE: gemini-3-pro-preview-11-2025 is only available on Vertex AI (paid), not free tier
   private fallbackModels: string[] = [
-    'gemini-2.0-flash-lite',    // RPM: 30, TPM: 1M, RPD: 200 - HIGHEST throughput
-    'gemini-2.5-flash-lite',    // RPM: 15, TPM: 250K, RPD: 1000 - HIGH daily quota
-    'gemini-2.0-flash',         // RPM: 15, TPM: 1M, RPD: 200 - HIGH throughput
-    'gemini-2.5-flash',         // RPM: 10, TPM: 250K, RPD: 250 - GOOD quota
-    'gemini-2.5-pro',           // RPM: 2, TPM: 125K, RPD: 50 - FALLBACK (lowest quota)
+    'gemini-2.0-flash-lite',          // RPM: 30, TPM: 1M, RPD: 200 - HIGHEST throughput
+    'gemini-2.5-flash-lite',          // RPM: 15, TPM: 250K, RPD: 1000 - HIGH daily quota
+    'gemini-2.0-flash',               // RPM: 15, TPM: 1M, RPD: 200 - HIGH throughput
+    'gemini-2.5-flash',               // RPM: 10, TPM: 250K, RPD: 250 - GOOD quota
+    'gemini-2.5-pro',                 // RPM: 2, TPM: 125K, RPD: 50 - FALLBACK
   ];
   private currentModelIndex: number = 0;
   private hasTriedModelFallback: boolean = false;
@@ -226,13 +228,41 @@ export class GeminiProvider extends BaseLLMProvider {
             await this.keyManager.handleError(error);
           }
 
-          // For specific keys, fail fast (don't retry with different keys)
-          if (usingSpecificKey) {
-            throw new Error(`Gemini API request failed with specific key: ${this.sanitizeError(lastError.message)}`);
+          // REMOVED fail-fast for specific keys - now we retry with other keys/models
+          // This enables robust parallel processing with automatic failover
+
+          // If using specific key and it's a rate limit error, try recovery strategies
+          if (usingSpecificKey && (isRateLimitError || isQuotaError)) {
+            // Strategy 1: Try another verified healthy key if available
+            if (this.verifiedHealthyKeys.length > 1) {
+              const currentKeyIndex = this.verifiedHealthyKeys.indexOf(specificKey);
+              const nextKeyIndex = (currentKeyIndex + 1) % this.verifiedHealthyKeys.length;
+              const nextKey = this.verifiedHealthyKeys[nextKeyIndex];
+
+              console.log(`[Key Rotation] Specific key hit rate limit, trying next verified healthy key`);
+              await this.delay(1000);
+              return this.request(prompt, temperature, nextKey);
+            }
+
+            // Strategy 2: Try a different model with lower quota requirements
+            if (this.tryNextModel()) {
+              console.log(`[Model Fallback] All keys rate limited for ${this.fallbackModels[this.currentModelIndex - 1]}, trying ${this.modelName}`);
+              // Reset and retry with new model and original key
+              await this.delay(2000);
+              return this.request(prompt, temperature, specificKey);
+            }
+
+            // Strategy 3: Wait and retry with same key/model (quota will reset)
+            console.log(`[Retry] All keys and models exhausted, waiting 10s before retry...`);
+            await this.delay(10000);
+            // Reset to first model for retry
+            this.currentModelIndex = 0;
+            this.modelName = this.fallbackModels[0];
+            return this.request(prompt, temperature, specificKey);
           }
 
           // Check if we have more keys to try
-          if (!this.keyManager.hasAvailableKeys()) {
+          if (!this.keyManager.hasAvailableKeys() && this.verifiedHealthyKeys.length === 0) {
             keyRotationCycles++;
             console.log(`[Key Rotation] Completed cycle ${keyRotationCycles} - all keys exhausted`);
 
@@ -374,16 +404,27 @@ export class GeminiProvider extends BaseLLMProvider {
     return [...this.fallbackModels];
   }
 
+  /**
+   * Set verified healthy keys for parallel processing
+   * These keys have been pre-tested and should be used exclusively
+   */
+  setHealthyKeys(keys: string[]): void {
+    this.verifiedHealthyKeys = keys;
+    console.log(`[Gemini Provider] Set ${keys.length} verified healthy keys for parallel processing`);
+  }
+
   async batchRequest(
     requests: LLMRequest[],
     temperature: number = 0.3
   ): Promise<LLMResponse[]> {
-    // Get all keys with available quota for smart parallel processing
-    const availableKeys = this.keyManager?.getKeysWithQuota(1000) || this.keyManager?.getAllAvailableKeys() || [];
+    // Use pre-verified healthy keys if available, otherwise fall back to dynamic selection
+    const availableKeys = this.verifiedHealthyKeys.length > 0
+      ? this.verifiedHealthyKeys
+      : (this.keyManager?.getKeysWithQuota(1000) || this.keyManager?.getAllAvailableKeys() || []);
     const usingParallelKeys = availableKeys.length > 1;
 
     if (usingParallelKeys) {
-      console.log(`[Smart Parallel LLM] Processing ${requests.length} requests across ${availableKeys.length} API keys with available quota`);
+      console.log(`[Parallel LLM] Processing ${requests.length} requests across ${availableKeys.length} ${this.verifiedHealthyKeys.length > 0 ? 'verified healthy' : 'available'} API keys`);
     }
 
     // Process all requests in parallel, distributing across available keys

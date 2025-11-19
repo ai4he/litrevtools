@@ -18,6 +18,7 @@ export const MODEL_QUOTAS: Record<string, ModelQuotas> = {
   'gemini-2.0-flash': { rpm: 15, tpm: 1000000, rpd: 200 },
   'gemini-2.5-flash': { rpm: 10, tpm: 250000, rpd: 250 },
   'gemini-2.5-pro': { rpm: 2, tpm: 125000, rpd: 50 },
+  // NOTE: gemini-3-pro-preview-11-2025 is only available on Vertex AI (paid tier), not free tier Google AI Studio
 };
 
 export class QuotaTracker {

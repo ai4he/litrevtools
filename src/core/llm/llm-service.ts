@@ -28,6 +28,7 @@ export class LLMService {
   private config: LLMConfig;
   private keyManager?: APIKeyManager;
   private onKeyExhausted?: () => Promise<string | null>;
+  private healthyKeys: string[] = []; // Store verified healthy keys from initialization
 
   constructor(config?: Partial<LLMConfig>) {
     // Default configuration with Gemini as default provider
@@ -117,6 +118,26 @@ export class LLMService {
       model: this.config.model,
       keyManager: this.keyManager
     });
+
+    // Run health check during initialization to identify working keys upfront
+    if (this.keyManager) {
+      console.log('[LLM Service] Running initial health check to identify working keys...');
+      const healthCheckResults = await this.keyManager.runHealthCheck();
+      console.log(`[LLM Service] Health check complete: ${healthCheckResults.healthy}/${healthCheckResults.healthy + healthCheckResults.unhealthy} keys healthy`);
+
+      if (healthCheckResults.healthy === 0) {
+        throw new Error('No healthy API keys available. Please check your API keys and try again.');
+      }
+
+      // Store healthy keys for parallel processing
+      this.healthyKeys = this.keyManager.getAllAvailableKeys();
+      console.log(`[LLM Service] Identified ${this.healthyKeys.length} healthy keys for parallel processing`);
+
+      // Pass healthy keys to the provider for exclusive use in parallel processing
+      if (this.provider && 'setHealthyKeys' in this.provider) {
+        (this.provider as any).setHealthyKeys(this.healthyKeys);
+      }
+    }
   }
 
   /**
@@ -193,16 +214,12 @@ export class LLMService {
       throw new Error('LLM service is not enabled or initialized');
     }
 
-    // Run health check before starting heavy tasks (only if using key manager)
-    if (this.provider && this.keyManager) {
-      console.log('[LLM Service] Running health check before filtering...');
-      const healthCheckResults = await this.keyManager.runHealthCheck();
-      console.log(`[LLM Service] Health check complete: ${healthCheckResults.healthy}/${healthCheckResults.healthy + healthCheckResults.unhealthy} keys healthy`);
-
-      if (healthCheckResults.healthy === 0) {
-        throw new Error('No healthy API keys available. Please check your API keys and try again.');
-      }
+    // Use pre-verified healthy keys (already identified during initialization)
+    if (this.healthyKeys.length === 0) {
+      throw new Error('No healthy API keys available. Health check during initialization found no working keys.');
     }
+
+    console.log(`[LLM Service] Starting semantic filtering with ${this.healthyKeys.length} verified healthy keys`);
 
     let processedPapers = [...papers];
     const startTime = Date.now();
