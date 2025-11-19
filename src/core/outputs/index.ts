@@ -263,6 +263,9 @@ export class OutputManager {
     await csvGen.generate(session.papers, csvPath);
     outputs.csv = csvPath;
 
+    // Update database with CSV file path
+    this.database.updateOutputFiles(sessionId, outputs);
+
     return outputs;
   }
 
