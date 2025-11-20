@@ -13,6 +13,7 @@ import { APIKeyManager } from './api-key-manager';
 export interface ActiveStream {
   requestId: string; // Unique ID for this request
   keyLabel: string; // Which API key is handling this
+  modelName: string; // Which model is processing this request
   paperId?: string; // Associated paper ID (if applicable)
   paperTitle?: string; // Paper title for display
   tokensReceived: number; // How many tokens received so far

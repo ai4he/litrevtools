@@ -3,6 +3,7 @@ import React from 'react';
 interface ActiveStream {
   requestId: string;
   keyLabel: string;
+  modelName: string;
   paperId?: string;
   paperTitle?: string;
   tokensReceived: number;
@@ -75,9 +76,12 @@ export const LiveLLMActivityMonitor: React.FC<LiveLLMActivityMonitorProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs font-semibold text-gray-700">
                           {stream.keyLabel}
+                        </span>
+                        <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-mono">
+                          {stream.modelName}
                         </span>
                         {stream.status === 'streaming' && (
                           <div className="flex gap-0.5">

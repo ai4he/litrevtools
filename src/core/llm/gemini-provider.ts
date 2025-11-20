@@ -31,6 +31,7 @@ export class GeminiProvider extends BaseLLMProvider {
   private activeStreams: Map<string, {
     requestId: string;
     keyLabel: string;
+    modelName: string;
     paperId?: string;
     paperTitle?: string;
     tokensReceived: number;
@@ -155,12 +156,14 @@ export class GeminiProvider extends BaseLLMProvider {
   private startStreamTracking(
     requestId: string,
     keyLabel: string,
+    modelName: string,
     paperId?: string,
     paperTitle?: string
   ): void {
     this.activeStreams.set(requestId, {
       requestId,
       keyLabel,
+      modelName,
       paperId,
       paperTitle,
       tokensReceived: 0,
@@ -783,9 +786,9 @@ export class GeminiProvider extends BaseLLMProvider {
       const paperId = paper?.id;
       const paperTitle = paper?.title?.substring(0, 50); // Truncate for display
 
-      // Start tracking this stream
+      // Start tracking this stream with current model
       const requestId = `${req.id}-${Date.now()}`;
-      this.startStreamTracking(requestId, keyLabel, paperId, paperTitle);
+      this.startStreamTracking(requestId, keyLabel, this.modelName, paperId, paperTitle);
 
       if (specificKey && index < availableKeys.length) {
         console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to ${keyLabel}`);

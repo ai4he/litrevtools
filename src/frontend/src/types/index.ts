@@ -134,6 +134,7 @@ export interface OutputProgress {
   activeStreams?: Array<{
     requestId: string;
     keyLabel: string;
+    modelName: string;
     paperId?: string;
     paperTitle?: string;
     tokensReceived: number;
