@@ -8,6 +8,7 @@ import { ScholarExtractor } from './scholar';
 import { GeminiService } from './gemini';
 import { OutputManager } from './outputs';
 import { LLMService, LLMFilteringProgress } from './llm/llm-service';
+import { ResumeManager } from './resume-manager';
 import {
   AppConfig,
   SearchParameters,
@@ -17,10 +18,15 @@ import {
   Paper,
   ProgressCallback,
   PaperCallback,
-  ErrorCallback
+  ErrorCallback,
+  ResumeMetadata,
+  Step1ResumeMetadata,
+  Step2ResumeMetadata,
+  Step3ResumeMetadata
 } from './types';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import * as fs from 'fs';
 
 // Load environment variables
 dotenv.config();
@@ -32,6 +38,7 @@ export class LitRevTools {
   private outputManager: OutputManager;
   private scholarExtractor?: ScholarExtractor;
   private llmService?: LLMService;
+  private resumeManager: ResumeManager;
 
   constructor(config?: Partial<AppConfig>) {
     // Build configuration
@@ -46,6 +53,7 @@ export class LitRevTools {
       this.config.outputDir,
       this.config.gemini.paperBatchSize
     );
+    this.resumeManager = new ResumeManager(this.config.outputDir);
   }
 
   /**
@@ -367,6 +375,239 @@ export class LitRevTools {
   }
 
   /**
+   * Generate progress ZIP for Step 1 (in-progress search)
+   */
+  async generateStep1ProgressZip(sessionId: string, lastOffset: number): Promise<string> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const sessionDir = path.join(this.config.outputDir, sessionId);
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
+    // Generate CSV file
+    const csvPath = path.join(sessionDir, 'papers-progress.csv');
+    const { CSVGenerator } = await import('./outputs/csv-generator');
+    const csvGen = new CSVGenerator();
+    await csvGen.generateRawExtractions(session.papers, csvPath);
+
+    // Generate metadata
+    const metadata = this.resumeManager.generateStep1Metadata(
+      session,
+      session.progress,
+      lastOffset
+    );
+
+    // Create ZIP
+    const zipPath = path.join(sessionDir, 'step1-progress.zip');
+    await this.resumeManager.createProgressZip(sessionId, csvPath, metadata, zipPath);
+
+    return zipPath;
+  }
+
+  /**
+   * Generate progress ZIP for Step 2 (in-progress filtering)
+   */
+  async generateStep2ProgressZip(
+    sessionId: string,
+    parameters: {
+      inclusionPrompt?: string;
+      exclusionPrompt?: string;
+      batchSize: number;
+      model: string;
+    },
+    progress: {
+      totalPapers: number;
+      processedPapers: number;
+      currentBatch: number;
+      totalBatches: number;
+    }
+  ): Promise<string> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const sessionDir = path.join(this.config.outputDir, sessionId);
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
+    // Generate labeled CSV file
+    const csvPath = path.join(sessionDir, 'papers-labeled-progress.csv');
+    const { CSVGenerator } = await import('./outputs/csv-generator');
+    const csvGen = new CSVGenerator();
+    await csvGen.generateLabeledExtractions(session.papers, csvPath);
+
+    // Generate metadata
+    const metadata = this.resumeManager.generateStep2Metadata(
+      sessionId,
+      undefined, // sourceStep1SessionId
+      parameters,
+      progress,
+      !!session.originalPapers,
+      session.createdAt
+    );
+
+    // Create ZIP
+    const zipPath = path.join(sessionDir, 'step2-progress.zip');
+    await this.resumeManager.createProgressZip(sessionId, csvPath, metadata, zipPath);
+
+    return zipPath;
+  }
+
+  /**
+   * Generate progress ZIP for Step 3 (in-progress output generation)
+   */
+  async generateStep3ProgressZip(
+    sessionId: string,
+    parameters: {
+      dataSource: 'step1' | 'step2' | 'upload';
+      model: string;
+      batchSize: number;
+      latexPrompt?: string;
+    },
+    progress: OutputProgress,
+    completedOutputs: {
+      csv: boolean;
+      bibtex: boolean;
+      latex: boolean;
+      prismaDiagram: boolean;
+      prismaTable: boolean;
+      zip: boolean;
+    }
+  ): Promise<string> {
+    const session = this.database.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const sessionDir = path.join(this.config.outputDir, sessionId);
+
+    // Use the main CSV file
+    const csvPath = path.join(sessionDir, 'papers-labeled.csv');
+
+    // Generate metadata
+    const metadata = this.resumeManager.generateStep3Metadata(
+      sessionId,
+      undefined, // sourceStep2SessionId
+      undefined, // sourceStep1SessionId
+      parameters,
+      progress,
+      completedOutputs,
+      session.createdAt
+    );
+
+    // Create ZIP
+    const zipPath = path.join(sessionDir, 'step3-progress.zip');
+    await this.resumeManager.createProgressZip(sessionId, csvPath, metadata, zipPath);
+
+    return zipPath;
+  }
+
+  /**
+   * Extract and validate ZIP contents
+   */
+  async extractResumeZip(zipPath: string): Promise<{
+    metadata: ResumeMetadata;
+    papers: Paper[];
+    tempDir: string;
+  }> {
+    const { csvPath, metadata, tempDir } = await this.resumeManager.extractZipContents(zipPath);
+    const papers = await this.resumeManager.parseCsvToPapers(csvPath);
+
+    return { metadata, papers, tempDir };
+  }
+
+  /**
+   * Resume Step 1 from ZIP
+   */
+  async resumeStep1FromZip(
+    zipPath: string,
+    callbacks?: {
+      onProgress?: ProgressCallback;
+      onPaper?: PaperCallback;
+      onError?: ErrorCallback;
+    }
+  ): Promise<string> {
+    const { metadata, papers, tempDir } = await this.extractResumeZip(zipPath);
+
+    if (metadata.step !== 1) {
+      throw new Error('Invalid ZIP: expected Step 1 metadata');
+    }
+
+    const step1Metadata = metadata as Step1ResumeMetadata;
+
+    // Create new session with restored parameters and papers
+    const newSessionId = await this.startSearch(step1Metadata.parameters, callbacks);
+    const session = this.database.getSession(newSessionId);
+
+    if (session) {
+      // Add previously extracted papers
+      for (const paper of papers) {
+        this.database.addPaper(newSessionId, paper);
+      }
+
+      // Update PRISMA data
+      this.database.updatePRISMAData(newSessionId, step1Metadata.prismaData);
+    }
+
+    // Clean up temp directory
+    this.resumeManager.cleanupTempDir(tempDir);
+
+    console.log(`[LitRevTools] Resumed Step 1 from ZIP. New session: ${newSessionId}, Restored ${papers.length} papers`);
+
+    return newSessionId;
+  }
+
+  /**
+   * Resume Step 2 from ZIP
+   */
+  async resumeStep2FromZip(
+    zipPath: string,
+    onProgress?: (progress: LLMFilteringProgress) => void
+  ): Promise<string> {
+    const { metadata, papers, tempDir } = await this.extractResumeZip(zipPath);
+
+    if (metadata.step !== 2) {
+      throw new Error('Invalid ZIP: expected Step 2 metadata');
+    }
+
+    const step2Metadata = metadata as Step2ResumeMetadata;
+
+    // Create new session with papers
+    const newSessionId = `step2_${Date.now()}`;
+    // TODO: Create session and add papers
+    // For now, throw error indicating this needs implementation
+    throw new Error('Step 2 resume not yet fully implemented');
+  }
+
+  /**
+   * Resume Step 3 from ZIP
+   */
+  async resumeStep3FromZip(
+    zipPath: string,
+    onProgress?: (progress: OutputProgress) => void
+  ): Promise<string> {
+    const { metadata, papers, tempDir } = await this.extractResumeZip(zipPath);
+
+    if (metadata.step !== 3) {
+      throw new Error('Invalid ZIP: expected Step 3 metadata');
+    }
+
+    const step3Metadata = metadata as Step3ResumeMetadata;
+
+    // Create new session with papers
+    const newSessionId = `step3_${Date.now()}`;
+    // TODO: Create session and add papers, then resume generation
+    // For now, throw error indicating this needs implementation
+    throw new Error('Step 3 resume not yet fully implemented');
+  }
+
+  /**
    * Get configuration
    */
   getConfig(): AppConfig {
@@ -438,3 +679,4 @@ export { LitRevDatabase } from './database';
 export { GeminiService } from './gemini';
 export { ScholarExtractor } from './scholar';
 export { OutputManager, CSVGenerator, BibTeXGenerator, LaTeXGenerator } from './outputs';
+export { ResumeManager } from './resume-manager';
