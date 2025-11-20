@@ -124,6 +124,76 @@ export const sessionAPI = {
     const response = await api.post(`/sessions/${sessionId}/generate/stop`);
     return response.data;
   },
+
+  // Download progress ZIP files
+  downloadProgressZipStep1: async (sessionId: string, lastOffset: number) => {
+    const response = await api.get(`/sessions/${sessionId}/download/progress-zip/step1?lastOffset=${lastOffset}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadProgressZipStep2: async (
+    sessionId: string,
+    parameters: {
+      inclusionPrompt?: string;
+      exclusionPrompt?: string;
+      batchSize: number;
+      model: string;
+    },
+    progress: {
+      totalPapers: number;
+      processedPapers: number;
+      currentBatch: number;
+      totalBatches: number;
+    }
+  ) => {
+    const response = await api.post(`/sessions/${sessionId}/download/progress-zip/step2`, {
+      inclusionPrompt: parameters.inclusionPrompt,
+      exclusionPrompt: parameters.exclusionPrompt,
+      batchSize: parameters.batchSize,
+      model: parameters.model,
+      progress
+    }, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadProgressZipStep3: async (
+    sessionId: string,
+    parameters: any,
+    progress: any,
+    completedOutputs: any
+  ) => {
+    const response = await api.post(`/sessions/${sessionId}/download/progress-zip/step3`, {
+      parameters,
+      progress,
+      completedOutputs
+    }, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+};
+
+// Resume API
+export const resumeAPI = {
+  /**
+   * Resume from ZIP file
+   */
+  resumeFromZip: async (zipFile: File, stepNumber: number) => {
+    const formData = new FormData();
+    formData.append('zipFile', zipFile);
+    formData.append('step', stepNumber.toString());
+
+    const response = await api.post('/resume-from-zip', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };
 
 export const authAPI = {

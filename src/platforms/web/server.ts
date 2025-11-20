@@ -10,8 +10,10 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
+import multer from 'multer';
 import { LitRevTools, SearchParameters, SearchProgress, Paper, validateParameters, mergeWithDefaults } from '../../core';
 import * as path from 'path';
+import * as fs from 'fs';
 import { verifyGoogleToken, generateJWT, authMiddleware, optionalAuthMiddleware, AuthRequest } from './auth';
 
 const app = express();
@@ -41,6 +43,26 @@ app.use(express.static(frontendPath));
 
 // Fallback to old public directory
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Configure multer for file uploads
+const uploadDir = path.join(process.cwd(), 'data', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const upload = multer({
+  dest: uploadDir,
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.endsWith('.zip') || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only ZIP and CSV files are allowed'));
+    }
+  }
+});
 
 // Initialize LitRevTools instance
 const litrev = new LitRevTools();
@@ -836,6 +858,116 @@ app.get('/api/sessions/:id/download/:type', (req, res) => {
 
     res.download(filePath);
   } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 1
+app.get('/api/sessions/:id/download/progress-zip/step1', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const session = litrev.getSession(sessionId);
+
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // Generate progress ZIP (lastOffset should be tracked in session or passed as query param)
+    const lastOffset = parseInt(req.query.lastOffset as string) || 0;
+    const zipPath = await litrev.generateStep1ProgressZip(sessionId, lastOffset);
+
+    res.download(zipPath, `step1-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 1 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 2
+app.post('/api/sessions/:id/download/progress-zip/step2', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { inclusionPrompt, exclusionPrompt, batchSize, model, progress } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    const zipPath = await litrev.generateStep2ProgressZip(
+      sessionId,
+      { inclusionPrompt, exclusionPrompt, batchSize, model },
+      progress
+    );
+
+    res.download(zipPath, `step2-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 2 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 3
+app.post('/api/sessions/:id/download/progress-zip/step3', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { parameters, progress, completedOutputs } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    const zipPath = await litrev.generateStep3ProgressZip(
+      sessionId,
+      parameters,
+      progress,
+      completedOutputs
+    );
+
+    res.download(zipPath, `step3-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 3 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume from ZIP file (multipart upload)
+app.post('/api/resume-from-zip', upload.single('zipFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'No ZIP file provided' });
+      return;
+    }
+
+    const zipPath = req.file.path;
+    const stepNumber = parseInt(req.body.step) || 0;
+
+    console.log(`[Server] Resume request for Step ${stepNumber} from ZIP: ${zipPath}`);
+
+    let newSessionId: string;
+
+    switch (stepNumber) {
+      case 1:
+        newSessionId = await litrev.resumeStep1FromZip(zipPath);
+        break;
+      case 2:
+        newSessionId = await litrev.resumeStep2FromZip(zipPath);
+        break;
+      case 3:
+        newSessionId = await litrev.resumeStep3FromZip(zipPath);
+        break;
+      default:
+        res.status(400).json({ success: false, error: 'Invalid step number' });
+        return;
+    }
+
+    res.json({ success: true, sessionId: newSessionId });
+  } catch (error: any) {
+    console.error('[Server] Error resuming from ZIP:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

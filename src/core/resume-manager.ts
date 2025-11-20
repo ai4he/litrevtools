@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
-import { extract } from 'zip-lib';
+import AdmZip from 'adm-zip';
 import {
   Step1ResumeMetadata,
   Step2ResumeMetadata,
@@ -192,9 +192,10 @@ export class ResumeManager {
     }
 
     try {
-      // Extract ZIP
+      // Extract ZIP using adm-zip
       console.log(`[ResumeManager] Extracting ZIP to: ${tempDir}`);
-      await extract(zipPath, tempDir);
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(tempDir, true);
 
       // Find CSV file (should be the only .csv file)
       const files = fs.readdirSync(tempDir);
