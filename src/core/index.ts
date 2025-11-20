@@ -9,6 +9,7 @@ import { GeminiService } from './gemini';
 import { OutputManager } from './outputs';
 import { LLMService, LLMFilteringProgress } from './llm/llm-service';
 import { ResumeManager } from './resume-manager';
+import { ProjectManager } from './project-manager';
 import {
   AppConfig,
   SearchParameters,
@@ -39,6 +40,7 @@ export class LitRevTools {
   private scholarExtractor?: ScholarExtractor;
   private llmService?: LLMService;
   private resumeManager: ResumeManager;
+  private projectManager: ProjectManager;
 
   constructor(config?: Partial<AppConfig>) {
     // Build configuration
@@ -54,6 +56,7 @@ export class LitRevTools {
       this.config.gemini.paperBatchSize
     );
     this.resumeManager = new ResumeManager(this.config.outputDir);
+    this.projectManager = new ProjectManager(this.database, this);
   }
 
   /**
@@ -622,6 +625,13 @@ export class LitRevTools {
   }
 
   /**
+   * Get ProjectManager instance
+   */
+  getProjectManager(): ProjectManager {
+    return this.projectManager;
+  }
+
+  /**
    * Build configuration from environment and overrides
    */
   private buildConfig(overrides?: Partial<AppConfig>): AppConfig {
@@ -680,3 +690,4 @@ export { GeminiService } from './gemini';
 export { ScholarExtractor } from './scholar';
 export { OutputManager, CSVGenerator, BibTeXGenerator, LaTeXGenerator } from './outputs';
 export { ResumeManager } from './resume-manager';
+export { ProjectManager } from './project-manager';

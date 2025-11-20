@@ -445,6 +445,76 @@ export interface Step3ResumeMetadata {
 
 export type ResumeMetadata = Step1ResumeMetadata | Step2ResumeMetadata | Step3ResumeMetadata;
 
+// ============================================================================
+// Project-Based Management Types
+// ============================================================================
+
+/**
+ * Project - Container for a complete 3-step literature review workflow
+ */
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  status: 'active' | 'paused' | 'completed' | 'error';
+  created_at: Date;
+  updated_at: Date;
+
+  // Step associations (session IDs)
+  step1_session_id?: string;
+  step2_session_id?: string;
+  step3_session_id?: string;
+
+  // Completion status
+  step1_complete: boolean;
+  step2_complete: boolean;
+  step3_complete: boolean;
+
+  // Current active step (null if no step is active)
+  current_step?: 1 | 2 | 3;
+
+  // Error tracking
+  error_message?: string;
+}
+
+/**
+ * Project creation parameters
+ */
+export interface CreateProjectParams {
+  name: string;
+  description?: string;
+}
+
+/**
+ * Project update parameters
+ */
+export interface UpdateProjectParams {
+  name?: string;
+  description?: string;
+  status?: 'active' | 'paused' | 'completed' | 'error';
+}
+
+/**
+ * Project with populated step data
+ */
+export interface ProjectWithSteps extends Project {
+  step1?: SearchSession;
+  step2?: SearchSession;
+  step3?: SearchSession;
+}
+
+/**
+ * Project progress summary
+ */
+export interface ProjectProgress {
+  projectId: string;
+  currentStep: 1 | 2 | 3 | null;
+  step1Progress?: SearchProgress;
+  step2Progress?: LLMFilteringProgress;
+  step3Progress?: OutputProgress;
+  overallProgress: number; // 0-100 percentage
+}
+
 export type ProgressCallback = (progress: SearchProgress, sessionId: string) => void;
 export type PaperCallback = (paper: Paper, sessionId: string) => void;
 export type ErrorCallback = (error: Error, sessionId: string) => void;

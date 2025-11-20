@@ -22,10 +22,34 @@ export class LitRevDatabase {
   }
 
   private initializeTables(): void {
+    // Projects table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        step1_session_id TEXT,
+        step2_session_id TEXT,
+        step3_session_id TEXT,
+        step1_complete INTEGER NOT NULL DEFAULT 0,
+        step2_complete INTEGER NOT NULL DEFAULT 0,
+        step3_complete INTEGER NOT NULL DEFAULT 0,
+        current_step INTEGER,
+        error_message TEXT,
+        FOREIGN KEY (step1_session_id) REFERENCES sessions (id) ON DELETE SET NULL,
+        FOREIGN KEY (step2_session_id) REFERENCES sessions (id) ON DELETE SET NULL,
+        FOREIGN KEY (step3_session_id) REFERENCES sessions (id) ON DELETE SET NULL
+      )
+    `);
+
     // Sessions table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
+        project_id TEXT,
         name TEXT,
         inclusion_keywords TEXT NOT NULL,
         exclusion_keywords TEXT NOT NULL,
@@ -45,7 +69,8 @@ export class LitRevDatabase {
         progress INTEGER DEFAULT 0,
         error TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
       )
     `);
 
@@ -219,6 +244,16 @@ export class LitRevDatabase {
   }
 
   private runMigrations(): void {
+    // Check if project_id column exists in sessions table
+    const sessionsTableInfo = this.db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    const hasProjectId = sessionsTableInfo.some(col => col.name === 'project_id');
+
+    // Add project_id column to sessions table
+    if (!hasProjectId) {
+      console.log('Adding project_id column to sessions table...');
+      this.db.exec('ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE CASCADE');
+    }
+
     // Check if category column exists in papers table
     const tableInfo = this.db.prepare("PRAGMA table_info(papers)").all() as Array<{ name: string }>;
     const hasCategory = tableInfo.some(col => col.name === 'category');
@@ -669,6 +704,196 @@ export class LitRevDatabase {
     `).all() as any[];
 
     return rows.map(row => this.getSession(row.id)).filter(s => s !== null) as SearchSession[];
+  }
+
+  // ============================================================================
+  // Project Management Methods
+  // ============================================================================
+
+  /**
+   * Create a new project
+   */
+  createProject(params: { name: string; description?: string }): string {
+    const id = this.generateId();
+    const now = new Date().toISOString();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO projects (
+        id, name, description, status, created_at, updated_at,
+        step1_complete, step2_complete, step3_complete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      params.name,
+      params.description || null,
+      'active',
+      now,
+      now,
+      0, // step1_complete
+      0, // step2_complete
+      0  // step3_complete
+    );
+
+    return id;
+  }
+
+  /**
+   * Get a single project by ID
+   */
+  getProject(projectId: string): any | null {
+    const row = this.db.prepare(`
+      SELECT * FROM projects WHERE id = ?
+    `).get(projectId) as any;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      created_at: new Date(row.created_at),
+      updated_at: new Date(row.updated_at),
+      step1_session_id: row.step1_session_id,
+      step2_session_id: row.step2_session_id,
+      step3_session_id: row.step3_session_id,
+      step1_complete: row.step1_complete === 1,
+      step2_complete: row.step2_complete === 1,
+      step3_complete: row.step3_complete === 1,
+      current_step: row.current_step,
+      error_message: row.error_message
+    };
+  }
+
+  /**
+   * Get a project with populated step sessions
+   */
+  getProjectWithSteps(projectId: string): any | null {
+    const project = this.getProject(projectId);
+    if (!project) return null;
+
+    const result: any = { ...project };
+
+    if (project.step1_session_id) {
+      result.step1 = this.getSession(project.step1_session_id);
+    }
+    if (project.step2_session_id) {
+      result.step2 = this.getSession(project.step2_session_id);
+    }
+    if (project.step3_session_id) {
+      result.step3 = this.getSession(project.step3_session_id);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get all projects
+   */
+  getAllProjects(): any[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM projects ORDER BY created_at DESC
+    `).all() as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      created_at: new Date(row.created_at),
+      updated_at: new Date(row.updated_at),
+      step1_session_id: row.step1_session_id,
+      step2_session_id: row.step2_session_id,
+      step3_session_id: row.step3_session_id,
+      step1_complete: row.step1_complete === 1,
+      step2_complete: row.step2_complete === 1,
+      step3_complete: row.step3_complete === 1,
+      current_step: row.current_step,
+      error_message: row.error_message
+    }));
+  }
+
+  /**
+   * Update project metadata
+   */
+  updateProject(projectId: string, params: { name?: string; description?: string; status?: string }): void {
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (params.name !== undefined) {
+      fields.push('name = ?');
+      values.push(params.name);
+    }
+    if (params.description !== undefined) {
+      fields.push('description = ?');
+      values.push(params.description);
+    }
+    if (params.status !== undefined) {
+      fields.push('status = ?');
+      values.push(params.status);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(projectId);
+
+    const sql = `UPDATE projects SET ${fields.join(', ')} WHERE id = ?`;
+    this.db.prepare(sql).run(...values);
+  }
+
+  /**
+   * Update project step session ID
+   */
+  updateProjectStepSession(projectId: string, step: 1 | 2 | 3, sessionId: string): void {
+    const field = `step${step}_session_id`;
+    this.db.prepare(`
+      UPDATE projects SET ${field} = ?, updated_at = ? WHERE id = ?
+    `).run(sessionId, new Date().toISOString(), projectId);
+
+    // Update session's project_id
+    this.db.prepare(`
+      UPDATE sessions SET project_id = ? WHERE id = ?
+    `).run(projectId, sessionId);
+  }
+
+  /**
+   * Mark project step as complete
+   */
+  markProjectStepComplete(projectId: string, step: 1 | 2 | 3): void {
+    const field = `step${step}_complete`;
+    this.db.prepare(`
+      UPDATE projects SET ${field} = 1, updated_at = ? WHERE id = ?
+    `).run(new Date().toISOString(), projectId);
+  }
+
+  /**
+   * Set project current step
+   */
+  setProjectCurrentStep(projectId: string, step: 1 | 2 | 3 | null): void {
+    this.db.prepare(`
+      UPDATE projects SET current_step = ?, updated_at = ? WHERE id = ?
+    `).run(step, new Date().toISOString(), projectId);
+  }
+
+  /**
+   * Set project error
+   */
+  setProjectError(projectId: string, errorMessage: string): void {
+    this.db.prepare(`
+      UPDATE projects SET status = 'error', error_message = ?, updated_at = ? WHERE id = ?
+    `).run(errorMessage, new Date().toISOString(), projectId);
+  }
+
+  /**
+   * Delete a project and its associated sessions
+   */
+  deleteProject(projectId: string): void {
+    this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    // CASCADE will automatically delete associated sessions
   }
 
   updatePRISMAData(sessionId: string, data: Partial<PRISMAData>): void {

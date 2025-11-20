@@ -140,6 +140,202 @@ app.get('/api/sessions/:id', (req, res) => {
   }
 });
 
+// ============================================================================
+// Project Routes
+// ============================================================================
+
+// Get all projects
+app.get('/api/projects', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const projects = projectManager.getAllProjects();
+    res.json({ success: true, projects });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project by ID
+app.get('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const project = projectManager.getProject(req.params.id);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project with steps populated
+app.get('/api/projects/:id/with-steps', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const project = projectManager.getProjectWithSteps(req.params.id);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project progress
+app.get('/api/projects/:id/progress', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const progress = projectManager.getProjectProgress(req.params.id);
+    if (!progress) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create a new project
+app.post('/api/projects', (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name) {
+      res.status(400).json({ success: false, error: 'Project name is required' });
+      return;
+    }
+
+    const projectManager = litrev.getProjectManager();
+    const projectId = projectManager.createProject({ name, description });
+    const project = projectManager.getProject(projectId);
+
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update project
+app.put('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { name, description, status } = req.body;
+
+    projectManager.updateProject(req.params.id, { name, description, status });
+    const project = projectManager.getProject(req.params.id);
+
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete project
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.deleteProject(req.params.id);
+    res.json({ success: true, message: 'Project deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pause project
+app.post('/api/projects/:id/pause', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.pauseProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume project
+app.post('/api/projects/:id/resume', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.resumeProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Stop project
+app.post('/api/projects/:id/stop', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.stopProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 1 for a project
+app.post('/api/projects/:id/start-step1', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const parameters = req.body;
+
+    // Validate parameters (reuse existing validation)
+    const validation = validateParameters(mergeWithDefaults(parameters));
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        errors: validation.errors
+      });
+      return;
+    }
+
+    const sessionId = await projectManager.startStep1(req.params.id, parameters);
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 2 for a project
+app.post('/api/projects/:id/start-step2', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { inclusionPrompt, exclusionPrompt, batchSize, model } = req.body;
+
+    const sessionId = await projectManager.startStep2(
+      req.params.id,
+      { inclusionPrompt, exclusionPrompt, batchSize, model }
+    );
+
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 3 for a project
+app.post('/api/projects/:id/start-step3', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { dataSource, model, batchSize, latexPrompt } = req.body;
+
+    const sessionId = await projectManager.startStep3(
+      req.params.id,
+      { dataSource, model, batchSize, latexPrompt }
+    );
+
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Start a new search
 app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {

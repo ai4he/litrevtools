@@ -196,6 +196,123 @@ export const resumeAPI = {
   },
 };
 
+// Project API
+export const projectAPI = {
+  /**
+   * Get all projects
+   */
+  getAll: async () => {
+    const response = await api.get('/projects');
+    return response.data;
+  },
+
+  /**
+   * Get a single project by ID
+   */
+  getById: async (projectId: string) => {
+    const response = await api.get(`/projects/${projectId}`);
+    return response.data;
+  },
+
+  /**
+   * Get a project with populated step data
+   */
+  getWithSteps: async (projectId: string) => {
+    const response = await api.get(`/projects/${projectId}/with-steps`);
+    return response.data;
+  },
+
+  /**
+   * Get project progress
+   */
+  getProgress: async (projectId: string) => {
+    const response = await api.get(`/projects/${projectId}/progress`);
+    return response.data;
+  },
+
+  /**
+   * Create a new project
+   */
+  create: async (params: { name: string; description?: string }) => {
+    const response = await api.post('/projects', params);
+    return response.data;
+  },
+
+  /**
+   * Update a project
+   */
+  update: async (projectId: string, params: { name?: string; description?: string; status?: string }) => {
+    const response = await api.put(`/projects/${projectId}`, params);
+    return response.data;
+  },
+
+  /**
+   * Delete a project
+   */
+  delete: async (projectId: string) => {
+    const response = await api.delete(`/projects/${projectId}`);
+    return response.data;
+  },
+
+  /**
+   * Pause a project
+   */
+  pause: async (projectId: string) => {
+    const response = await api.post(`/projects/${projectId}/pause`);
+    return response.data;
+  },
+
+  /**
+   * Resume a project
+   */
+  resume: async (projectId: string) => {
+    const response = await api.post(`/projects/${projectId}/resume`);
+    return response.data;
+  },
+
+  /**
+   * Stop a project
+   */
+  stop: async (projectId: string) => {
+    const response = await api.post(`/projects/${projectId}/stop`);
+    return response.data;
+  },
+
+  /**
+   * Start Step 1 for a project
+   */
+  startStep1: async (projectId: string, parameters: any) => {
+    const response = await api.post(`/projects/${projectId}/start-step1`, parameters);
+    return response.data;
+  },
+
+  /**
+   * Start Step 2 for a project
+   */
+  startStep2: async (projectId: string, parameters: {
+    inclusionPrompt?: string;
+    exclusionPrompt?: string;
+    batchSize?: number;
+    model?: string;
+  }) => {
+    const response = await api.post(`/projects/${projectId}/start-step2`, parameters);
+    return response.data;
+  },
+
+  /**
+   * Start Step 3 for a project
+   */
+  startStep3: async (projectId: string, parameters: {
+    dataSource?: 'step1' | 'step2';
+    model?: string;
+    batchSize?: number;
+    latexPrompt?: string;
+  }) => {
+    const response = await api.post(`/projects/${projectId}/start-step3`, parameters);
+    return response.data;
+  },
+};
+
 export const authAPI = {
   googleLogin: async (credential: string) => {
     const response = await api.post('/auth/google', { credential });
