@@ -92,6 +92,38 @@ export const sessionAPI = {
     });
     return response.data;
   },
+
+  // Step 2 (Semantic Filtering) controls
+  pauseSemanticFilter: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/semantic-filter/pause`);
+    return response.data;
+  },
+
+  resumeSemanticFilter: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/semantic-filter/resume`);
+    return response.data;
+  },
+
+  stopSemanticFilter: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/semantic-filter/stop`);
+    return response.data;
+  },
+
+  // Step 3 (Output Generation) controls
+  pauseGenerate: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/generate/pause`);
+    return response.data;
+  },
+
+  resumeGenerate: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/generate/resume`);
+    return response.data;
+  },
+
+  stopGenerate: async (sessionId: string) => {
+    const response = await api.post(`/sessions/${sessionId}/generate/stop`);
+    return response.data;
+  },
 };
 
 export const authAPI = {

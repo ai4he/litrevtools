@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Filter, Download, CheckCircle, AlertCircle, Play } from 'lucide-react';
+import { Filter, Download, CheckCircle, AlertCircle, Play, Pause, Square } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { LiveLLMActivityMonitor } from './LiveLLMActivityMonitor';
 import { downloadBlob } from '../utils/helpers';
@@ -76,6 +76,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
   const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
+  const [isPaused, setIsPaused] = useState(false);
   const { socket } = useSocket();
 
   // Use csvSessionId if available (for CSV upload), otherwise use sessionId from Step 1
@@ -291,6 +292,42 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     }
   };
 
+  const handlePause = async () => {
+    if (!activeSessionId) return;
+    try {
+      await sessionAPI.pauseSemanticFilter(activeSessionId);
+      setIsPaused(true);
+    } catch (err: any) {
+      console.error('Failed to pause semantic filtering:', err);
+      setError(err.response?.data?.message || 'Failed to pause semantic filtering');
+    }
+  };
+
+  const handleResume = async () => {
+    if (!activeSessionId) return;
+    try {
+      await sessionAPI.resumeSemanticFilter(activeSessionId);
+      setIsPaused(false);
+    } catch (err: any) {
+      console.error('Failed to resume semantic filtering:', err);
+      setError(err.response?.data?.message || 'Failed to resume semantic filtering');
+    }
+  };
+
+  const handleStop = async () => {
+    if (!activeSessionId) return;
+    if (!confirm('Are you sure you want to stop semantic filtering?')) return;
+
+    try {
+      await sessionAPI.stopSemanticFilter(activeSessionId);
+      setIsFiltering(false);
+      setIsPaused(false);
+    } catch (err: any) {
+      console.error('Failed to stop semantic filtering:', err);
+      setError(err.response?.data?.message || 'Failed to stop semantic filtering');
+    }
+  };
+
   const isComplete = filteringCompleted;
   const hasError = progress?.status === 'error' || !!error;
 
@@ -497,6 +534,34 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
             batchProgress={batchProgress}
             error={progress.error}
           />
+
+          {/* Control Buttons */}
+          <div className="flex gap-2 justify-center">
+            {!isPaused ? (
+              <button
+                onClick={handlePause}
+                className="btn-secondary flex items-center gap-2 px-4 py-2"
+              >
+                <Pause size={18} />
+                Pause
+              </button>
+            ) : (
+              <button
+                onClick={handleResume}
+                className="btn-primary flex items-center gap-2 px-4 py-2"
+              >
+                <Play size={18} />
+                Resume
+              </button>
+            )}
+            <button
+              onClick={handleStop}
+              className="btn-danger flex items-center gap-2 px-4 py-2"
+            >
+              <Square size={18} />
+              Stop
+            </button>
+          </div>
 
           {/* Real-time Status Details */}
           {(progress.currentModel || progress.retryCount || progress.keyRotations || progress.modelFallbacks) && (

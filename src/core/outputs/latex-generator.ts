@@ -10,12 +10,47 @@ import * as path from 'path';
 export class LaTeXGenerator {
   private gemini: GeminiService;
   private batchSize: number = 15; // Papers per batch
+  private isPaused: boolean = false;
+  private isStopped: boolean = false;
 
   constructor(gemini: GeminiService, batchSize?: number) {
     this.gemini = gemini;
     if (batchSize) {
       this.batchSize = batchSize;
     }
+  }
+
+  /**
+   * Pause LaTeX generation
+   */
+  pause(): void {
+    this.isPaused = true;
+    console.log('[LaTeXGenerator] Paused');
+  }
+
+  /**
+   * Resume LaTeX generation
+   */
+  resume(): void {
+    this.isPaused = false;
+    console.log('[LaTeXGenerator] Resumed');
+  }
+
+  /**
+   * Stop LaTeX generation
+   */
+  stop(): void {
+    this.isStopped = true;
+    this.isPaused = false;
+    console.log('[LaTeXGenerator] Stopped');
+  }
+
+  /**
+   * Reset control flags (for new generation session)
+   */
+  resetControlFlags(): void {
+    this.isPaused = false;
+    this.isStopped = false;
   }
 
   /**
@@ -63,6 +98,9 @@ export class LaTeXGenerator {
 
     console.log(`[LaTeXGenerator] Processing ${batches.length} batches`);
 
+    // Reset control flags for new generation session
+    this.resetControlFlags();
+
     let currentDraft: {
       abstract: string;
       introduction: string;
@@ -74,6 +112,18 @@ export class LaTeXGenerator {
 
     // Process batches iteratively
     for (let i = 0; i < batches.length; i++) {
+      // Check if stopped
+      if (this.isStopped) {
+        console.log(`[LaTeXGenerator] Processing stopped by user at batch ${i + 1}/${batches.length}`);
+        throw new Error('Processing stopped by user');
+      }
+
+      // Wait while paused
+      while (this.isPaused) {
+        console.log(`[LaTeXGenerator] Processing paused at batch ${i + 1}/${batches.length}`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Check every second
+      }
+
       const batch = batches[i];
       const papersProcessedSoFar = includedPapers.slice(0, (i + 1) * this.batchSize);
       const papersProcessed = Math.min(papersProcessedSoFar.length, includedPapers.length);

@@ -31,6 +31,7 @@ export class LitRevTools {
   private gemini: GeminiService;
   private outputManager: OutputManager;
   private scholarExtractor?: ScholarExtractor;
+  private llmService?: LLMService;
 
   constructor(config?: Partial<AppConfig>) {
     // Build configuration
@@ -248,7 +249,7 @@ export class LitRevTools {
     }
 
     // Create LLM service - will use .env API keys with rotation
-    const llmService = new LLMService({
+    this.llmService = new LLMService({
       enabled: true,
       provider: 'gemini',
       model: model || 'gemini-2.0-flash-exp', // Use specified model or default
@@ -262,10 +263,13 @@ export class LitRevTools {
     });
 
     // Initialize the LLM service
-    await llmService.initialize();
+    await this.llmService.initialize();
+
+    // Reset control flags for new filtering session
+    this.llmService.resetControlFlags();
 
     // Apply semantic filtering with progress tracking
-    const filteredPapers = await llmService.semanticFilterSeparate(
+    const filteredPapers = await this.llmService.semanticFilterSeparate(
       session.papers,
       inclusionPrompt,
       exclusionPrompt,
@@ -282,7 +286,7 @@ export class LitRevTools {
   }
 
   /**
-   * Pause an ongoing search
+   * Pause an ongoing search (Step 1)
    */
   pauseSearch(): void {
     if (this.scholarExtractor) {
@@ -291,7 +295,7 @@ export class LitRevTools {
   }
 
   /**
-   * Resume a paused search
+   * Resume a paused search (Step 1)
    */
   resumeSearch(): void {
     if (this.scholarExtractor) {
@@ -300,11 +304,65 @@ export class LitRevTools {
   }
 
   /**
-   * Stop an ongoing search
+   * Stop an ongoing search (Step 1)
    */
   stopSearch(): void {
     if (this.scholarExtractor) {
       this.scholarExtractor.stop();
+    }
+  }
+
+  /**
+   * Pause semantic filtering (Step 2)
+   */
+  pauseSemanticFiltering(): void {
+    if (this.llmService) {
+      this.llmService.pause();
+    }
+  }
+
+  /**
+   * Resume semantic filtering (Step 2)
+   */
+  resumeSemanticFiltering(): void {
+    if (this.llmService) {
+      this.llmService.resume();
+    }
+  }
+
+  /**
+   * Stop semantic filtering (Step 2)
+   */
+  stopSemanticFiltering(): void {
+    if (this.llmService) {
+      this.llmService.stop();
+    }
+  }
+
+  /**
+   * Pause output generation (Step 3)
+   */
+  pauseOutputGeneration(): void {
+    if (this.outputManager) {
+      this.outputManager.pause();
+    }
+  }
+
+  /**
+   * Resume output generation (Step 3)
+   */
+  resumeOutputGeneration(): void {
+    if (this.outputManager) {
+      this.outputManager.resume();
+    }
+  }
+
+  /**
+   * Stop output generation (Step 3)
+   */
+  stopOutputGeneration(): void {
+    if (this.outputManager) {
+      this.outputManager.stop();
     }
   }
 

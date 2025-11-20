@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { FileText, Download, CheckCircle, AlertCircle, Play, Package, File } from 'lucide-react';
+import { FileText, Download, CheckCircle, AlertCircle, Play, Package, File, Pause, Square } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { LiveLLMActivityMonitor } from './LiveLLMActivityMonitor';
 import { downloadBlob } from '../utils/helpers';
@@ -77,6 +77,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [batchSize, setBatchSize] = useState(30);
   const [tempSessionId, setTempSessionId] = useState<string | null>(null); // Store temp session ID from CSV upload
+  const [isPaused, setIsPaused] = useState(false);
   const { socket } = useSocket();
 
   // Expose trigger method to parent via ref
@@ -348,6 +349,45 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
     }
   };
 
+  const handlePause = async () => {
+    const activeSessionId = tempSessionId || sessionId;
+    if (!activeSessionId) return;
+    try {
+      await sessionAPI.pauseGenerate(activeSessionId);
+      setIsPaused(true);
+    } catch (err: any) {
+      console.error('Failed to pause output generation:', err);
+      setError(err.response?.data?.message || 'Failed to pause output generation');
+    }
+  };
+
+  const handleResume = async () => {
+    const activeSessionId = tempSessionId || sessionId;
+    if (!activeSessionId) return;
+    try {
+      await sessionAPI.resumeGenerate(activeSessionId);
+      setIsPaused(false);
+    } catch (err: any) {
+      console.error('Failed to resume output generation:', err);
+      setError(err.response?.data?.message || 'Failed to resume output generation');
+    }
+  };
+
+  const handleStop = async () => {
+    const activeSessionId = tempSessionId || sessionId;
+    if (!activeSessionId) return;
+    if (!confirm('Are you sure you want to stop output generation?')) return;
+
+    try {
+      await sessionAPI.stopGenerate(activeSessionId);
+      setIsGenerating(false);
+      setIsPaused(false);
+    } catch (err: any) {
+      console.error('Failed to stop output generation:', err);
+      setError(err.response?.data?.message || 'Failed to stop output generation');
+    }
+  };
+
   const isComplete = outputsGenerated && !isGenerating;
   const hasError = outputProgress?.status === 'error' || !!error;
 
@@ -548,6 +588,34 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
             batchProgress={batchProgress}
             error={outputProgress.error}
           />
+
+          {/* Control Buttons */}
+          <div className="flex gap-2 justify-center mt-4">
+            {!isPaused ? (
+              <button
+                onClick={handlePause}
+                className="btn-secondary flex items-center gap-2 px-4 py-2"
+              >
+                <Pause size={18} />
+                Pause
+              </button>
+            ) : (
+              <button
+                onClick={handleResume}
+                className="btn-primary flex items-center gap-2 px-4 py-2"
+              >
+                <Play size={18} />
+                Resume
+              </button>
+            )}
+            <button
+              onClick={handleStop}
+              className="btn-danger flex items-center gap-2 px-4 py-2"
+            >
+              <Square size={18} />
+              Stop
+            </button>
+          </div>
 
           {/* Activity Blocks - Real-time Status */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">

@@ -217,6 +217,42 @@ app.post('/api/search/:id/stop', (req, res) => {
   res.json({ success: true });
 });
 
+// Pause semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/pause', (req, res) => {
+  litrev.pauseSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Resume semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/resume', (req, res) => {
+  litrev.resumeSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Stop semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/stop', (req, res) => {
+  litrev.stopSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Pause output generation (Step 3)
+app.post('/api/sessions/:id/generate/pause', (req, res) => {
+  litrev.pauseOutputGeneration();
+  res.json({ success: true });
+});
+
+// Resume output generation (Step 3)
+app.post('/api/sessions/:id/generate/resume', (req, res) => {
+  litrev.resumeOutputGeneration();
+  res.json({ success: true });
+});
+
+// Stop output generation (Step 3)
+app.post('/api/sessions/:id/generate/stop', (req, res) => {
+  litrev.stopOutputGeneration();
+  res.json({ success: true });
+});
+
 // Generate outputs (async with WebSocket progress)
 app.post('/api/sessions/:id/generate', async (req, res) => {
   try {

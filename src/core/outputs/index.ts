@@ -20,6 +20,7 @@ export class OutputManager {
   private gemini: GeminiService;
   private outputDir: string;
   private paperBatchSize: number;
+  private latexGenerator?: LaTeXGenerator;
 
   constructor(database: LitRevDatabase, gemini: GeminiService, outputDir: string, paperBatchSize?: number) {
     this.database = database;
@@ -30,6 +31,33 @@ export class OutputManager {
     // Ensure output directory exists
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
+    }
+  }
+
+  /**
+   * Pause output generation (Step 3)
+   */
+  pause(): void {
+    if (this.latexGenerator) {
+      this.latexGenerator.pause();
+    }
+  }
+
+  /**
+   * Resume output generation (Step 3)
+   */
+  resume(): void {
+    if (this.latexGenerator) {
+      this.latexGenerator.resume();
+    }
+  }
+
+  /**
+   * Stop output generation (Step 3)
+   */
+  stop(): void {
+    if (this.latexGenerator) {
+      this.latexGenerator.stop();
     }
   }
 
@@ -158,7 +186,7 @@ export class OutputManager {
         });
 
         const latexPath = path.join(sessionDir, 'paper.tex');
-        const latexGen = new LaTeXGenerator(this.gemini, this.paperBatchSize);
+        this.latexGenerator = new LaTeXGenerator(this.gemini, this.paperBatchSize);
 
         // Track start time for output generation
         const outputStartTime = Date.now();
@@ -167,7 +195,7 @@ export class OutputManager {
         let lastModelFallbacks = 0;
 
         // Pass batch progress callback with enhanced tracking
-        await latexGen.generate(
+        await this.latexGenerator.generate(
           session.papers,
           session.parameters,
           session.prismaData,
