@@ -8,6 +8,20 @@ import { GeminiProvider } from './gemini-provider';
 import { APIKeyManager } from './api-key-manager';
 
 /**
+ * Real-time streaming activity for a single LLM request
+ */
+export interface ActiveStream {
+  requestId: string; // Unique ID for this request
+  keyLabel: string; // Which API key is handling this
+  paperId?: string; // Associated paper ID (if applicable)
+  paperTitle?: string; // Paper title for display
+  tokensReceived: number; // How many tokens received so far
+  streamSpeed: number; // Tokens per second
+  startTime: number; // When this stream started (timestamp)
+  status: 'streaming' | 'completing' | 'completed' | 'error';
+}
+
+/**
  * Progress callback for LLM filtering operations
  */
 export interface LLMFilteringProgress {
@@ -33,6 +47,8 @@ export interface LLMFilteringProgress {
     quotaDetails: string;
     healthStatus?: string;
   }>;
+  // Real-time streaming activity
+  activeStreams?: ActiveStream[]; // Currently active streaming requests
 }
 
 export type LLMProgressCallback = (progress: LLMFilteringProgress) => void;
@@ -795,10 +811,37 @@ export class LLMService {
     const providerForProgress = this.provider as any;
     const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
 
+    // Set up streaming progress callback to emit real-time stream updates
+    if (progressCallback && providerForProgress?.setStreamingProgressCallback) {
+      providerForProgress.setStreamingProgressCallback((streams: any[]) => {
+        // Emit progress with current active streams
+        const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers: 0, // Will be updated by batch completion
+          currentBatch: 1,
+          totalBatches,
+          papersInCurrentBatch: requests.length,
+          timeElapsed: Date.now() - startTime,
+          estimatedTimeRemaining: 0,
+          currentAction: `Processing ${streams.length} parallel requests`,
+          currentModel,
+          healthyKeysCount: this.healthyKeys.length,
+          retryCount: providerForProgress?.currentRetryCount || 0,
+          keyRotations: providerForProgress?.keyRotationCount || 0,
+          modelFallbacks: providerForProgress?.modelFallbackCount || 0,
+          apiKeyQuotas: quotaStatus,
+          activeStreams: streams // Include real-time streaming activity
+        });
+      });
+    }
+
     // Report initial progress
     if (progressCallback) {
       // Get quota status for all keys
       const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+      const activeStreams = providerForProgress?.getActiveStreams?.() || [];
 
       progressCallback({
         phase,
@@ -815,7 +858,8 @@ export class LLMService {
         retryCount: providerForProgress?.currentRetryCount || 0,
         keyRotations: providerForProgress?.keyRotationCount || 0,
         modelFallbacks: providerForProgress?.modelFallbackCount || 0,
-        apiKeyQuotas: quotaStatus
+        apiKeyQuotas: quotaStatus,
+        activeStreams
       });
     }
 
@@ -851,6 +895,7 @@ export class LLMService {
         if (progressCallback) {
           // Get quota status for all keys
           const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+          const activeStreams = providerForProgress?.getActiveStreams?.() || [];
 
           progressCallback({
             phase,
@@ -867,7 +912,8 @@ export class LLMService {
             retryCount,
             keyRotations,
             modelFallbacks,
-            apiKeyQuotas: quotaStatus
+            apiKeyQuotas: quotaStatus,
+            activeStreams
           });
         }
 
@@ -883,6 +929,9 @@ export class LLMService {
 
     // Report final progress
     if (progressCallback) {
+      const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+      const activeStreams = providerForProgress?.getActiveStreams?.() || [];
+
       progressCallback({
         phase,
         totalPapers,
@@ -891,7 +940,9 @@ export class LLMService {
         totalBatches,
         papersInCurrentBatch: 0,
         timeElapsed: Date.now() - startTime,
-        estimatedTimeRemaining: 0
+        estimatedTimeRemaining: 0,
+        apiKeyQuotas: quotaStatus,
+        activeStreams
       });
     }
 

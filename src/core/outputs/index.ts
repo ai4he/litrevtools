@@ -109,6 +109,26 @@ export class OutputManager {
 
         // Get quota status for all keys
         const quotaStatus = keyManager?.getQuotaStatus?.() || [];
+        const activeStreams = llmProvider?.getActiveStreams?.() || [];
+
+        // Set up streaming progress callback for real-time updates
+        if (llmProvider?.setStreamingProgressCallback) {
+          llmProvider.setStreamingProgressCallback((streams: any[]) => {
+            const currentQuotaStatus = keyManager?.getQuotaStatus?.() || [];
+            onProgress?.({
+              status: 'running',
+              stage: 'latex',
+              currentTask: `Generating LaTeX paper (streaming ${streams.length} requests)...`,
+              totalStages,
+              completedStages,
+              progress: Math.round((completedStages / totalStages) * 100),
+              currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
+              healthyKeysCount: keyManager?.getActiveKeyCount?.() || undefined,
+              apiKeyQuotas: currentQuotaStatus,
+              activeStreams: streams
+            });
+          });
+        }
 
         onProgress?.({
           status: 'running',
@@ -133,7 +153,8 @@ export class OutputManager {
             total: keyManager.getTotalKeys(),
             switches: 0
           } : undefined,
-          apiKeyQuotas: quotaStatus
+          apiKeyQuotas: quotaStatus,
+          activeStreams
         });
 
         const latexPath = path.join(sessionDir, 'paper.tex');
@@ -171,6 +192,7 @@ export class OutputManager {
 
             // Get quota status for all keys
             const batchQuotaStatus = keyManager?.getQuotaStatus?.() || [];
+            const batchActiveStreams = llmProvider?.getActiveStreams?.() || [];
 
             const baseProgress: OutputProgress = {
               status: 'running',
@@ -195,7 +217,8 @@ export class OutputManager {
               currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
               healthyKeysCount: keyManager?.getActiveKeyCount?.() || undefined,
               modelFallbacks: currentModelFallbacks,
-              apiKeyQuotas: batchQuotaStatus
+              apiKeyQuotas: batchQuotaStatus,
+              activeStreams: batchActiveStreams
             };
 
             // Add API key tracking if available

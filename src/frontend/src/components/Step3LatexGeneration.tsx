@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { FileText, Download, CheckCircle, AlertCircle, Play, Package, File } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
+import { LiveLLMActivityMonitor } from './LiveLLMActivityMonitor';
 import { downloadBlob } from '../utils/helpers';
 import { sessionAPI } from '../utils/api';
 import { OutputProgress } from '../types';
@@ -664,33 +665,13 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
             )}
           </div>
 
-          {/* API Key Quotas - Show active/healthy keys with their remaining quotas */}
-          {outputProgress.apiKeyQuotas && outputProgress.apiKeyQuotas.length > 0 && (
-            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-              <div className="text-sm font-medium text-gray-900 mb-3">📊 API Key Status & Quota</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {outputProgress.apiKeyQuotas
-                  .filter(quota => quota.healthStatus === 'Healthy')
-                  .map((quota, index) => (
-                    <div key={index} className="bg-white p-3 rounded border border-gray-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-gray-700">{quota.label}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          quota.quotaRemaining > 50 ? 'bg-green-100 text-green-700' :
-                          quota.quotaRemaining > 20 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {quota.quotaRemaining.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-600 font-mono">
-                        {quota.quotaDetails}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
+          {/* Live LLM Activity Monitor - Shows active streams and API key quotas */}
+          <LiveLLMActivityMonitor
+            activeStreams={outputProgress.activeStreams}
+            apiKeyQuotas={outputProgress.apiKeyQuotas}
+            healthyKeysCount={outputProgress.healthyKeysCount}
+            currentModel={outputProgress.currentModel}
+          />
         </>
       )}
 

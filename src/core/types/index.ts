@@ -133,6 +133,17 @@ export interface OutputProgress {
     quotaDetails: string;
     healthStatus?: string;
   }>;
+  // Real-time streaming activity
+  activeStreams?: Array<{
+    requestId: string;
+    keyLabel: string;
+    paperId?: string;
+    paperTitle?: string;
+    tokensReceived: number;
+    streamSpeed: number;
+    startTime: number;
+    status: 'streaming' | 'completing' | 'completed' | 'error';
+  }>;
 }
 
 export interface TorCircuit {

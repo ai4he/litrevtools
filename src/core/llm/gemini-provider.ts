@@ -27,6 +27,21 @@ export class GeminiProvider extends BaseLLMProvider {
   public currentRetryCount: number = 0;
   public successfulRequestCount: number = 0; // Track actual successful API calls
 
+  // Active streaming requests tracking for real-time UI updates
+  private activeStreams: Map<string, {
+    requestId: string;
+    keyLabel: string;
+    paperId?: string;
+    paperTitle?: string;
+    tokensReceived: number;
+    streamSpeed: number;
+    startTime: number;
+    status: 'streaming' | 'completing' | 'completed' | 'error';
+  }> = new Map();
+
+  // Callback for streaming progress updates (called when streams update)
+  private onStreamingProgress?: (streams: any[]) => void;
+
   // Model priority orders from config (can be customized in config.ts)
   // SPEED Strategy: For Step 2 (semantic filtering) - prioritize throughput and quota
   private speedModels: string[] = config.llm.modelPriorityOrders.semanticFiltering;
@@ -104,6 +119,87 @@ export class GeminiProvider extends BaseLLMProvider {
     this.currentRetryCount = 0;
     this.successfulRequestCount = 0;
     console.log('[Gemini Provider] Statistics counters reset');
+  }
+
+  /**
+   * Set the streaming progress callback
+   */
+  setStreamingProgressCallback(callback: (streams: any[]) => void): void {
+    this.onStreamingProgress = callback;
+  }
+
+  /**
+   * Update an active stream's progress
+   */
+  private updateStreamProgress(
+    requestId: string,
+    updates: Partial<{
+      tokensReceived: number;
+      streamSpeed: number;
+      status: 'streaming' | 'completing' | 'completed' | 'error';
+    }>
+  ): void {
+    const stream = this.activeStreams.get(requestId);
+    if (stream) {
+      Object.assign(stream, updates);
+      // Emit updated streams to callback
+      if (this.onStreamingProgress) {
+        this.onStreamingProgress(Array.from(this.activeStreams.values()));
+      }
+    }
+  }
+
+  /**
+   * Start tracking a new stream
+   */
+  private startStreamTracking(
+    requestId: string,
+    keyLabel: string,
+    paperId?: string,
+    paperTitle?: string
+  ): void {
+    this.activeStreams.set(requestId, {
+      requestId,
+      keyLabel,
+      paperId,
+      paperTitle,
+      tokensReceived: 0,
+      streamSpeed: 0,
+      startTime: Date.now(),
+      status: 'streaming'
+    });
+    // Emit initial state
+    if (this.onStreamingProgress) {
+      this.onStreamingProgress(Array.from(this.activeStreams.values()));
+    }
+  }
+
+  /**
+   * Stop tracking a stream
+   */
+  private stopStreamTracking(requestId: string, status: 'completed' | 'error' = 'completed'): void {
+    const stream = this.activeStreams.get(requestId);
+    if (stream) {
+      stream.status = status;
+      // Emit final state
+      if (this.onStreamingProgress) {
+        this.onStreamingProgress(Array.from(this.activeStreams.values()));
+      }
+      // Remove after a short delay to allow UI to show completion
+      setTimeout(() => {
+        this.activeStreams.delete(requestId);
+        if (this.onStreamingProgress) {
+          this.onStreamingProgress(Array.from(this.activeStreams.values()));
+        }
+      }, 1000);
+    }
+  }
+
+  /**
+   * Get current active streams
+   */
+  getActiveStreams(): any[] {
+    return Array.from(this.activeStreams.values());
   }
 
   /**
@@ -670,30 +766,69 @@ export class GeminiProvider extends BaseLLMProvider {
     }
 
     // Process all requests in parallel, distributing across available keys
-    // IMPORTANT: Each request uses this.request() which has INFINITE retries
+    // IMPORTANT: Each request uses streaming for real-time progress tracking
     // We trust that request() will ALWAYS eventually succeed
     const requestPromises = requests.map(async (req, index) => {
       // Distribute requests across available keys using round-robin
       const specificKey = usingParallelKeys ? availableKeys[index % availableKeys.length] : undefined;
+      const keyIndex = usingParallelKeys ? (index % availableKeys.length) : 0;
+
+      // Get key label for tracking
+      const keyLabel = this.keyManager
+        ? `Key ${keyIndex + 1}`
+        : 'Single Key';
+
+      // Extract paper info if available
+      const paper = req.context?.paper;
+      const paperId = paper?.id;
+      const paperTitle = paper?.title?.substring(0, 50); // Truncate for display
+
+      // Start tracking this stream
+      const requestId = `${req.id}-${Date.now()}`;
+      this.startStreamTracking(requestId, keyLabel, paperId, paperTitle);
 
       if (specificKey && index < availableKeys.length) {
-        console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to Key ${(index % availableKeys.length) + 1}`);
+        console.log(`[Parallel LLM] Request ${index + 1}/${requests.length} assigned to ${keyLabel}`);
       }
 
-      // Call request() which has infinite retry logic - it will NEVER fail
-      const text = await this.request(req.prompt, temperature, specificKey);
+      try {
+        // Call requestWithStreaming for real-time progress
+        const text = await this.requestWithStreaming(
+          req.prompt,
+          temperature,
+          specificKey,
+          (chunk: string, tokensReceived: number, streamSpeed: number) => {
+            // Update stream progress in real-time
+            this.updateStreamProgress(requestId, {
+              tokensReceived,
+              streamSpeed,
+              status: 'streaming'
+            });
+          }
+        );
 
-      // Parse the response based on task type
-      const result = this.parseResponse(text, req.taskType);
+        // Mark as completing
+        this.updateStreamProgress(requestId, { status: 'completing' });
 
-      return {
-        id: req.id,
-        taskType: req.taskType,
-        result,
-        confidence: this.extractConfidence(text),
-        tokensUsed: Math.ceil((req.prompt.length + text.length) / 4),
-        context: req.context
-      } as LLMResponse;
+        // Parse the response based on task type
+        const result = this.parseResponse(text, req.taskType);
+
+        // Mark as completed and remove from tracking
+        this.stopStreamTracking(requestId, 'completed');
+
+        return {
+          id: req.id,
+          taskType: req.taskType,
+          result,
+          confidence: this.extractConfidence(text),
+          tokensUsed: Math.ceil((req.prompt.length + text.length) / 4),
+          context: req.context
+        } as LLMResponse;
+      } catch (error) {
+        // Mark as error
+        this.stopStreamTracking(requestId, 'error');
+        throw error;
+      }
     });
 
     // Wait for all requests to complete in parallel
