@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { GoogleAuth } from './components/GoogleAuth';
 import { SearchPage } from './pages/SearchPage';
 import ProjectsDashboard from './components/ProjectsDashboard';
-import ProjectPage from './components/ProjectPage';
+import ProjectPageEnhanced from './components/ProjectPageEnhanced';
 import { User } from './types';
 import { FolderOpen, Search } from 'lucide-react';
 
@@ -53,7 +53,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/projects" replace />} />
               <Route path="/projects" element={<ProjectsDashboard />} />
-              <Route path="/projects/:id" element={<ProjectPage />} />
+              <Route path="/projects/:id" element={<ProjectPageEnhanced />} />
               <Route path="/search" element={<SearchPage />} />
             </Routes>
           </div>
