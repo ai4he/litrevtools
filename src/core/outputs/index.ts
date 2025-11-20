@@ -107,6 +107,9 @@ export class OutputManager {
         const llmProvider = this.gemini.getLLMProvider();
         const keyManager = llmProvider?.getKeyManager?.();
 
+        // Get quota status for all keys
+        const quotaStatus = keyManager?.getQuotaStatus?.() || [];
+
         onProgress?.({
           status: 'running',
           stage: 'latex',
@@ -124,11 +127,13 @@ export class OutputManager {
           },
           progress: Math.round((completedStages / totalStages) * 100),
           currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
+          healthyKeysCount: keyManager?.getActiveKeyCount?.() || undefined,
           currentApiKey: keyManager ? {
             index: keyManager.getCurrentKeyIndex(),
             total: keyManager.getTotalKeys(),
             switches: 0
-          } : undefined
+          } : undefined,
+          apiKeyQuotas: quotaStatus
         });
 
         const latexPath = path.join(sessionDir, 'paper.tex');
@@ -164,6 +169,9 @@ export class OutputManager {
             const currentKeySwitches = llmProvider?.keyRotationCount || 0;
             const currentModelFallbacks = llmProvider?.modelFallbackCount || 0;
 
+            // Get quota status for all keys
+            const batchQuotaStatus = keyManager?.getQuotaStatus?.() || [];
+
             const baseProgress: OutputProgress = {
               status: 'running',
               stage: 'latex',
@@ -185,7 +193,9 @@ export class OutputManager {
               previousActivity,
               currentAction,
               currentModel: llmProvider?.getCurrentModel?.() || 'unknown',
-              modelFallbacks: currentModelFallbacks
+              healthyKeysCount: keyManager?.getActiveKeyCount?.() || undefined,
+              modelFallbacks: currentModelFallbacks,
+              apiKeyQuotas: batchQuotaStatus
             };
 
             // Add API key tracking if available

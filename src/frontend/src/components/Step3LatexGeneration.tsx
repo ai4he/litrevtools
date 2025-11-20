@@ -149,6 +149,24 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       console.log('[Step3 WebSocket] ========== OUTPUTS GENERATED ==========');
       console.log('[Step3 WebSocket] Outputs data:', data);
 
+      // Extract actual session ID from output file paths
+      // For CSV uploads, the files are stored under the actual session ID, not the temp ID
+      if (data?.csv || data?.bibtex || data?.latex || data?.zip) {
+        const samplePath = data.csv || data.bibtex || data.latex || data.zip;
+        // Extract session ID from path like: data/outputs/SESSION_ID/file.ext
+        const sessionIdMatch = samplePath.match(/data\/outputs\/([^\/]+)\//);
+        if (sessionIdMatch && sessionIdMatch[1]) {
+          const actualSessionId = sessionIdMatch[1];
+          console.log('[Step3 WebSocket] Extracted actual session ID from path:', actualSessionId);
+
+          // Update tempSessionId to the actual session ID for downloads
+          if (tempSessionId && tempSessionId !== actualSessionId) {
+            console.log('[Step3 WebSocket] Updating tempSessionId from', tempSessionId, 'to', actualSessionId);
+            setTempSessionId(actualSessionId);
+          }
+        }
+      }
+
       // Track which outputs are actually available
       setAvailableOutputs({
         csv: !!data?.csv,
@@ -572,6 +590,21 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
               </div>
             )}
 
+            {/* Healthy Keys Count */}
+            {outputProgress.healthyKeysCount !== undefined && (
+              <div className="p-3 rounded-lg border border-green-200 bg-green-50">
+                <div className="text-xs font-semibold text-green-700 uppercase mb-1">
+                  Healthy API Keys
+                </div>
+                <div className="text-2xl font-bold text-green-600">
+                  {outputProgress.healthyKeysCount}
+                </div>
+                <div className="text-xs text-green-600 mt-1">
+                  ✓ Ready to process
+                </div>
+              </div>
+            )}
+
             {/* API Key Status */}
             {outputProgress.currentApiKey && (
               <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
@@ -630,6 +663,34 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
               </div>
             )}
           </div>
+
+          {/* API Key Quotas - Show active/healthy keys with their remaining quotas */}
+          {outputProgress.apiKeyQuotas && outputProgress.apiKeyQuotas.length > 0 && (
+            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="text-sm font-medium text-gray-900 mb-3">📊 API Key Status & Quota</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {outputProgress.apiKeyQuotas
+                  .filter(quota => quota.healthStatus === 'Healthy')
+                  .map((quota, index) => (
+                    <div key={index} className="bg-white p-3 rounded border border-gray-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-gray-700">{quota.label}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          quota.quotaRemaining > 50 ? 'bg-green-100 text-green-700' :
+                          quota.quotaRemaining > 20 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {quota.quotaRemaining.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-600 font-mono">
+                        {quota.quotaDetails}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 

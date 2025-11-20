@@ -122,6 +122,14 @@ export interface OutputProgress {
   // Model information
   currentModel?: string; // Which LLM model is being used
   modelFallbacks?: number; // Number of times model has switched due to failures
+  healthyKeysCount?: number; // Number of healthy API keys available
+  apiKeyQuotas?: Array<{
+    label: string;
+    status: string;
+    quotaRemaining: number;
+    quotaDetails: string;
+    healthStatus?: string;
+  }>;
 }
 
 export interface SearchSession {

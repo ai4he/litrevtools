@@ -26,6 +26,13 @@ export interface LLMFilteringProgress {
   retryCount?: number; // Number of retries for current request
   keyRotations?: number; // Number of key rotations performed
   modelFallbacks?: number; // Number of model fallbacks performed
+  apiKeyQuotas?: Array<{
+    label: string;
+    status: string;
+    quotaRemaining: number;
+    quotaDetails: string;
+    healthStatus?: string;
+  }>;
 }
 
 export type LLMProgressCallback = (progress: LLMFilteringProgress) => void;
@@ -790,6 +797,9 @@ export class LLMService {
 
     // Report initial progress
     if (progressCallback) {
+      // Get quota status for all keys
+      const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+
       progressCallback({
         phase,
         totalPapers,
@@ -804,7 +814,8 @@ export class LLMService {
         healthyKeysCount: this.healthyKeys.length,
         retryCount: providerForProgress?.currentRetryCount || 0,
         keyRotations: providerForProgress?.keyRotationCount || 0,
-        modelFallbacks: providerForProgress?.modelFallbackCount || 0
+        modelFallbacks: providerForProgress?.modelFallbackCount || 0,
+        apiKeyQuotas: quotaStatus
       });
     }
 
@@ -838,6 +849,9 @@ export class LLMService {
 
         // Report progress for this batch completion
         if (progressCallback) {
+          // Get quota status for all keys
+          const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+
           progressCallback({
             phase,
             totalPapers,
@@ -852,7 +866,8 @@ export class LLMService {
             healthyKeysCount: this.healthyKeys.length,
             retryCount,
             keyRotations,
-            modelFallbacks
+            modelFallbacks,
+            apiKeyQuotas: quotaStatus
           });
         }
 

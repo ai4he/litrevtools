@@ -673,7 +673,7 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
 `;
 
     console.log(`[GeminiService] generateFullPaperDraft - Full prompt length: ${prompt.length} characters`);
-    console.log(`[GeminiService] Sending prompt to Gemini...`);
+    console.log(`[GeminiService] Sending prompt to Gemini with retry-and-feedback (using structured output API)...`);
 
     // Write prompt to file for debugging
     try {
@@ -686,70 +686,9 @@ VERIFY: Before returning, check that ALL backslashes are doubled (\\\\) in the J
       console.error(`[GeminiService] Failed to write debug prompt:`, err);
     }
 
-    const text = (await this.requestWithRetry(prompt)).trim();
-
-    console.log(`[GeminiService] Received response, length: ${text.length} characters`);
-
-    // Save response for debugging
-    try {
-      const fs = require('fs');
-      const debugPath = './data/outputs/debug_initial_response.txt';
-      fs.writeFileSync(debugPath, text, 'utf-8');
-      console.log(`[GeminiService] Debug: Response written to ${debugPath}`);
-    } catch (err) {
-      console.error(`[GeminiService] Failed to write debug response:`, err);
-    }
-
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error(`[GeminiService] No JSON found in response. First 500 chars:\n${text.substring(0, 500)}`);
-      throw new Error('Failed to find JSON in paper draft response');
-    }
-
-    let jsonStr = jsonMatch[0];
-
-    // Try to parse JSON, if it fails due to escaping issues, try to fix them
-    try {
-      return JSON.parse(jsonStr);
-    } catch (parseError: any) {
-      console.error(`[GeminiService] JSON parse error: ${parseError.message}`);
-      console.error(`[GeminiService] Attempting to fix escaping issues...`);
-
-      // Save original problematic JSON for debugging
-      try {
-        const fs = require('fs');
-        const debugPath = './data/outputs/debug_failed_json_original.txt';
-        fs.writeFileSync(debugPath, jsonStr, 'utf-8');
-        console.log(`[GeminiService] Debug: Original failed JSON written to ${debugPath}`);
-      } catch (err) {
-        // Ignore
-      }
-
-      // Use robust JSON cleaner to fix escaping and control characters
-      try {
-        const cleaned = this.cleanJSONString(jsonStr);
-
-        console.log(`[GeminiService] Attempting to parse cleaned JSON...`);
-
-        // Save cleaned JSON for debugging
-        try {
-          const fs = require('fs');
-          const debugPath = './data/outputs/debug_cleaned_json.txt';
-          fs.writeFileSync(debugPath, cleaned, 'utf-8');
-          console.log(`[GeminiService] Debug: Cleaned JSON written to ${debugPath}`);
-        } catch (err) {
-          // Ignore
-        }
-
-        const parsed = JSON.parse(cleaned);
-        console.log(`[GeminiService] Successfully parsed after cleaning!`);
-        return parsed;
-      } catch (fixError: any) {
-        console.error(`[GeminiService] Failed to fix JSON: ${fixError.message}`);
-        throw new Error(`JSON parsing failed: ${parseError.message}. Auto-fix also failed: ${fixError.message}. Check debug files for details.`);
-      }
-    }
+    // Use retry-with-feedback mechanism with structured output API
+    // This guarantees valid JSON and retries with feedback if anything fails
+    return await this.generateWithRetryAndFeedback(prompt, 3, 'initial-draft');
   }
 
   /**
