@@ -356,6 +356,95 @@ export interface AppConfig {
   outputDir: string;
 }
 
+/**
+ * Resume metadata for Step 1 (Search & Extraction)
+ */
+export interface Step1ResumeMetadata {
+  step: 1;
+  sessionId: string;
+  parameters: SearchParameters;
+  progress: {
+    status: 'running' | 'paused' | 'completed' | 'error';
+    totalPapers: number;
+    processedPapers: number;
+    includedPapers: number;
+    excludedPapers: number;
+    lastOffset: number;
+    currentYear?: number;
+    timestamp: string;
+  };
+  prismaData: PRISMAData;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+/**
+ * Resume metadata for Step 2 (Semantic Filtering)
+ */
+export interface Step2ResumeMetadata {
+  step: 2;
+  sessionId: string;
+  sourceStep1SessionId?: string;
+  parameters: {
+    inclusionPrompt?: string;
+    exclusionPrompt?: string;
+    batchSize: number;
+    model: string;
+  };
+  progress: {
+    status: 'running' | 'paused' | 'completed' | 'error';
+    totalPapers: number;
+    processedPapers: number;
+    currentBatch: number;
+    totalBatches: number;
+    timestamp: string;
+  };
+  originalPapersPreserved: boolean;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+/**
+ * Resume metadata for Step 3 (Output Generation)
+ */
+export interface Step3ResumeMetadata {
+  step: 3;
+  sessionId: string;
+  sourceStep2SessionId?: string;
+  sourceStep1SessionId?: string;
+  parameters: {
+    dataSource: 'step1' | 'step2' | 'upload';
+    model: string;
+    batchSize: number;
+    latexPrompt?: string;
+  };
+  progress: {
+    status: 'running' | 'paused' | 'completed' | 'error';
+    stage: 'csv' | 'bibtex' | 'latex' | 'prisma' | 'zip' | 'completed';
+    completedStages: number;
+    totalStages: number;
+    latexBatchProgress?: {
+      currentBatch: number;
+      totalBatches: number;
+      papersProcessed: number;
+      papersRemaining: number;
+    };
+    timestamp: string;
+  };
+  completedOutputs: {
+    csv: boolean;
+    bibtex: boolean;
+    latex: boolean;
+    prismaDiagram: boolean;
+    prismaTable: boolean;
+    zip: boolean;
+  };
+  createdAt: string;
+  lastUpdated: string;
+}
+
+export type ResumeMetadata = Step1ResumeMetadata | Step2ResumeMetadata | Step3ResumeMetadata;
+
 export type ProgressCallback = (progress: SearchProgress, sessionId: string) => void;
 export type PaperCallback = (paper: Paper, sessionId: string) => void;
 export type ErrorCallback = (error: Error, sessionId: string) => void;
