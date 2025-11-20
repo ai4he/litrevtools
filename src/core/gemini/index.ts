@@ -16,6 +16,8 @@ export class GeminiService {
   private apiKeys: string[];
   private currentKeyIndex: number = 0;
   private modelName: string;
+  private keyRotationCount: number = 0;
+  private modelFallbackCount: number = 0;
 
   constructor(config: GeminiConfig) {
     // Support both single key and multiple keys
@@ -29,6 +31,56 @@ export class GeminiService {
 
     this.modelName = config.model;
     console.log(`[GeminiService] Initialized with ${this.apiKeys.length} API key(s) for model ${this.modelName}`);
+  }
+
+  /**
+   * Get tracking information for progress display
+   */
+  getLLMProvider(): any {
+    return {
+      getCurrentModel: () => this.modelName,
+      getKeyManager: () => ({
+        getCurrentKeyIndex: () => this.currentKeyIndex,
+        getTotalKeys: () => this.apiKeys.length,
+      }),
+      keyRotationCount: this.keyRotationCount,
+      modelFallbackCount: this.modelFallbackCount
+    };
+  }
+
+  /**
+   * Get current model name
+   */
+  getCurrentModel(): string {
+    return this.modelName;
+  }
+
+  /**
+   * Get current API key index
+   */
+  getCurrentKeyIndex(): number {
+    return this.currentKeyIndex;
+  }
+
+  /**
+   * Get total number of API keys
+   */
+  getTotalKeys(): number {
+    return this.apiKeys.length;
+  }
+
+  /**
+   * Get number of API key rotations
+   */
+  getKeyRotationCount(): number {
+    return this.keyRotationCount;
+  }
+
+  /**
+   * Get number of model fallbacks
+   */
+  getModelFallbackCount(): number {
+    return this.modelFallbackCount;
   }
 
   /**
@@ -202,7 +254,8 @@ export class GeminiService {
         if (isQuotaError && this.apiKeys.length > 1) {
           // Rotate to next key
           this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
-          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
+          this.keyRotationCount++;
+          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length} (rotation #${this.keyRotationCount})`);
 
           // Wait a bit before retrying
           await this.delay(2000);
@@ -254,7 +307,8 @@ export class GeminiService {
         if (isQuotaError && this.apiKeys.length > 1) {
           // Rotate to next key
           this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
-          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
+          this.keyRotationCount++;
+          console.log(`[GeminiService] Rotating to key ${this.currentKeyIndex + 1}/${this.apiKeys.length} (rotation #${this.keyRotationCount})`);
 
           // Wait a bit before retrying
           await this.delay(2000);

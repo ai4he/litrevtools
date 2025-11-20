@@ -516,18 +516,121 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
 
       {/* Progress */}
       {outputProgress && isGenerating && (
-        <ProgressCard
-          title="Output Generation in Progress"
-          currentTask={outputProgress.currentTask}
-          progress={outputProgress.progress}
-          stage={outputProgress.stage}
-          currentStage={outputProgress.completedStages}
-          totalStages={outputProgress.totalStages}
-          timeElapsed={outputProgress.timeElapsed}
-          estimatedTimeRemaining={outputProgress.estimatedTimeRemaining}
-          batchProgress={batchProgress}
-          error={outputProgress.error}
-        />
+        <>
+          <ProgressCard
+            title="Output Generation in Progress"
+            currentTask={outputProgress.currentTask}
+            progress={outputProgress.progress}
+            stage={outputProgress.stage}
+            currentStage={outputProgress.completedStages}
+            totalStages={outputProgress.totalStages}
+            timeElapsed={outputProgress.timeElapsed}
+            estimatedTimeRemaining={outputProgress.estimatedTimeRemaining}
+            batchProgress={batchProgress}
+            error={outputProgress.error}
+          />
+
+          {/* Activity Blocks - Real-time Status */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            {/* Previous Activity */}
+            <div className="p-4 rounded-lg border-2 border-purple-200 bg-purple-50">
+              <div className="text-xs font-semibold text-purple-700 uppercase mb-2">
+                Previous Activity
+              </div>
+              <div className="text-sm text-purple-900">
+                {outputProgress.previousActivity || 'Starting process...'}
+              </div>
+            </div>
+
+            {/* Current Activity */}
+            <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+              <div className="text-xs font-semibold text-blue-700 uppercase mb-2">
+                Current Activity
+              </div>
+              <div className="text-sm text-blue-900 font-medium">
+                {outputProgress.currentAction || outputProgress.currentTask}
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time LLM Status */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            {/* Model Information */}
+            {outputProgress.currentModel && (
+              <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="text-xs font-semibold text-gray-600 uppercase mb-1">
+                  Current Model
+                </div>
+                <div className="text-sm text-gray-900 font-mono">
+                  {outputProgress.currentModel}
+                </div>
+                {outputProgress.modelFallbacks !== undefined && outputProgress.modelFallbacks > 0 && (
+                  <div className="text-xs text-orange-600 mt-1">
+                    ⚠️ {outputProgress.modelFallbacks} model switch{outputProgress.modelFallbacks > 1 ? 'es' : ''}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* API Key Status */}
+            {outputProgress.currentApiKey && (
+              <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="text-xs font-semibold text-gray-600 uppercase mb-1">
+                  API Key Status
+                </div>
+                <div className="text-sm text-gray-900">
+                  Key {outputProgress.currentApiKey.index + 1} of {outputProgress.currentApiKey.total}
+                </div>
+                {outputProgress.currentApiKey.switches > 0 && (
+                  <div className="text-xs text-blue-600 mt-1">
+                    🔄 {outputProgress.currentApiKey.switches} key rotation{outputProgress.currentApiKey.switches > 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Token Streaming */}
+            {outputProgress.tokenStreaming?.enabled && (
+              <div className="p-3 rounded-lg border border-green-200 bg-green-50">
+                <div className="text-xs font-semibold text-green-700 uppercase mb-1">
+                  Token Streaming
+                </div>
+                <div className="text-sm text-green-900">
+                  {outputProgress.tokenStreaming.tokensReceived.toLocaleString()} tokens
+                </div>
+                {outputProgress.tokenStreaming.streamingSpeed && (
+                  <div className="text-xs text-green-600 mt-1">
+                    ⚡ {Math.round(outputProgress.tokenStreaming.streamingSpeed)} tokens/sec
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Waiting State */}
+            {outputProgress.isWaiting && (
+              <div className="p-3 rounded-lg border border-yellow-200 bg-yellow-50">
+                <div className="text-xs font-semibold text-yellow-700 uppercase mb-1">
+                  Waiting
+                </div>
+                <div className="text-sm text-yellow-900">
+                  {outputProgress.waitReason || 'Please wait...'}
+                </div>
+              </div>
+            )}
+
+            {/* Fixing Output */}
+            {outputProgress.isFixingOutput && (
+              <div className="p-3 rounded-lg border border-orange-200 bg-orange-50">
+                <div className="text-xs font-semibold text-orange-700 uppercase mb-1">
+                  Processing
+                </div>
+                <div className="text-sm text-orange-900">
+                  Fixing LaTeX syntax errors
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Download Buttons */}
