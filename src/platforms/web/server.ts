@@ -10,8 +10,10 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
+import multer from 'multer';
 import { LitRevTools, SearchParameters, SearchProgress, Paper, validateParameters, mergeWithDefaults } from '../../core';
 import * as path from 'path';
+import * as fs from 'fs';
 import { verifyGoogleToken, generateJWT, authMiddleware, optionalAuthMiddleware, AuthRequest } from './auth';
 
 const app = express();
@@ -41,6 +43,26 @@ app.use(express.static(frontendPath));
 
 // Fallback to old public directory
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Configure multer for file uploads
+const uploadDir = path.join(process.cwd(), 'data', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const upload = multer({
+  dest: uploadDir,
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.endsWith('.zip') || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only ZIP and CSV files are allowed'));
+    }
+  }
+});
 
 // Initialize LitRevTools instance
 const litrev = new LitRevTools();
@@ -113,6 +135,202 @@ app.get('/api/sessions/:id', (req, res) => {
       return;
     }
     res.json({ success: true, session });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// Project Routes
+// ============================================================================
+
+// Get all projects
+app.get('/api/projects', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const projects = projectManager.getAllProjects();
+    res.json({ success: true, projects });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project by ID
+app.get('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const project = projectManager.getProject(req.params.id);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project with steps populated
+app.get('/api/projects/:id/with-steps', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const project = projectManager.getProjectWithSteps(req.params.id);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get project progress
+app.get('/api/projects/:id/progress', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const progress = projectManager.getProjectProgress(req.params.id);
+    if (!progress) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+    res.json({ success: true, progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create a new project
+app.post('/api/projects', (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name) {
+      res.status(400).json({ success: false, error: 'Project name is required' });
+      return;
+    }
+
+    const projectManager = litrev.getProjectManager();
+    const projectId = projectManager.createProject({ name, description });
+    const project = projectManager.getProject(projectId);
+
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update project
+app.put('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { name, description, status } = req.body;
+
+    projectManager.updateProject(req.params.id, { name, description, status });
+    const project = projectManager.getProject(req.params.id);
+
+    res.json({ success: true, project });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete project
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.deleteProject(req.params.id);
+    res.json({ success: true, message: 'Project deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pause project
+app.post('/api/projects/:id/pause', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.pauseProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume project
+app.post('/api/projects/:id/resume', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.resumeProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Stop project
+app.post('/api/projects/:id/stop', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    projectManager.stopProject(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 1 for a project
+app.post('/api/projects/:id/start-step1', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const parameters = req.body;
+
+    // Validate parameters (reuse existing validation)
+    const validation = validateParameters(mergeWithDefaults(parameters));
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        errors: validation.errors
+      });
+      return;
+    }
+
+    const sessionId = await projectManager.startStep1(req.params.id, parameters);
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 2 for a project
+app.post('/api/projects/:id/start-step2', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { inclusionPrompt, exclusionPrompt, batchSize, model } = req.body;
+
+    const sessionId = await projectManager.startStep2(
+      req.params.id,
+      { inclusionPrompt, exclusionPrompt, batchSize, model }
+    );
+
+    res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Step 3 for a project
+app.post('/api/projects/:id/start-step3', async (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const { dataSource, model, batchSize, latexPrompt } = req.body;
+
+    const sessionId = await projectManager.startStep3(
+      req.params.id,
+      { dataSource, model, batchSize, latexPrompt }
+    );
+
+    res.json({ success: true, sessionId });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -214,6 +432,42 @@ app.post('/api/search/:id/stop', (req, res) => {
 
   litrev.stopSearch();
   activeSearches.delete(req.params.id);
+  res.json({ success: true });
+});
+
+// Pause semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/pause', (req, res) => {
+  litrev.pauseSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Resume semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/resume', (req, res) => {
+  litrev.resumeSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Stop semantic filtering (Step 2)
+app.post('/api/sessions/:id/semantic-filter/stop', (req, res) => {
+  litrev.stopSemanticFiltering();
+  res.json({ success: true });
+});
+
+// Pause output generation (Step 3)
+app.post('/api/sessions/:id/generate/pause', (req, res) => {
+  litrev.pauseOutputGeneration();
+  res.json({ success: true });
+});
+
+// Resume output generation (Step 3)
+app.post('/api/sessions/:id/generate/resume', (req, res) => {
+  litrev.resumeOutputGeneration();
+  res.json({ success: true });
+});
+
+// Stop output generation (Step 3)
+app.post('/api/sessions/:id/generate/stop', (req, res) => {
+  litrev.stopOutputGeneration();
   res.json({ success: true });
 });
 
@@ -800,6 +1054,116 @@ app.get('/api/sessions/:id/download/:type', (req, res) => {
 
     res.download(filePath);
   } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 1
+app.get('/api/sessions/:id/download/progress-zip/step1', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const session = litrev.getSession(sessionId);
+
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // Generate progress ZIP (lastOffset should be tracked in session or passed as query param)
+    const lastOffset = parseInt(req.query.lastOffset as string) || 0;
+    const zipPath = await litrev.generateStep1ProgressZip(sessionId, lastOffset);
+
+    res.download(zipPath, `step1-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 1 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 2
+app.post('/api/sessions/:id/download/progress-zip/step2', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { inclusionPrompt, exclusionPrompt, batchSize, model, progress } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    const zipPath = await litrev.generateStep2ProgressZip(
+      sessionId,
+      { inclusionPrompt, exclusionPrompt, batchSize, model },
+      progress
+    );
+
+    res.download(zipPath, `step2-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 2 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Download progress ZIP for Step 3
+app.post('/api/sessions/:id/download/progress-zip/step3', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { parameters, progress, completedOutputs } = req.body;
+
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    const zipPath = await litrev.generateStep3ProgressZip(
+      sessionId,
+      parameters,
+      progress,
+      completedOutputs
+    );
+
+    res.download(zipPath, `step3-progress-${sessionId}.zip`);
+  } catch (error: any) {
+    console.error('[Server] Error generating Step 3 progress ZIP:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume from ZIP file (multipart upload)
+app.post('/api/resume-from-zip', upload.single('zipFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'No ZIP file provided' });
+      return;
+    }
+
+    const zipPath = req.file.path;
+    const stepNumber = parseInt(req.body.step) || 0;
+
+    console.log(`[Server] Resume request for Step ${stepNumber} from ZIP: ${zipPath}`);
+
+    let newSessionId: string;
+
+    switch (stepNumber) {
+      case 1:
+        newSessionId = await litrev.resumeStep1FromZip(zipPath);
+        break;
+      case 2:
+        newSessionId = await litrev.resumeStep2FromZip(zipPath);
+        break;
+      case 3:
+        newSessionId = await litrev.resumeStep3FromZip(zipPath);
+        break;
+      default:
+        res.status(400).json({ success: false, error: 'Invalid step number' });
+        return;
+    }
+
+    res.json({ success: true, sessionId: newSessionId });
+  } catch (error: any) {
+    console.error('[Server] Error resuming from ZIP:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

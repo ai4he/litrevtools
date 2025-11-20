@@ -60,6 +60,8 @@ export class LLMService {
   private keyManager?: APIKeyManager;
   private onKeyExhausted?: () => Promise<string | null>;
   private healthyKeys: string[] = []; // Store verified healthy keys from initialization
+  private isPaused: boolean = false;
+  private isStopped: boolean = false;
 
   /**
    * Forbidden phrases that indicate templated/generic reasoning
@@ -864,67 +866,101 @@ export class LLMService {
       });
     }
 
-    // Process ALL batches in parallel - the GeminiProvider will distribute requests across keys
-    const batchPromises = batches.map((batch, batchIndex) =>
-      this.provider!.batchRequest(batch, this.config.temperature).then(results => {
-        // Log completion of each batch
-        const completedCount = (batchIndex + 1) * batchSize;
-        const timeElapsed = Date.now() - startTime;
-        const papersPerMs = completedCount / timeElapsed;
-        const remainingPapers = totalPapers - completedCount;
-        const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
+    // Process batches with pause/stop support
+    const allResponses: LLMResponse[] = [];
 
-        console.log(`[Parallel LLM] Batch ${batchIndex + 1}/${totalBatches} completed (${results.length} papers)`);
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      // Check if stopped
+      if (this.isStopped) {
+        console.log(`[Parallel LLM] Processing stopped by user at batch ${batchIndex + 1}/${totalBatches}`);
+        throw new Error('Processing stopped by user');
+      }
 
-        // Get latest provider stats
-        const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
-        const retryCount = providerForProgress?.currentRetryCount || 0;
-        const keyRotations = providerForProgress?.keyRotationCount || 0;
-        const modelFallbacks = providerForProgress?.modelFallbackCount || 0;
-
-        // Build detailed action message
-        let actionMessage = `Processing batch ${batchIndex + 1}/${totalBatches}`;
-        if (keyRotations > 0 || modelFallbacks > 0 || retryCount > 0) {
-          const details = [];
-          if (keyRotations > 0) details.push(`${keyRotations} key rotations`);
-          if (modelFallbacks > 0) details.push(`${modelFallbacks} model fallbacks`);
-          if (retryCount > 0) details.push(`${retryCount} retries`);
-          actionMessage += ` (${details.join(', ')})`;
-        }
-
-        // Report progress for this batch completion
+      // Wait while paused
+      while (this.isPaused) {
+        console.log(`[Parallel LLM] Processing paused at batch ${batchIndex + 1}/${totalBatches}`);
         if (progressCallback) {
-          // Get quota status for all keys
           const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
           const activeStreams = providerForProgress?.getActiveStreams?.() || [];
 
           progressCallback({
             phase,
             totalPapers,
-            processedPapers: Math.min(completedCount, totalPapers),
+            processedPapers: batchIndex * batchSize,
             currentBatch: batchIndex + 1,
             totalBatches,
-            papersInCurrentBatch: 0, // Batch completed
-            timeElapsed,
-            estimatedTimeRemaining,
-            currentAction: actionMessage,
-            currentModel,
+            papersInCurrentBatch: 0,
+            timeElapsed: Date.now() - startTime,
+            estimatedTimeRemaining: 0,
+            currentAction: `Paused at batch ${batchIndex + 1}/${totalBatches}`,
+            currentModel: providerForProgress?.getCurrentModel?.() || 'unknown',
             healthyKeysCount: this.healthyKeys.length,
-            retryCount,
-            keyRotations,
-            modelFallbacks,
+            retryCount: providerForProgress?.currentRetryCount || 0,
+            keyRotations: providerForProgress?.keyRotationCount || 0,
+            modelFallbacks: providerForProgress?.modelFallbackCount || 0,
             apiKeyQuotas: quotaStatus,
             activeStreams
           });
         }
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Check every second
+      }
 
-        return results;
-      })
-    );
+      // Process this batch
+      const batch = batches[batchIndex];
+      const results = await this.provider!.batchRequest(batch, this.config.temperature);
+      allResponses.push(...results);
 
-    // Wait for all batches to complete
-    const batchResults = await Promise.all(batchPromises);
-    const allResponses = batchResults.flat();
+      // Log completion of this batch
+      const completedCount = (batchIndex + 1) * batchSize;
+      const timeElapsed = Date.now() - startTime;
+      const papersPerMs = completedCount / timeElapsed;
+      const remainingPapers = totalPapers - completedCount;
+      const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
+
+      console.log(`[Parallel LLM] Batch ${batchIndex + 1}/${totalBatches} completed (${results.length} papers)`);
+
+      // Get latest provider stats
+      const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
+      const retryCount = providerForProgress?.currentRetryCount || 0;
+      const keyRotations = providerForProgress?.keyRotationCount || 0;
+      const modelFallbacks = providerForProgress?.modelFallbackCount || 0;
+
+      // Build detailed action message
+      let actionMessage = `Processing batch ${batchIndex + 1}/${totalBatches}`;
+      if (keyRotations > 0 || modelFallbacks > 0 || retryCount > 0) {
+        const details = [];
+        if (keyRotations > 0) details.push(`${keyRotations} key rotations`);
+        if (modelFallbacks > 0) details.push(`${modelFallbacks} model fallbacks`);
+        if (retryCount > 0) details.push(`${retryCount} retries`);
+        actionMessage += ` (${details.join(', ')})`;
+      }
+
+      // Report progress for this batch completion
+      if (progressCallback) {
+        // Get quota status for all keys
+        const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
+        const activeStreams = providerForProgress?.getActiveStreams?.() || [];
+
+        progressCallback({
+          phase,
+          totalPapers,
+          processedPapers: Math.min(completedCount, totalPapers),
+          currentBatch: batchIndex + 1,
+          totalBatches,
+          papersInCurrentBatch: 0, // Batch completed
+          timeElapsed,
+          estimatedTimeRemaining,
+          currentAction: actionMessage,
+          currentModel,
+          healthyKeysCount: this.healthyKeys.length,
+          retryCount,
+          keyRotations,
+          modelFallbacks,
+          apiKeyQuotas: quotaStatus,
+          activeStreams
+        });
+      }
+    }
 
     console.log(`[Parallel LLM] All ${totalBatches} batches completed. Processed ${allResponses.length} papers.`);
 
@@ -1415,5 +1451,52 @@ Use an academic tone with proper citations (Author et al., Year format).`;
    */
   resetRateLimitedKeys(): void {
     this.keyManager?.resetRateLimitedKeys();
+  }
+
+  /**
+   * Pause the LLM service (for Step 2 semantic filtering)
+   */
+  pause(): void {
+    this.isPaused = true;
+    console.log('[LLM Service] Paused');
+  }
+
+  /**
+   * Resume the LLM service
+   */
+  resume(): void {
+    this.isPaused = false;
+    console.log('[LLM Service] Resumed');
+  }
+
+  /**
+   * Stop the LLM service
+   */
+  stop(): void {
+    this.isStopped = true;
+    this.isPaused = false;
+    console.log('[LLM Service] Stopped');
+  }
+
+  /**
+   * Check if LLM service is paused
+   */
+  getIsPaused(): boolean {
+    return this.isPaused;
+  }
+
+  /**
+   * Check if LLM service is stopped
+   */
+  getIsStopped(): boolean {
+    return this.isStopped;
+  }
+
+  /**
+   * Reset control flags (for new filtering session)
+   */
+  resetControlFlags(): void {
+    this.isPaused = false;
+    this.isStopped = false;
   }
 }
