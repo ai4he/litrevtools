@@ -8,6 +8,7 @@ import { BaseLLMProvider } from './base-provider';
 import { LLMRequest, LLMResponse } from '../types';
 import { APIKeyManager } from './api-key-manager';
 import { UsageTracker } from './usage-tracker';
+import { config } from '../../config';
 
 export class GeminiProvider extends BaseLLMProvider {
   readonly name = 'gemini';
@@ -26,27 +27,12 @@ export class GeminiProvider extends BaseLLMProvider {
   public currentRetryCount: number = 0;
   public successfulRequestCount: number = 0; // Track actual successful API calls
 
-  // Fallback models with different strategies
-  // Tested 2025-11-19 with 22 API keys - all models verified as working
-  // NOTE: gemini-3-pro-preview-11-2025 is only available on Vertex AI (paid), not free tier
-
+  // Model priority orders from config (can be customized in config.ts)
   // SPEED Strategy: For Step 2 (semantic filtering) - prioritize throughput and quota
-  private speedModels: string[] = [
-    'gemini-2.0-flash-lite',          // RPM: 30, TPM: 1M, RPD: 200 - HIGHEST throughput
-    'gemini-2.5-flash-lite',          // RPM: 15, TPM: 250K, RPD: 1000 - HIGH daily quota
-    'gemini-2.0-flash',               // RPM: 15, TPM: 1M, RPD: 200 - HIGH throughput
-    'gemini-2.5-flash',               // RPM: 10, TPM: 250K, RPD: 250 - GOOD quota
-    'gemini-2.5-pro',                 // RPM: 2, TPM: 125K, RPD: 50 - FALLBACK
-  ];
+  private speedModels: string[] = config.llm.modelPriorityOrders.semanticFiltering;
 
   // QUALITY Strategy: For Step 3 (LaTeX generation) - prioritize intelligence first
-  private qualityModels: string[] = [
-    'gemini-2.5-pro',                 // SMARTEST - best for complex writing tasks
-    'gemini-2.5-flash',               // Good balance of quality and speed
-    'gemini-2.0-flash',               // Fast but capable
-    'gemini-2.5-flash-lite',          // High quota, decent quality
-    'gemini-2.0-flash-lite',          // Fastest, fallback
-  ];
+  private qualityModels: string[] = config.llm.modelPriorityOrders.latexGeneration;
 
   private fallbackModels: string[] = this.speedModels; // Default to speed strategy
   private currentModelIndex: number = 0;
