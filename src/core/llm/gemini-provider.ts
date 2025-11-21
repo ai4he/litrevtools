@@ -372,6 +372,67 @@ export class GeminiProvider extends BaseLLMProvider {
               await this.keyManager.handleError(error);
             }
 
+            // SAME KEY ROTATION LOGIC AS request() method
+            // If using specific key and it's a rate limit error, try recovery strategies
+            if (usingSpecificKey && (isRateLimitError || isQuotaError)) {
+              this.currentRetryCount++;
+
+              // Strategy 1: Try another verified healthy key if available
+              if (this.verifiedHealthyKeys.length > 1) {
+                const currentKeyIndex = this.verifiedHealthyKeys.indexOf(specificKey);
+                const startIndex = currentKeyIndex >= 0 ? currentKeyIndex : -1;
+
+                // Try each remaining key in sequence
+                for (let i = 1; i < this.verifiedHealthyKeys.length; i++) {
+                  const nextKeyIndex = (startIndex + i) % this.verifiedHealthyKeys.length;
+                  const nextKey = this.verifiedHealthyKeys[nextKeyIndex];
+
+                  if (nextKey === specificKey) continue;
+
+                  this.keyRotationCount++;
+                  console.log(`[Key Rotation #${this.keyRotationCount}] Key hit rate limit, trying key ${nextKeyIndex + 1}/${this.verifiedHealthyKeys.length}`);
+
+                  try {
+                    return await this.requestWithStreaming(prompt, temperature, nextKey, onToken);
+                  } catch (retryError) {
+                    const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error';
+                    if (retryMessage.toLowerCase().includes('rate limit') || retryMessage.toLowerCase().includes('429')) {
+                      console.log(`[Key Rotation] Key ${nextKeyIndex + 1} also rate limited, trying next key...`);
+                      continue;
+                    } else {
+                      throw retryError;
+                    }
+                  }
+                }
+
+                console.log(`[Key Rotation] All ${this.verifiedHealthyKeys.length} keys are rate limited`);
+              }
+
+              // Strategy 2: Try a different model
+              if (this.tryNextModel()) {
+                this.modelFallbackCount++;
+                console.log(`[Model Fallback #${this.modelFallbackCount}] Trying ${this.modelName}`);
+                await this.delay(2000);
+                const firstKey = this.verifiedHealthyKeys[0] || specificKey;
+                return this.requestWithStreaming(prompt, temperature, firstKey, onToken);
+              }
+
+              // Strategy 3: Wait and retry
+              const waitTime = 60000;
+              console.log(`[Retry #${this.currentRetryCount}] Waiting 60s for quota reset...`);
+              await this.delay(waitTime);
+
+              if (this.keyManager) {
+                this.keyManager.resetRateLimitedKeys();
+              }
+              this.currentModelIndex = 0;
+              this.modelName = this.fallbackModels[0];
+              console.log(`[Quota Reset] Retrying from beginning`);
+
+              const firstKey = this.verifiedHealthyKeys[0] || specificKey;
+              return this.requestWithStreaming(prompt, temperature, firstKey, onToken);
+            }
+
             if (!this.keyManager.hasAvailableKeys()) {
               if (isRateLimitError || isQuotaError) {
                 if (this.tryNextModel()) {
@@ -379,7 +440,20 @@ export class GeminiProvider extends BaseLLMProvider {
                   continue;
                 }
                 await this.delay(60000);
+
+                const keysBeforeReset = this.keyManager.getAllAvailableKeys().length;
                 this.keyManager.resetRateLimitedKeys();
+                const keysAfterReset = this.keyManager.getAllAvailableKeys().length;
+
+                // If no keys were reset, they're all at daily quota - fail gracefully
+                if (keysAfterReset === keysBeforeReset && keysAfterReset === 0) {
+                  const totalKeys = this.keyManager.getKeyStatistics().length;
+                  throw new Error(
+                    `All ${totalKeys} API keys have exhausted their daily quota. ` +
+                    `Quotas will reset at midnight Pacific Time.`
+                  );
+                }
+
                 this.currentModelIndex = 0;
                 this.modelName = this.fallbackModels[0];
                 keyRotationCycles = 0;
@@ -539,25 +613,52 @@ export class GeminiProvider extends BaseLLMProvider {
             // Strategy 1: Try another verified healthy key if available
             if (this.verifiedHealthyKeys.length > 1) {
               const currentKeyIndex = this.verifiedHealthyKeys.indexOf(specificKey);
-              const nextKeyIndex = (currentKeyIndex + 1) % this.verifiedHealthyKeys.length;
-              const nextKey = this.verifiedHealthyKeys[nextKeyIndex];
 
-              this.keyRotationCount++;
-              console.log(`[Key Rotation #${this.keyRotationCount}] Specific key hit rate limit, trying next verified healthy key`);
-              await this.delay(1000);
-              return this.request(prompt, temperature, nextKey);
+              // If key not found in array, start from beginning
+              const startIndex = currentKeyIndex >= 0 ? currentKeyIndex : -1;
+
+              // Try each remaining key in sequence
+              for (let i = 1; i < this.verifiedHealthyKeys.length; i++) {
+                const nextKeyIndex = (startIndex + i) % this.verifiedHealthyKeys.length;
+                const nextKey = this.verifiedHealthyKeys[nextKeyIndex];
+
+                // Skip if it's the same key
+                if (nextKey === specificKey) continue;
+
+                this.keyRotationCount++;
+                console.log(`[Key Rotation #${this.keyRotationCount}] Key hit rate limit, trying key ${nextKeyIndex + 1}/${this.verifiedHealthyKeys.length}`);
+
+                try {
+                  // Try next key without delay (it should have quota available)
+                  return await this.request(prompt, temperature, nextKey);
+                } catch (retryError) {
+                  // This key also failed, try next one
+                  const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error';
+                  if (retryMessage.toLowerCase().includes('rate limit') || retryMessage.toLowerCase().includes('429')) {
+                    console.log(`[Key Rotation] Key ${nextKeyIndex + 1} also rate limited, trying next key...`);
+                    continue;
+                  } else {
+                    // Non-rate-limit error, propagate it
+                    throw retryError;
+                  }
+                }
+              }
+
+              // All keys tried and rate limited
+              console.log(`[Key Rotation] All ${this.verifiedHealthyKeys.length} keys are rate limited`);
             }
 
             // Strategy 2: Try a different model with lower quota requirements
             if (this.tryNextModel()) {
               this.modelFallbackCount++;
               console.log(`[Model Fallback #${this.modelFallbackCount}] All keys rate limited for ${this.fallbackModels[this.currentModelIndex - 1]}, trying ${this.modelName}`);
-              // Reset and retry with new model and original key
+              // Reset and retry with new model and first available key
               await this.delay(2000);
-              return this.request(prompt, temperature, specificKey);
+              const firstKey = this.verifiedHealthyKeys[0] || specificKey;
+              return this.request(prompt, temperature, firstKey);
             }
 
-            // Strategy 3: Wait and retry with same key/model (quota will reset)
+            // Strategy 3: Wait and retry with different key/model (quota will reset)
             // Quotas reset every 60 seconds, so wait full minute before retrying
             const waitTime = 60000; // 60 seconds
             console.log(`[Retry #${this.currentRetryCount}] All keys and models exhausted, waiting 60s for quota reset...`);
@@ -607,16 +708,38 @@ export class GeminiProvider extends BaseLLMProvider {
               await this.delay(waitTime);
 
               // Reset all rate-limited keys and go back to first model
-              const resetCount = this.keyManager.getAllAvailableKeys().length;
+              const keysBeforeReset = this.keyManager.getAllAvailableKeys().length;
               this.keyManager.resetRateLimitedKeys();
-              const availableAfterReset = this.keyManager.getAllAvailableKeys().length;
+              const keysAfterReset = this.keyManager.getAllAvailableKeys().length;
+
+              // If no keys were reset, they're all at DAILY quota (not minute quota)
+              // Don't continue infinite loop - fail gracefully
+              if (keysAfterReset === keysBeforeReset && keysAfterReset === 0) {
+                const totalKeys = this.keyManager.getKeyStatistics().length;
+                console.log(`\n${'='.repeat(80)}`);
+                console.log(`❌ DAILY QUOTA EXHAUSTED - ALL API KEYS`);
+                console.log(`${'='.repeat(80)}`);
+                console.log(`   All ${totalKeys} API keys have exhausted their DAILY quota`);
+                console.log(`   Quotas will reset at midnight Pacific Time`);
+                console.log(`   To continue now:`);
+                console.log(`   1. Add more API keys with available quota`);
+                console.log(`   2. Wait until midnight PT for quota reset`);
+                console.log(`   3. Use a different model with higher quota`);
+                console.log(`${'='.repeat(80)}\n`);
+
+                throw new Error(
+                  `All ${totalKeys} API keys have exhausted their daily quota. ` +
+                  `Quotas will reset at midnight Pacific Time. ` +
+                  `Please add more API keys or wait for quota reset.`
+                );
+              }
 
               this.currentModelIndex = 0;
               this.modelName = this.fallbackModels[0];
               keyRotationCycles = 0;
               attempt = -1; // Reset attempts for new cycle
 
-              console.log(`[Recovery Complete] Reset ${availableAfterReset} keys. Retrying with model: ${this.modelName}\n`);
+              console.log(`[Recovery Complete] Reset ${keysAfterReset - keysBeforeReset} keys (${keysAfterReset} now available). Retrying with model: ${this.modelName}\n`);
               continue;
             }
 

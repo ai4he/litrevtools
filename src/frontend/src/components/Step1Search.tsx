@@ -12,15 +12,30 @@ import { useProgress } from '../hooks/useProgress';
 interface Step1SearchProps {
   onSearchComplete: (sessionId: string, rawCsvData: any[], autoMode: boolean, searchParameters?: any) => void;
   disabled?: boolean;
+  existingSessionId?: string | null;
 }
 
-export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disabled }) => {
+export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disabled, existingSessionId }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [searchParameters, setSearchParameters] = useState<SearchParameters | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { socket } = useSocket();
-  const { progress, papers, error: progressError, clearError } = useProgress(socket, sessionId);
+
+  // Use existingSessionId if available, otherwise use local sessionId
+  const effectiveSessionId = existingSessionId || sessionId;
+
+  console.log('[Step1Search] Props:', { existingSessionId, sessionId, effectiveSessionId, disabled });
+
+  const { progress, papers, error: progressError, clearError } = useProgress(socket, effectiveSessionId);
+
+  // Update sessionId when existingSessionId prop changes
+  useEffect(() => {
+    console.log('[Step1Search] existingSessionId changed:', existingSessionId);
+    if (existingSessionId) {
+      setSessionId(existingSessionId);
+    }
+  }, [existingSessionId]);
 
   // Handle progress errors
   useEffect(() => {
@@ -45,9 +60,9 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
   };
 
   const handlePause = async () => {
-    if (!sessionId) return;
+    if (!effectiveSessionId) return;
     try {
-      await searchAPI.pause(sessionId);
+      await searchAPI.pause(effectiveSessionId);
     } catch (err: any) {
       console.error('Failed to pause search:', err);
       setError(err.response?.data?.message || 'Failed to pause search');
@@ -55,9 +70,9 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
   };
 
   const handleResume = async () => {
-    if (!sessionId) return;
+    if (!effectiveSessionId) return;
     try {
-      await searchAPI.resume(sessionId);
+      await searchAPI.resume(effectiveSessionId);
     } catch (err: any) {
       console.error('Failed to resume search:', err);
       setError(err.response?.data?.message || 'Failed to resume search');
@@ -65,11 +80,11 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
   };
 
   const handleStop = async () => {
-    if (!sessionId) return;
+    if (!effectiveSessionId) return;
     if (!confirm('Are you sure you want to stop this search?')) return;
 
     try {
-      await searchAPI.stop(sessionId);
+      await searchAPI.stop(effectiveSessionId);
       setIsSearching(false);
     } catch (err: any) {
       console.error('Failed to stop search:', err);
@@ -78,9 +93,9 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
   };
 
   const handleDownloadRawCsv = async () => {
-    if (!sessionId) return;
+    if (!effectiveSessionId) return;
     try {
-      const blob = await sessionAPI.download(sessionId, 'csv');
+      const blob = await sessionAPI.download(effectiveSessionId, 'csv');
       downloadBlob(blob, 'papers-raw.csv');
     } catch (err: any) {
       console.error('Download failed:', err);
@@ -100,16 +115,16 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
     if (progress) {
       if (progress.status === 'completed') {
         setIsSearching(false);
-        // Notify parent that search is complete
-        if (sessionId) {
+        // Notify parent that search is complete (only if this is a new search, not an existing one)
+        if (effectiveSessionId && !existingSessionId) {
           const autoMode = searchParameters?.autoMode || false;
-          onSearchComplete(sessionId, papers, autoMode, searchParameters || undefined);
+          onSearchComplete(effectiveSessionId, papers, autoMode, searchParameters || undefined);
         }
       } else if (progress.status === 'error') {
         setIsSearching(false);
       }
     }
-  }, [progress, sessionId, papers, searchParameters]);
+  }, [progress, effectiveSessionId, existingSessionId, papers, searchParameters, onSearchComplete]);
 
   const isComplete = progress?.status === 'completed';
   const hasError = progress?.status === 'error';
@@ -152,19 +167,19 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
       )}
 
       {/* Search Form */}
-      {!sessionId && (
+      {!effectiveSessionId && (
         <div className="mb-6">
           <SearchForm onSubmit={handleStartSearch} disabled={disabled || isSearching} />
         </div>
       )}
 
       {/* Progress and Results */}
-      {sessionId && progress && (
+      {effectiveSessionId && progress && (
         <div className="space-y-6">
           {/* Progress Dashboard */}
           <ProgressDashboard
             progress={progress}
-            sessionId={sessionId}
+            sessionId={effectiveSessionId}
             searchParameters={searchParameters || undefined}
             papers={papers}
             onPause={handlePause}

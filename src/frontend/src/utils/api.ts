@@ -11,12 +11,16 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token or guest mode header
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken');
+    const guestMode = localStorage.getItem('guestMode');
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (guestMode === 'true') {
+      config.headers['X-Guest-Mode'] = 'true';
     }
     return config;
   },
@@ -28,9 +32,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear invalid auth token
-      // Don't redirect - let the component handle the auth state
+      // Clear invalid auth token (but preserve guest mode)
+      const guestMode = localStorage.getItem('guestMode');
       localStorage.removeItem('authToken');
+
+      // If we get 401 in guest mode, it might be a real auth issue, clear guest mode too
+      if (!guestMode) {
+        // Only log if not in guest mode
+        console.warn('Authentication failed, token cleared');
+      }
     }
     return Promise.reject(error);
   }
@@ -309,6 +319,14 @@ export const projectAPI = {
     latexPrompt?: string;
   }) => {
     const response = await api.post(`/projects/${projectId}/start-step3`, parameters);
+    return response.data;
+  },
+
+  /**
+   * Mark a step as complete
+   */
+  completeStep: async (projectId: string, step: 1 | 2 | 3, sessionId?: string) => {
+    const response = await api.post(`/projects/${projectId}/complete-step/${step}`, { sessionId });
     return response.data;
   },
 };

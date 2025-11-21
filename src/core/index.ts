@@ -271,7 +271,7 @@ export class LitRevTools {
       temperature: 0.3,
       fallbackStrategy: 'rule_based',
       enableKeyRotation: true
-    });
+    }, this.database); // Pass database for persistent quota tracking
 
     // Initialize the LLM service
     await this.llmService.initialize();

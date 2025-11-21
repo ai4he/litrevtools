@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, Square, CheckCircle, Settings } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, CheckCircle } from 'lucide-react';
 import { projectAPI } from '../utils/api';
 import { Step1Search } from './Step1Search';
 import { Step2SemanticFiltering, Step2SemanticFilteringRef } from './Step2SemanticFiltering';
@@ -30,36 +30,40 @@ const ProjectPageEnhanced: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
-  const [projectMode, setProjectMode] = useState(true);
 
   const step2Ref = useRef<Step2SemanticFilteringRef>(null);
   const step3Ref = useRef<Step3LatexGenerationRef>(null);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     if (id) {
+      isInitialLoadRef.current = true; // Reset on ID change
       loadProject();
-      // Poll for updates every 5 seconds
-      const interval = setInterval(loadProject, 5000);
+      // Poll for updates every 30 seconds
+      const interval = setInterval(loadProject, 30000);
       return () => clearInterval(interval);
     }
   }, [id]);
 
-  const loadProject = async () => {
+  const loadProject = useCallback(async () => {
     if (!id) return;
 
     try {
-      setLoading(activeTab === 1 && !project); // Only show loading on initial load
+      setLoading((prev) => isInitialLoadRef.current ? true : prev);
       setError('');
       const response = await projectAPI.getById(id);
       setProject(response.project);
 
-      // Set active tab based on project state
-      if (response.project.current_step) {
-        setActiveTab(response.project.current_step);
-      } else if (response.project.step1_complete && !response.project.step2_complete) {
-        setActiveTab(2);
-      } else if (response.project.step2_complete && !response.project.step3_complete) {
-        setActiveTab(3);
+      // Set active tab based on project state ONLY on initial load
+      if (isInitialLoadRef.current) {
+        if (response.project.current_step) {
+          setActiveTab(response.project.current_step);
+        } else if (response.project.step1_complete && !response.project.step2_complete) {
+          setActiveTab(2);
+        } else if (response.project.step2_complete && !response.project.step3_complete) {
+          setActiveTab(3);
+        }
+        isInitialLoadRef.current = false;
       }
     } catch (err: any) {
       console.error('Error loading project:', err);
@@ -67,7 +71,7 @@ const ProjectPageEnhanced: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   const handlePause = async () => {
     if (!id) return;
@@ -100,33 +104,54 @@ const ProjectPageEnhanced: React.FC = () => {
   };
 
   // Step 1 completion handler
-  const handleStep1Complete = async (sessionId: string, _rawData: any[], _autoMode: boolean, _params?: any) => {
+  const handleStep1Complete = useCallback(async (sessionId: string, _rawData: any[], _autoMode: boolean, _params?: any) => {
     console.log('[ProjectPage] Step 1 completed:', sessionId);
     if (id) {
-      // The project should already be updated by the backend, just reload
-      await loadProject();
-      // Automatically switch to Step 2
-      setActiveTab(2);
+      try {
+        // Mark Step 1 as complete on the backend (and link the session ID)
+        await projectAPI.completeStep(id, 1, sessionId);
+        console.log('[ProjectPage] Marked Step 1 as complete and linked session:', sessionId);
+
+        // Reload project to get updated state
+        await loadProject();
+
+        // Automatically switch to Step 2
+        setActiveTab(2);
+      } catch (error: any) {
+        console.error('[ProjectPage] Error completing Step 1:', error);
+        setError(error.response?.data?.message || 'Failed to mark step as complete');
+      }
     }
-  };
+  }, [id, loadProject]);
 
   // Step 2 completion handler
-  const handleStep2Complete = async (sessionId: string, _labeledData: any[]) => {
+  const handleStep2Complete = useCallback(async (sessionId: string, _labeledData: any[]) => {
     console.log('[ProjectPage] Step 2 completed:', sessionId);
     if (id) {
-      await loadProject();
-      // Automatically switch to Step 3
-      setActiveTab(3);
-    }
-  };
+      try {
+        // Mark Step 2 as complete on the backend (and link the session ID)
+        await projectAPI.completeStep(id, 2, sessionId);
+        console.log('[ProjectPage] Marked Step 2 as complete and linked session:', sessionId);
 
-  // Step 3 completion handler
-  const handleStep3Complete = async (sessionId: string) => {
-    console.log('[ProjectPage] Step 3 completed:', sessionId);
-    if (id) {
-      await loadProject();
+        // Reload project to get updated state
+        await loadProject();
+
+        // Automatically switch to Step 3
+        setActiveTab(3);
+      } catch (error: any) {
+        console.error('[ProjectPage] Error completing Step 2:', error);
+        setError(error.response?.data?.message || 'Failed to mark step as complete');
+      }
     }
-  };
+  }, [id, loadProject]);
+
+  // Step 3 completion handler (not currently used but may be needed for future features)
+  // const handleStep3Complete = async (sessionId: string) => {
+  //   console.log('[ProjectPage] Step 3 completed:', sessionId);
+  //   if (id) {
+  //     await loadProject();
+  //   }
+  // };
 
   if (loading) {
     return (
@@ -287,28 +312,33 @@ const ProjectPageEnhanced: React.FC = () => {
 
         <div className="p-6">
           {activeTab === 1 && (
-            <Step1Search
-              onSearchComplete={handleStep1Complete}
-              disabled={project.step1_complete}
-            />
+            <>
+              {console.log('[ProjectPageEnhanced] Rendering Step1, project.step1_session_id:', project.step1_session_id)}
+              <Step1Search
+                key={`step1-${id}`}
+                onSearchComplete={handleStep1Complete}
+                disabled={project.step1_complete}
+                existingSessionId={project.step1_session_id}
+              />
+            </>
           )}
 
           {activeTab === 2 && (
             <Step2SemanticFiltering
+              key={`step2-${id}`}
               ref={step2Ref}
+              sessionId={project.step1_session_id || null}
+              enabled={project.step1_complete && !project.step2_complete}
               onFilteringComplete={handleStep2Complete}
-              step1SessionId={project.step1_session_id}
-              disabled={!project.step1_complete || project.step2_complete}
             />
           )}
 
           {activeTab === 3 && (
             <Step3LatexGeneration
+              key={`step3-${id}`}
               ref={step3Ref}
-              onGenerationComplete={handleStep3Complete}
-              step1SessionId={project.step1_session_id}
-              step2SessionId={project.step2_session_id}
-              disabled={!project.step1_complete}
+              sessionId={project.step2_session_id || project.step1_session_id || null}
+              enabled={project.step1_complete}
             />
           )}
         </div>

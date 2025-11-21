@@ -10,6 +10,7 @@ export class APIKeyManager {
   private fallbackStrategy: FallbackStrategy;
   private enableRotation: boolean;
   private onKeyExhausted?: () => Promise<string | null>;
+  private currentModel: string = 'gemini-2.0-flash-lite'; // Track current model for persistent quota
 
   constructor(
     apiKeys: string | string[],
@@ -412,15 +413,55 @@ export class APIKeyManager {
   }
 
   /**
-   * Reset all rate-limited keys (for testing or manual intervention)
+   * Reset rate-limited keys whose quotas have actually reset
+   * ONLY resets keys where the reset time has passed
+   * This prevents infinite loops when daily quotas are exhausted
    */
   resetRateLimitedKeys(): void {
+    const now = new Date();
+    let resetCount = 0;
+
     for (const key of this.keys) {
       if (key.status === 'rate_limited') {
-        key.status = 'active';
-        key.errorCount = 0;
-        key.rateLimitResetAt = undefined;
+        // Check if quota reset time has actually passed
+        let canReset = false;
+
+        if (key.quotaTracking) {
+          // Check RPM quota (resets every 60 seconds)
+          const rpmResetPassed = now >= key.quotaTracking.rpm.resetAt;
+          // Check RPD quota (resets at midnight PT)
+          const rpdResetPassed = now >= key.quotaTracking.rpd.resetAt;
+
+          // Only reset if AT LEAST ONE quota window has passed
+          // Prefer waiting for all quotas, but RPM is minimum requirement
+          if (rpmResetPassed) {
+            canReset = true;
+
+            // If RPD quota is also exhausted and hasn't reset, keep status as rate_limited
+            if (key.quotaTracking.rpd.used >= key.quotaTracking.rpd.limit && !rpdResetPassed) {
+              canReset = false;
+              console.log(`[API Key Manager] Key ${key.label || 'Unknown'} RPM reset but RPD quota still exhausted (resets at ${key.quotaTracking.rpd.resetAt.toLocaleString()})`);
+            }
+          }
+        } else if (key.rateLimitResetAt && now >= key.rateLimitResetAt) {
+          // Legacy: Use rateLimitResetAt if quotaTracking not available
+          canReset = true;
+        }
+
+        if (canReset) {
+          key.status = 'active';
+          key.errorCount = 0;
+          key.rateLimitResetAt = undefined;
+          resetCount++;
+          console.log(`[API Key Manager] Reset key ${key.label || 'Unknown'} - quota window passed`);
+        }
       }
+    }
+
+    if (resetCount > 0) {
+      console.log(`[API Key Manager] Reset ${resetCount}/${this.keys.length} rate-limited keys`);
+    } else {
+      console.log(`[API Key Manager] No keys ready to reset - all still within rate limit windows`);
     }
   }
 
@@ -440,6 +481,9 @@ export class APIKeyManager {
    */
   initializeQuotaTracking(modelName: string): void {
     const { QuotaTracker } = require('./quota-tracker');
+
+    // Store the current model for quota tracking
+    this.currentModel = modelName;
 
     for (const key of this.keys) {
       QuotaTracker.initializeQuotaTracking(key, modelName);
@@ -463,13 +507,14 @@ export class APIKeyManager {
 
   /**
    * Record usage for a specific key (tracks RPM, TPM, RPD)
+   * Persists to database for tracking across restarts
    */
   recordKeyUsage(apiKey: string, tokensUsed: number): void {
     const { QuotaTracker } = require('./quota-tracker');
     const keyInfo = this.keys.find(k => k.key === apiKey);
 
     if (keyInfo) {
-      QuotaTracker.recordUsage(keyInfo, tokensUsed);
+      QuotaTracker.recordUsage(keyInfo, tokensUsed, this.currentModel);
     }
   }
 
@@ -533,9 +578,9 @@ export class APIKeyManager {
 
   /**
    * Run health check on all API keys using a simple test request
-   * Uses gemini-2.5-pro (lowest quota model) for testing to minimize cost
+   * Uses gemini-2.5-flash-lite (free-tier model) for testing to ensure compatibility
    */
-  async runHealthCheck(testModel: string = 'gemini-2.5-pro'): Promise<{ healthy: number; unhealthy: number; results: Map<string, boolean> }> {
+  async runHealthCheck(testModel: string = 'gemini-2.5-flash-lite'): Promise<{ healthy: number; unhealthy: number; results: Map<string, boolean> }> {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const results = new Map<string, boolean>();
 
@@ -576,29 +621,49 @@ export class APIKeyManager {
       } catch (error: any) {
         const errorMessage = error?.message || 'Unknown error';
 
-        // Mark as unhealthy
-        keyInfo.healthCheck = {
-          lastChecked: new Date(),
-          isHealthy: false,
-          lastError: errorMessage.substring(0, 100)
-        };
+        // Classify error type
+        const isRateLimited = errorMessage.toLowerCase().includes('rate limit') ||
+                             errorMessage.toLowerCase().includes('429') ||
+                             errorMessage.toLowerCase().includes('quota');
 
-        // Classify error
-        if (errorMessage.toLowerCase().includes('invalid') ||
-            errorMessage.toLowerCase().includes('unauthorized') ||
-            errorMessage.toLowerCase().includes('401') ||
-            errorMessage.toLowerCase().includes('403')) {
-          keyInfo.status = 'invalid';
-        } else if (errorMessage.toLowerCase().includes('rate limit') ||
-                   errorMessage.toLowerCase().includes('429')) {
+        const isAuthError = errorMessage.toLowerCase().includes('invalid') ||
+                           errorMessage.toLowerCase().includes('unauthorized') ||
+                           errorMessage.toLowerCase().includes('401') ||
+                           errorMessage.toLowerCase().includes('403');
+
+        // Mark health status
+        if (isRateLimited) {
+          // Rate-limited keys are temporarily unavailable but NOT unhealthy
+          keyInfo.healthCheck = {
+            lastChecked: new Date(),
+            isHealthy: true, // Still healthy, just rate-limited
+            lastError: errorMessage.substring(0, 100)
+          };
           keyInfo.status = 'rate_limited';
           keyInfo.rateLimitResetAt = new Date(Date.now() + 60000);
+          results.set(keyInfo.label || keyInfo.key, true); // Count as healthy
+          console.log(`[Health Check] ⏸️  ${keyInfo.label} - RATE LIMITED (will recover)`);
+        } else if (isAuthError) {
+          // Authentication errors = permanently invalid
+          keyInfo.healthCheck = {
+            lastChecked: new Date(),
+            isHealthy: false,
+            lastError: errorMessage.substring(0, 100)
+          };
+          keyInfo.status = 'invalid';
+          results.set(keyInfo.label || keyInfo.key, false);
+          console.log(`[Health Check] ✗ ${keyInfo.label} - INVALID (auth error)`);
         } else {
+          // Other errors = unhealthy
+          keyInfo.healthCheck = {
+            lastChecked: new Date(),
+            isHealthy: false,
+            lastError: errorMessage.substring(0, 100)
+          };
           keyInfo.status = 'error';
+          results.set(keyInfo.label || keyInfo.key, false);
+          console.log(`[Health Check] ✗ ${keyInfo.label} - UNHEALTHY (${errorMessage.substring(0, 50)})`);
         }
-
-        results.set(keyInfo.label || keyInfo.key, false);
-        console.log(`[Health Check] ✗ ${keyInfo.label} - UNHEALTHY (${errorMessage.substring(0, 50)})`);
 
         // Small delay even on error
         await this.delay(500);
@@ -608,7 +673,7 @@ export class APIKeyManager {
     const healthy = Array.from(results.values()).filter(v => v).length;
     const unhealthy = results.size - healthy;
 
-    console.log(`[Health Check] Complete: ${healthy} healthy, ${unhealthy} unhealthy out of ${results.size} keys`);
+    console.log(`[Health Check] Complete: ${healthy} healthy (including rate-limited), ${unhealthy} permanently unhealthy out of ${results.size} keys`);
 
     return { healthy, unhealthy, results };
   }

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, Clock, CheckCircle, AlertCircle, Play, Trash2, Search, X, RefreshCw } from 'lucide-react';
 import { projectAPI } from '../utils/api';
-import { useSocket } from '../hooks/useSocket';
 
 interface Project {
   id: string;
@@ -23,7 +22,6 @@ interface Project {
 
 const ProjectsDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { socket, isConnected } = useSocket();
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);

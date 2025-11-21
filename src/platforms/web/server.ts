@@ -104,9 +104,30 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// Get current user
-app.get('/api/auth/me', authMiddleware, (req: AuthRequest, res) => {
-  res.json({ success: true, user: req.user });
+// Get current user (supports guest mode)
+app.get('/api/auth/me', optionalAuthMiddleware, (req: AuthRequest, res) => {
+  // If authenticated via JWT, return the user
+  if (req.user) {
+    res.json({ success: true, user: req.user });
+    return;
+  }
+
+  // Check if guest mode header is present (frontend sends this)
+  const guestMode = req.headers['x-guest-mode'];
+  if (guestMode === 'true') {
+    res.json({
+      success: true,
+      user: {
+        id: 'guest',
+        email: 'guest@local',
+        name: 'Guest User'
+      }
+    });
+    return;
+  }
+
+  // Not authenticated and not guest mode
+  res.status(401).json({ success: false, error: 'Not authenticated' });
 });
 
 // Logout (client-side only, just a placeholder)
@@ -331,6 +352,29 @@ app.post('/api/projects/:id/start-step3', async (req, res) => {
     );
 
     res.json({ success: true, sessionId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mark a step as complete
+app.post('/api/projects/:id/complete-step/:step', (req, res) => {
+  try {
+    const projectManager = litrev.getProjectManager();
+    const projectId = req.params.id;
+    const step = parseInt(req.params.step);
+    const { sessionId } = req.body;
+
+    if (![1, 2, 3].includes(step)) {
+      res.status(400).json({ success: false, error: 'Invalid step number' });
+      return;
+    }
+
+    // Mark step complete (and link sessionId if provided)
+    projectManager.markStepComplete(projectId, step as 1 | 2 | 3, sessionId);
+
+    console.log(`[Server] Marked Step ${step} as complete for project: ${projectId}`);
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

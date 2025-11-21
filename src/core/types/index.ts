@@ -147,6 +147,46 @@ export interface OutputProgress {
   }>;
 }
 
+/**
+ * Progress information for LLM filtering operations
+ */
+export interface LLMFilteringProgress {
+  phase: 'inclusion' | 'exclusion' | 'finalizing';
+  totalPapers: number;
+  processedPapers: number;
+  currentBatch: number;
+  totalBatches: number;
+  papersInCurrentBatch: number;
+  timeElapsed: number;
+  estimatedTimeRemaining: number;
+  // Detailed status for real-time feedback
+  currentAction?: string;
+  currentModel?: string;
+  healthyKeysCount?: number;
+  retryCount?: number;
+  keyRotations?: number;
+  modelFallbacks?: number;
+  apiKeyQuotas?: Array<{
+    label: string;
+    status: string;
+    quotaRemaining: number;
+    quotaDetails: string;
+    healthStatus?: string;
+  }>;
+  // Real-time streaming activity
+  activeStreams?: Array<{
+    requestId: string;
+    keyLabel: string;
+    modelName: string;
+    paperId?: string;
+    paperTitle?: string;
+    tokensReceived: number;
+    streamSpeed: number;
+    startTime: number;
+    status: 'streaming' | 'completing' | 'completed' | 'error';
+  }>;
+}
+
 export interface TorCircuit {
   id: string;
   ip: string;

@@ -220,6 +220,31 @@ export class LitRevDatabase {
       CREATE INDEX IF NOT EXISTS idx_api_keys_session ON api_keys(session_id);
     `);
 
+    // Global API Key Quota Tracking (persistent across sessions)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS api_key_quotas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        api_key_hash TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        rpm_used INTEGER DEFAULT 0,
+        rpm_limit INTEGER DEFAULT 30,
+        rpm_reset_at TEXT,
+        tpm_used INTEGER DEFAULT 0,
+        tpm_limit INTEGER DEFAULT 1000000,
+        tpm_reset_at TEXT,
+        rpd_used INTEGER DEFAULT 0,
+        rpd_limit INTEGER DEFAULT 200,
+        rpd_reset_at TEXT,
+        status TEXT DEFAULT 'active',
+        last_updated TEXT NOT NULL,
+        UNIQUE(api_key_hash, model_name)
+      )
+    `);
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_api_key_quotas_hash_model ON api_key_quotas(api_key_hash, model_name);
+    `);
+
     // Run migrations for existing databases
     this.runMigrations();
 
@@ -1108,5 +1133,120 @@ export class LitRevDatabase {
 
   close(): void {
     this.db.close();
+  }
+
+  // ============================================================================
+  // Global API Key Quota Tracking (Persistent)
+  // ============================================================================
+
+  /**
+   * Get or create quota record for an API key + model combination
+   */
+  getOrCreateQuotaRecord(apiKeyHash: string, modelName: string, quotaLimits: { rpm: number; tpm: number; rpd: number }): any {
+    const now = new Date().toISOString();
+    const nextMinute = new Date(Date.now() + 60000).toISOString();
+    const midnightPT = this.getNextMidnightPT().toISOString();
+
+    // Try to get existing record
+    let record = this.db.prepare(`
+      SELECT * FROM api_key_quotas WHERE api_key_hash = ? AND model_name = ?
+    `).get(apiKeyHash, modelName);
+
+    if (!record) {
+      // Create new record
+      this.db.prepare(`
+        INSERT INTO api_key_quotas (
+          api_key_hash, model_name,
+          rpm_used, rpm_limit, rpm_reset_at,
+          tpm_used, tpm_limit, tpm_reset_at,
+          rpd_used, rpd_limit, rpd_reset_at,
+          status, last_updated
+        ) VALUES (?, ?, 0, ?, ?, 0, ?, ?, 0, ?, ?, 'active', ?)
+      `).run(
+        apiKeyHash, modelName,
+        quotaLimits.rpm, nextMinute,
+        quotaLimits.tpm, nextMinute,
+        quotaLimits.rpd, midnightPT,
+        now
+      );
+
+      record = this.db.prepare(`
+        SELECT * FROM api_key_quotas WHERE api_key_hash = ? AND model_name = ?
+      `).get(apiKeyHash, modelName);
+    }
+
+    return record;
+  }
+
+  /**
+   * Update quota usage for an API key + model combination
+   */
+  updateQuotaUsage(apiKeyHash: string, modelName: string, tokensUsed: number): void {
+    const now = new Date();
+    const record = this.db.prepare(`
+      SELECT * FROM api_key_quotas WHERE api_key_hash = ? AND model_name = ?
+    `).get(apiKeyHash, modelName) as any;
+
+    if (!record) return;
+
+    let rpmUsed = record.rpm_used;
+    let tpmUsed = record.tpm_used;
+    let rpdUsed = record.rpd_used;
+    let rpmResetAt = record.rpm_reset_at;
+    let tpmResetAt = record.tpm_reset_at;
+    let rpdResetAt = record.rpd_reset_at;
+
+    // Check if RPM/TPM should reset (every minute)
+    if (new Date(rpmResetAt) <= now) {
+      rpmUsed = 0;
+      tpmUsed = 0;
+      rpmResetAt = new Date(now.getTime() + 60000).toISOString();
+      tpmResetAt = rpmResetAt;
+    }
+
+    // Check if RPD should reset (daily at midnight PT)
+    if (new Date(rpdResetAt) <= now) {
+      rpdUsed = 0;
+      rpdResetAt = this.getNextMidnightPT().toISOString();
+    }
+
+    // Increment usage
+    rpmUsed += 1;
+    tpmUsed += tokensUsed;
+    rpdUsed += 1;
+
+    this.db.prepare(`
+      UPDATE api_key_quotas SET
+        rpm_used = ?,
+        rpm_reset_at = ?,
+        tpm_used = ?,
+        tpm_reset_at = ?,
+        rpd_used = ?,
+        rpd_reset_at = ?,
+        last_updated = ?
+      WHERE api_key_hash = ? AND model_name = ?
+    `).run(rpmUsed, rpmResetAt, tpmUsed, tpmResetAt, rpdUsed, rpdResetAt, now.toISOString(), apiKeyHash, modelName);
+  }
+
+  /**
+   * Update API key status in quota table
+   */
+  updateQuotaStatus(apiKeyHash: string, modelName: string, status: string): void {
+    this.db.prepare(`
+      UPDATE api_key_quotas SET status = ?, last_updated = ?
+      WHERE api_key_hash = ? AND model_name = ?
+    `).run(status, new Date().toISOString(), apiKeyHash, modelName);
+  }
+
+  /**
+   * Get next midnight Pacific Time
+   */
+  private getNextMidnightPT(): Date {
+    const now = new Date();
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const midnight = new Date(pt);
+    midnight.setHours(24, 0, 0, 0);
+    const offset = midnight.getTime() - pt.getTime();
+    return new Date(now.getTime() + offset);
   }
 }

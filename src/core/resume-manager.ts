@@ -33,12 +33,16 @@ export class ResumeManager {
     progress: SearchProgress,
     lastOffset: number
   ): Step1ResumeMetadata {
+    // Map status to allowed values (idle/estimating -> running for resume purposes)
+    const status: 'running' | 'paused' | 'completed' | 'error' =
+      progress.status === 'idle' || progress.status === 'estimating' ? 'running' : progress.status;
+
     return {
       step: 1,
       sessionId: session.id,
       parameters: session.parameters,
       progress: {
-        status: progress.status,
+        status,
         totalPapers: progress.totalPapers,
         processedPapers: progress.processedPapers,
         includedPapers: progress.includedPapers,
@@ -117,6 +121,10 @@ export class ResumeManager {
     },
     createdAt: Date
   ): Step3ResumeMetadata {
+    // Map status to allowed values (idle -> running for resume purposes)
+    const status: 'running' | 'paused' | 'completed' | 'error' =
+      progress.status === 'idle' ? 'running' : progress.status;
+
     return {
       step: 3,
       sessionId,
@@ -124,7 +132,7 @@ export class ResumeManager {
       sourceStep1SessionId,
       parameters,
       progress: {
-        status: progress.status,
+        status,
         stage: progress.stage,
         completedStages: progress.completedStages,
         totalStages: progress.totalStages,

@@ -6,6 +6,8 @@ import { LLMConfig, LLMRequest, LLMResponse, LLMTaskType, Paper, FallbackStrateg
 import { LLMProvider } from './base-provider';
 import { GeminiProvider } from './gemini-provider';
 import { APIKeyManager } from './api-key-manager';
+import { LitRevDatabase } from '../database';
+import { QuotaTracker } from './quota-tracker';
 
 /**
  * Real-time streaming activity for a single LLM request
@@ -123,7 +125,12 @@ export class LLMService {
     return false;
   }
 
-  constructor(config?: Partial<LLMConfig>) {
+  constructor(config?: Partial<LLMConfig>, database?: LitRevDatabase) {
+    // Set database for persistent quota tracking
+    if (database) {
+      QuotaTracker.setDatabase(database);
+    }
+
     // Default configuration with Gemini as default provider
     // Optimized batch size for efficiency (larger batches = fewer API calls)
     this.config = {
@@ -213,21 +220,15 @@ export class LLMService {
       modelSelectionStrategy: this.config.modelSelectionStrategy || 'speed' // Default to speed for filtering
     });
 
-    // Run health check during initialization to identify working keys upfront
+    // Initialize all keys as available (skip wasteful upfront health check)
+    // Keys will be validated on-demand during actual usage through error handling
     if (this.keyManager) {
-      console.log('[LLM Service] Running initial health check to identify working keys...');
-      const healthCheckResults = await this.keyManager.runHealthCheck();
-      console.log(`[LLM Service] Health check complete: ${healthCheckResults.healthy}/${healthCheckResults.healthy + healthCheckResults.unhealthy} keys healthy`);
-
-      if (healthCheckResults.healthy === 0) {
-        throw new Error('No healthy API keys available. Please check your API keys and try again.');
-      }
-
-      // Store healthy keys for parallel processing
+      // Get all configured keys (they start as 'active' by default)
       this.healthyKeys = this.keyManager.getAllAvailableKeys();
-      console.log(`[LLM Service] Identified ${this.healthyKeys.length} healthy keys for parallel processing`);
+      console.log(`[LLM Service] Initialized with ${this.healthyKeys.length} API keys (will validate on-demand)`);
 
-      // Pass healthy keys to the provider for exclusive use in parallel processing
+      // Pass all keys to the provider for parallel processing
+      // Invalid keys will be detected and marked during actual usage
       if (this.provider && 'setHealthyKeys' in this.provider) {
         (this.provider as any).setHealthyKeys(this.healthyKeys);
       }
@@ -308,9 +309,13 @@ export class LLMService {
       throw new Error('LLM service is not enabled or initialized');
     }
 
-    // Use pre-verified healthy keys (already identified during initialization)
+    // Refresh available keys (in case some have recovered from rate limits)
+    if (this.keyManager) {
+      this.healthyKeys = this.keyManager.getAllAvailableKeys();
+    }
+
     if (this.healthyKeys.length === 0) {
-      throw new Error('No healthy API keys available. Health check during initialization found no working keys.');
+      throw new Error('No API keys available. All keys may be temporarily rate-limited. Please wait a minute and try again.');
     }
 
     // Display detailed diagnostics before starting batch processing

@@ -23,6 +23,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
         // Check for guest mode first
         const guestMode = localStorage.getItem('guestMode');
         if (guestMode === 'true') {
+          console.log('[GoogleAuth] Guest mode detected, skipping authentication');
           const guestUser = { id: 'guest', email: 'guest@local', name: 'Guest User' };
           setUser(guestUser);
           onAuthChange?.(guestUser);
@@ -30,12 +31,14 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
           return;
         }
 
-        // Try to get authenticated user
-        const currentUser = await authAPI.getCurrentUser();
-        setUser(currentUser);
-        onAuthChange?.(currentUser);
-      } catch (error) {
-        console.log('Not authenticated');
+        // Try to get authenticated user (only if not in guest mode)
+        console.log('[GoogleAuth] Checking authentication status...');
+        const response = await authAPI.getCurrentUser();
+        console.log('[GoogleAuth] Authentication successful:', response.user?.email);
+        setUser(response.user);
+        onAuthChange?.(response.user);
+      } catch (error: any) {
+        console.log('[GoogleAuth] Not authenticated:', error.response?.status);
         setUser(null);
         onAuthChange?.(null);
       } finally {

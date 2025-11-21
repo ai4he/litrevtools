@@ -5,6 +5,8 @@
 
 import { APIKeyInfo } from '../types';
 import { config } from '../../config';
+import { LitRevDatabase } from '../database';
+import * as crypto from 'crypto';
 
 // Model quota configurations (from testing 2025-11-19)
 export interface ModelQuotas {
@@ -17,8 +19,25 @@ export interface ModelQuotas {
 export const MODEL_QUOTAS: Record<string, ModelQuotas> = config.llm.modelQuotas;
 
 export class QuotaTracker {
+  private static database: LitRevDatabase | null = null;
+
+  /**
+   * Set the database instance for persistent quota tracking
+   */
+  static setDatabase(db: LitRevDatabase): void {
+    this.database = db;
+  }
+
+  /**
+   * Create a hash of the API key for storage (to avoid storing keys in plaintext)
+   */
+  private static hashApiKey(apiKey: string): string {
+    return crypto.createHash('sha256').update(apiKey).digest('hex').substring(0, 32);
+  }
+
   /**
    * Initialize quota tracking for a key based on the model
+   * Loads from database if available, otherwise creates new tracking
    */
   static initializeQuotaTracking(keyInfo: APIKeyInfo, modelName: string): void {
     let quotas = MODEL_QUOTAS[modelName];
@@ -28,27 +47,64 @@ export class QuotaTracker {
       quotas = { rpm: 2, tpm: 125000, rpd: 50 };
     }
 
-    const now = new Date();
-    const nextMinute = new Date(now.getTime() + 60000);
-    const midnightPT = this.getNextMidnightPT();
+    // Try to load from database
+    let dbRecord = null;
+    if (this.database) {
+      const keyHash = this.hashApiKey(keyInfo.key);
+      dbRecord = this.database.getOrCreateQuotaRecord(keyHash, modelName, quotas);
+    }
 
-    keyInfo.quotaTracking = {
-      rpm: {
-        limit: quotas.rpm,
-        used: 0,
-        resetAt: nextMinute
-      },
-      tpm: {
-        limit: quotas.tpm,
-        used: 0,
-        resetAt: nextMinute
-      },
-      rpd: {
-        limit: quotas.rpd,
-        used: 0,
-        resetAt: midnightPT
-      }
-    };
+    const now = new Date();
+
+    if (dbRecord) {
+      // Load from database and check if quotas need reset
+      const rpmResetAt = new Date(dbRecord.rpm_reset_at);
+      const tpmResetAt = new Date(dbRecord.tpm_reset_at);
+      const rpdResetAt = new Date(dbRecord.rpd_reset_at);
+
+      keyInfo.quotaTracking = {
+        rpm: {
+          limit: dbRecord.rpm_limit,
+          used: now >= rpmResetAt ? 0 : dbRecord.rpm_used,
+          resetAt: now >= rpmResetAt ? new Date(now.getTime() + 60000) : rpmResetAt
+        },
+        tpm: {
+          limit: dbRecord.tpm_limit,
+          used: now >= tpmResetAt ? 0 : dbRecord.tpm_used,
+          resetAt: now >= tpmResetAt ? new Date(now.getTime() + 60000) : tpmResetAt
+        },
+        rpd: {
+          limit: dbRecord.rpd_limit,
+          used: now >= rpdResetAt ? 0 : dbRecord.rpd_used,
+          resetAt: now >= rpdResetAt ? this.getNextMidnightPT() : rpdResetAt
+        }
+      };
+
+      // Restore status from database
+      keyInfo.status = dbRecord.status as any;
+    } else {
+      // Initialize with fresh quotas (no database available)
+      const nextMinute = new Date(now.getTime() + 60000);
+      const midnightPT = this.getNextMidnightPT();
+
+      keyInfo.quotaTracking = {
+        rpm: {
+          limit: quotas.rpm,
+          used: 0,
+          resetAt: nextMinute
+        },
+        tpm: {
+          limit: quotas.tpm,
+          used: 0,
+          resetAt: nextMinute
+        },
+        rpd: {
+          limit: quotas.rpd,
+          used: 0,
+          resetAt: midnightPT
+        }
+      };
+    }
 
     keyInfo.healthCheck = {
       isHealthy: true,
@@ -71,8 +127,9 @@ export class QuotaTracker {
 
   /**
    * Record a request and token usage for a key
+   * Updates both in-memory and database
    */
-  static recordUsage(keyInfo: APIKeyInfo, tokensUsed: number): void {
+  static recordUsage(keyInfo: APIKeyInfo, tokensUsed: number, modelName?: string): void {
     if (!keyInfo.quotaTracking) return;
 
     const now = new Date();
@@ -102,6 +159,12 @@ export class QuotaTracker {
 
     keyInfo.lastUsed = now;
     keyInfo.requestCount += 1;
+
+    // Persist to database
+    if (this.database && modelName) {
+      const keyHash = this.hashApiKey(keyInfo.key);
+      this.database.updateQuotaUsage(keyHash, modelName, tokensUsed);
+    }
   }
 
   /**

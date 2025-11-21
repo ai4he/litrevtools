@@ -155,20 +155,20 @@ export class ProjectManager {
       this.database.markProjectStepComplete(projectId, 1);
 
       // Start semantic filtering
-      const sessionId = await this.litrev.startSemanticFiltering(
+      await this.litrev.applySemanticFiltering(
         project.step1_session_id,
         parameters.inclusionPrompt,
         parameters.exclusionPrompt,
+        onProgress,
         parameters.batchSize,
-        parameters.model,
-        onProgress
+        parameters.model
       );
 
-      // Link session to project
-      this.database.updateProjectStepSession(projectId, 2, sessionId);
+      // Link session to project (use same session ID from step1)
+      this.database.updateProjectStepSession(projectId, 2, project.step1_session_id);
 
-      console.log(`[ProjectManager] Step 2 started with session: ${sessionId}`);
-      return sessionId;
+      console.log(`[ProjectManager] Step 2 started with session: ${project.step1_session_id}`);
+      return project.step1_session_id;
     } catch (error: any) {
       console.error(`[ProjectManager] Error starting Step 2:`, error);
       this.database.setProjectError(projectId, error.message);
@@ -220,14 +220,9 @@ export class ProjectManager {
       }
 
       // Start output generation
-      await this.litrev.generateOutputs(
+      await this.litrev.generateOutputsWithDataSource(
         sourceSessionId,
         parameters?.dataSource || 'step1',
-        {
-          model: parameters?.model,
-          batchSize: parameters?.batchSize,
-          latexPrompt: parameters?.latexPrompt
-        },
         onProgress
       );
 
@@ -266,9 +261,7 @@ export class ProjectManager {
     try {
       switch (project.current_step) {
         case 1:
-          if (project.step1_session_id) {
-            this.litrev.pauseSearch(project.step1_session_id);
-          }
+          this.litrev.pauseSearch();
           break;
         case 2:
           this.litrev.pauseSemanticFiltering();
@@ -301,9 +294,7 @@ export class ProjectManager {
     try {
       switch (project.current_step) {
         case 1:
-          if (project.step1_session_id) {
-            this.litrev.resumeSearch(project.step1_session_id);
-          }
+          this.litrev.resumeSearch();
           break;
         case 2:
           this.litrev.resumeSemanticFiltering();
@@ -336,9 +327,7 @@ export class ProjectManager {
     try {
       switch (project.current_step) {
         case 1:
-          if (project.step1_session_id) {
-            this.litrev.stopSearch(project.step1_session_id);
-          }
+          this.litrev.stopSearch();
           break;
         case 2:
           this.litrev.stopSemanticFiltering();
@@ -357,6 +346,31 @@ export class ProjectManager {
       this.database.setProjectError(projectId, error.message);
       throw error;
     }
+  }
+
+  // ============================================================================
+  // Step Completion
+  // ============================================================================
+
+  /**
+   * Mark a step as complete for a project
+   */
+  markStepComplete(projectId: string, step: 1 | 2 | 3, sessionId?: string): void {
+    const project = this.getProject(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    console.log(`[ProjectManager] Marking step ${step} as complete for project: ${projectId}`);
+
+    // If sessionId is provided, link it to the project step
+    if (sessionId) {
+      this.database.updateProjectStepSession(projectId, step, sessionId);
+      console.log(`[ProjectManager] Linked session ${sessionId} to step ${step}`);
+    }
+
+    this.database.markProjectStepComplete(projectId, step);
+    this.database.setProjectCurrentStep(projectId, null);
   }
 
   // ============================================================================
