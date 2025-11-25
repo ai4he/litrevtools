@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { FileText, Download, CheckCircle, AlertCircle, Play, Package, File, Pause, Square } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { LiveLLMActivityMonitor } from './LiveLLMActivityMonitor';
@@ -80,7 +80,11 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [batchSize, setBatchSize] = useState(30);
   const [tempSessionId, setTempSessionId] = useState<string | null>(null); // Store temp session ID from CSV upload
   const [isPaused, setIsPaused] = useState(false);
-  const { socket } = useSocket();
+  const { socket, reconnectCount, resubscribe } = useSocket();
+  const lastReconnectCount = useRef(0);
+
+  // Use tempSessionId if available (CSV upload), otherwise use sessionId from props
+  const activeSessionId = tempSessionId || sessionId;
 
   // Expose trigger method to parent via ref
   useImperativeHandle(ref, () => ({
@@ -213,6 +217,63 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       socket.emit('unsubscribe', activeSessionId);
     };
   }, [socket, sessionId, tempSessionId]);
+
+  // Sync status on reconnection
+  useEffect(() => {
+    // Skip initial render and only act on actual reconnections
+    if (reconnectCount === 0 || reconnectCount === lastReconnectCount.current) {
+      return;
+    }
+    lastReconnectCount.current = reconnectCount;
+
+    if (!activeSessionId) {
+      return;
+    }
+
+    console.log('[Step3] Reconnected! Syncing status for session:', activeSessionId);
+
+    // Re-subscribe to session events
+    resubscribe(activeSessionId);
+
+    // Fetch current status from REST API
+    const syncStatus = async () => {
+      try {
+        const response = await sessionAPI.getStepStatus(activeSessionId);
+        console.log('[Step3] Step status response:', response);
+
+        if (response.success && response.stepStatus) {
+          const { stepStatus } = response;
+
+          // Only update if this is Step 3 status
+          if (stepStatus.step === 3) {
+            if (stepStatus.status === 'running') {
+              setIsGenerating(true);
+              setOutputsGenerated(false);
+              setOutputProgress({
+                status: 'running',
+                stage: 'latex',
+                currentTask: stepStatus.currentTask || 'Processing...',
+                totalStages: 5,
+                completedStages: 0,
+                progress: stepStatus.progress || 0,
+              });
+            } else if (stepStatus.status === 'completed') {
+              setIsGenerating(false);
+              setOutputsGenerated(true);
+              setOutputProgress(null);
+            } else if (stepStatus.status === 'error') {
+              setIsGenerating(false);
+              setError(stepStatus.error || 'Output generation failed');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Step3] Failed to sync status on reconnection:', err);
+      }
+    };
+
+    syncStatus();
+  }, [reconnectCount, activeSessionId, resubscribe]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

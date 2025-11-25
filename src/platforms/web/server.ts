@@ -73,6 +73,28 @@ const activeSearches: Set<string> = new Set();
 // Event buffer to store events until client subscribes
 const eventBuffer: Map<string, Array<{ event: string; data: any }>> = new Map();
 
+// Track current step status for each session (for reconnection sync)
+interface StepStatus {
+  step: 1 | 2 | 3;
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'error';
+  progress?: number;
+  currentTask?: string;
+  lastUpdate: number;
+  error?: string;
+}
+const sessionStepStatus: Map<string, StepStatus> = new Map();
+
+// Helper to update and get step status
+const updateStepStatus = (sessionId: string, step: 1 | 2 | 3, status: Partial<StepStatus>) => {
+  const current = sessionStepStatus.get(sessionId) || { step, status: 'idle', lastUpdate: Date.now() };
+  sessionStepStatus.set(sessionId, {
+    ...current,
+    step,
+    ...status,
+    lastUpdate: Date.now(),
+  });
+};
+
 // REST API Routes
 
 // Authentication Routes
@@ -156,6 +178,35 @@ app.get('/api/sessions/:id', (req, res) => {
       return;
     }
     res.json({ success: true, session });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get current step status for a session (for reconnection sync)
+app.get('/api/sessions/:id/step-status', (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const session = litrev.getSession(sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    // Get the tracked step status
+    const stepStatus = sessionStepStatus.get(sessionId);
+
+    // Also check if there's an active search
+    const isSearching = activeSearches.has(sessionId);
+
+    res.json({
+      success: true,
+      stepStatus: stepStatus || null,
+      isSearching,
+      // Include session progress for additional context
+      sessionProgress: session.progress,
+      sessionStatus: session.status,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -421,6 +472,13 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       onProgress: (progress: SearchProgress, sid: string) => {
         emitOrBuffer(sid, 'progress', progress);
 
+        // Update step status for reconnection sync
+        updateStepStatus(sid, 1, {
+          status: progress.status === 'searching' ? 'running' : progress.status as any,
+          progress: progress.progress,
+          currentTask: progress.currentTask || `Step 1: ${progress.status}`,
+        });
+
         if (progress.status === 'completed' || progress.status === 'error') {
           // Clean up
           activeSearches.delete(sid);
@@ -432,6 +490,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
       },
       onError: (error: Error, sid: string) => {
         emitOrBuffer(sid, 'error', { message: error.message });
+        updateStepStatus(sid, 1, { status: 'error', error: error.message });
       }
     });
 
@@ -556,10 +615,21 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
     // Return immediately - generation happens in background
     res.json({ success: true, message: 'Output generation started' });
 
+    // Helper to update Step 3 status
+    const updateStep3Status = (progress: any) => {
+      updateStepStatus(sessionId, 3, {
+        status: progress.status === 'completed' ? 'completed' : progress.status === 'error' ? 'error' : 'running',
+        progress: progress.progress,
+        currentTask: progress.currentTask,
+        error: progress.error,
+      });
+    };
+
     // Start generation with progress callbacks
     const generateMethod = dataSource
       ? litrev.generateOutputsWithDataSource(sessionId, dataSource || 'current', (progress) => {
           emitOrBuffer(sessionId, 'output-progress', progress);
+          updateStep3Status(progress);
 
           // When completed, emit the outputs
           if (progress.status === 'completed') {
@@ -569,6 +639,7 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
         })
       : litrev.generateOutputs(sessionId, (progress) => {
           emitOrBuffer(sessionId, 'output-progress', progress);
+          updateStep3Status(progress);
 
           // When completed, emit the outputs
           if (progress.status === 'completed') {
@@ -579,7 +650,7 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
 
     generateMethod.catch((error: any) => {
       console.error('[Server] Output generation failed:', error);
-      emitOrBuffer(sessionId, 'output-progress', {
+      const errorProgress = {
         status: 'error',
         stage: 'completed',
         currentTask: 'Output generation failed',
@@ -587,7 +658,9 @@ app.post('/api/sessions/:id/generate', async (req, res) => {
         completedStages: 0,
         error: error.message,
         progress: 0
-      });
+      };
+      emitOrBuffer(sessionId, 'output-progress', errorProgress);
+      updateStep3Status(errorProgress);
     });
 
   } catch (error: any) {
@@ -993,7 +1066,7 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
         const completedStages = progress.phase === 'inclusion' ? 0 : progress.phase === 'exclusion' ? 1 : 2;
         const overallProgress = (progress.processedPapers / progress.totalPapers) * 100;
 
-        emitOrBuffer(sessionId, 'semantic-filter-progress', {
+        const progressData = {
           status: 'running',
           currentTask: `Processing ${progress.phase} criteria - Batch ${progress.currentBatch}/${progress.totalBatches}`,
           progress: overallProgress,
@@ -1004,6 +1077,15 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
           totalBatches: progress.totalBatches,
           timeElapsed: progress.timeElapsed,
           estimatedTimeRemaining: progress.estimatedTimeRemaining
+        };
+
+        emitOrBuffer(sessionId, 'semantic-filter-progress', progressData);
+
+        // Update step status for reconnection sync
+        updateStepStatus(sessionId, 2, {
+          status: 'running',
+          progress: overallProgress,
+          currentTask: progressData.currentTask,
         });
       },
       batchSize, // Pass the configurable batch size
@@ -1019,6 +1101,13 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
         processedPapers: session.papers.length,
         currentBatch: 0,
         totalBatches: 0
+      });
+
+      // Update step status for reconnection sync
+      updateStepStatus(sessionId, 2, {
+        status: 'completed',
+        progress: 100,
+        currentTask: 'Semantic filtering completed!',
       });
 
       // Emit completion event immediately so download button appears
@@ -1042,6 +1131,14 @@ app.post('/api/sessions/:id/semantic-filter', async (req, res) => {
         processedPapers: 0,
         currentBatch: 0,
         totalBatches: 0
+      });
+
+      // Update step status for reconnection sync
+      updateStepStatus(sessionId, 2, {
+        status: 'error',
+        progress: 0,
+        currentTask: 'Semantic filtering failed',
+        error: error.message,
       });
     });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Filter, Download, CheckCircle, AlertCircle, Play, Pause, Square } from 'lucide-react';
 import { ProgressCard, BatchProgress } from './ProgressCard';
 import { LiveLLMActivityMonitor } from './LiveLLMActivityMonitor';
@@ -77,7 +77,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
   const [csvSessionId, setCsvSessionId] = useState<string | null>(null);
   const [filteredPapers, setFilteredPapers] = useState<any[]>([]);
   const [isPaused, setIsPaused] = useState(false);
-  const { socket } = useSocket();
+  const { socket, reconnectCount, resubscribe } = useSocket();
+  const lastReconnectCount = useRef(0);
 
   // Use csvSessionId if available (for CSV upload), otherwise use sessionId from Step 1
   const activeSessionId = csvSessionId || sessionId;
@@ -152,6 +153,65 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
       socket.emit('unsubscribe', activeSessionId);
     };
   }, [socket, activeSessionId, onFilteringComplete]);
+
+  // Sync status on reconnection
+  useEffect(() => {
+    // Skip initial render and only act on actual reconnections
+    if (reconnectCount === 0 || reconnectCount === lastReconnectCount.current) {
+      return;
+    }
+    lastReconnectCount.current = reconnectCount;
+
+    if (!activeSessionId) {
+      return;
+    }
+
+    console.log('[Step2] Reconnected! Syncing status for session:', activeSessionId);
+
+    // Re-subscribe to session events
+    resubscribe(activeSessionId);
+
+    // Fetch current status from REST API
+    const syncStatus = async () => {
+      try {
+        const response = await sessionAPI.getStepStatus(activeSessionId);
+        console.log('[Step2] Step status response:', response);
+
+        if (response.success && response.stepStatus) {
+          const { stepStatus } = response;
+
+          // Only update if this is Step 2 status
+          if (stepStatus.step === 2) {
+            if (stepStatus.status === 'running') {
+              setIsFiltering(true);
+              setFilteringCompleted(false);
+              setProgress({
+                status: 'running',
+                currentTask: stepStatus.currentTask || 'Processing...',
+                progress: stepStatus.progress || 0,
+                phase: 'inclusion',
+                totalPapers: 0,
+                processedPapers: 0,
+                currentBatch: 0,
+                totalBatches: 0,
+              });
+            } else if (stepStatus.status === 'completed') {
+              setIsFiltering(false);
+              setFilteringCompleted(true);
+              setProgress(null);
+            } else if (stepStatus.status === 'error') {
+              setIsFiltering(false);
+              setError(stepStatus.error || 'Semantic filtering failed');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Step2] Failed to sync status on reconnection:', err);
+      }
+    };
+
+    syncStatus();
+  }, [reconnectCount, activeSessionId, resubscribe]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
