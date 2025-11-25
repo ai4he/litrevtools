@@ -145,13 +145,23 @@ const ProjectPageEnhanced: React.FC = () => {
     }
   }, [id, loadProject]);
 
-  // Step 3 completion handler (not currently used but may be needed for future features)
-  // const handleStep3Complete = async (sessionId: string) => {
-  //   console.log('[ProjectPage] Step 3 completed:', sessionId);
-  //   if (id) {
-  //     await loadProject();
-  //   }
-  // };
+  // Step 3 completion handler
+  const handleStep3Complete = useCallback(async (sessionId: string) => {
+    console.log('[ProjectPage] Step 3 completed:', sessionId);
+    if (id) {
+      try {
+        // Mark Step 3 as complete on the backend (and link the session ID)
+        await projectAPI.completeStep(id, 3, sessionId);
+        console.log('[ProjectPage] Marked Step 3 as complete and linked session:', sessionId);
+
+        // Reload project to get updated state
+        await loadProject();
+      } catch (error: any) {
+        console.error('[ProjectPage] Error completing Step 3:', error);
+        setError(error.response?.data?.message || 'Failed to mark step as complete');
+      }
+    }
+  }, [id, loadProject]);
 
   if (loading) {
     return (
@@ -339,6 +349,7 @@ const ProjectPageEnhanced: React.FC = () => {
               ref={step3Ref}
               sessionId={project.step2_session_id || project.step1_session_id || null}
               enabled={project.step1_complete}
+              onComplete={handleStep3Complete}
             />
           )}
         </div>

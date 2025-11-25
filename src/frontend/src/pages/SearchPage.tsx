@@ -8,6 +8,7 @@ export const SearchPage: React.FC = () => {
   const [step1SessionId, setStep1SessionId] = useState<string | null>(null);
   const [step1Complete, setStep1Complete] = useState(false);
   const [step2Complete, setStep2Complete] = useState(false);
+  const [step3Complete, setStep3Complete] = useState(false);
   const [autoMode, setAutoMode] = useState(false);
   const [autoModeMessage, setAutoModeMessage] = useState<string | null>(null);
   const { isConnected } = useSocket();
@@ -47,6 +48,14 @@ export const SearchPage: React.FC = () => {
         console.log('[SearchPage] Auto-triggering Step 3');
         step3Ref.current?.startGeneration();
       }, 1000);
+    }
+  };
+
+  const handleStep3Complete = (sessionId: string) => {
+    console.log('[SearchPage] Step 3 completed:', sessionId);
+    setStep3Complete(true);
+    if (autoMode) {
+      setAutoModeMessage('All steps complete! Your literature review outputs are ready.');
     }
   };
 
@@ -101,7 +110,9 @@ export const SearchPage: React.FC = () => {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  step1Complete ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'
+                  step3Complete ? 'bg-green-100 text-green-600' :
+                  step1Complete ? 'bg-yellow-100 text-yellow-600' :
+                  'bg-gray-100 text-gray-400'
                 }`}>
                   3
                 </div>
@@ -148,6 +159,7 @@ export const SearchPage: React.FC = () => {
             ref={step3Ref}
             sessionId={step1SessionId}
             enabled={step1Complete}
+            onComplete={handleStep3Complete}
           />
         </div>
 

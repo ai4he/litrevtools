@@ -25,6 +25,7 @@ export const config = {
     // Model quotas: RPM (Requests Per Minute), TPM (Tokens Per Minute), RPD (Requests Per Day)
     // Update these values based on your Gemini API tier or if Google updates quotas
     modelQuotas: {
+      'gemini-3-pro-preview': { rpm: 5, tpm: 250000, rpd: 100 },  // Gemini 3 Pro (Preview)
       'gemini-2.0-flash-lite': { rpm: 30, tpm: 1000000, rpd: 200 },
       'gemini-2.5-flash-lite': { rpm: 15, tpm: 250000, rpd: 1000 },
       'gemini-2.0-flash': { rpm: 15, tpm: 1000000, rpd: 200 },
@@ -46,7 +47,8 @@ export const config = {
 
       // For Step 3: LaTeX generation (prioritize quality and intelligence)
       latexGeneration: [
-        'gemini-2.5-pro',          // Smartest: RPM: 2, TPM: 125K, RPD: 50
+        'gemini-3-pro-preview',    // Best: Gemini 3 Pro (Preview) - Top quality
+        'gemini-2.5-pro',          // Smartest 2.x: RPM: 2, TPM: 125K, RPD: 50
         'gemini-2.5-flash',        // Good balance: RPM: 10, TPM: 250K, RPD: 250
         'gemini-2.0-flash',        // Fast but capable: RPM: 15, TPM: 1M, RPD: 200
         'gemini-2.5-flash-lite',   // High quota: RPM: 15, TPM: 250K, RPD: 1000
@@ -55,7 +57,8 @@ export const config = {
 
       // For LaTeX verification (prioritize quality)
       latexVerification: [
-        'gemini-2.5-pro',          // Smartest: RPM: 2, TPM: 125K, RPD: 50
+        'gemini-3-pro-preview',    // Best: Gemini 3 Pro (Preview) - Top quality
+        'gemini-2.5-pro',          // Smartest 2.x: RPM: 2, TPM: 125K, RPD: 50
         'gemini-2.5-flash',        // Good balance: RPM: 10, TPM: 250K, RPD: 250
         'gemini-2.0-flash',        // Fast but capable: RPM: 15, TPM: 1M, RPD: 200
         'gemini-2.5-flash-lite',   // High quota: RPM: 15, TPM: 250K, RPD: 1000

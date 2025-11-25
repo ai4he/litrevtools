@@ -10,6 +10,7 @@ import { useSocket } from '../hooks/useSocket';
 interface Step3LatexGenerationProps {
   sessionId: string | null;
   enabled: boolean;
+  onComplete?: (sessionId: string) => void;
 }
 
 export interface Step3LatexGenerationRef {
@@ -58,7 +59,8 @@ const OUTPUT_FILES: OutputFile[] = [
 ];
 
 export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3LatexGenerationProps>(({
-  sessionId
+  sessionId,
+  onComplete
 }, ref) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -74,7 +76,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
     latex: false,
     zip: false
   });
-  const [llmModel, setLlmModel] = useState<'auto' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
+  const [llmModel, setLlmModel] = useState<'auto' | 'gemini-3-pro-preview' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [batchSize, setBatchSize] = useState(30);
   const [tempSessionId, setTempSessionId] = useState<string | null>(null); // Store temp session ID from CSV upload
   const [isPaused, setIsPaused] = useState(false);
@@ -140,6 +142,11 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
         setIsGenerating(false);
         setOutputProgress(null); // Clear progress when done
         setOutputsGenerated(true); // Mark outputs as generated
+        // Notify parent of completion
+        const activeSessionId = tempSessionId || sessionId;
+        if (onComplete && activeSessionId) {
+          onComplete(activeSessionId);
+        }
       } else if (progress.status === 'error') {
         console.log('[Step3 WebSocket] Status: ERROR -', progress.error);
         setIsGenerating(false);
@@ -186,6 +193,11 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
       setIsGenerating(false);
       setOutputProgress(null);
       setOutputsGenerated(true); // Mark outputs as generated
+      // Notify parent of completion
+      const activeSessionId = tempSessionId || sessionId;
+      if (onComplete && activeSessionId) {
+        onComplete(activeSessionId);
+      }
     };
 
     console.log('[Step3 useEffect] Attaching event listeners...');
@@ -506,6 +518,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
                 className="input-field w-full"
               >
                 <option value="auto">🤖 Auto (Recommended - Automatically selects best model based on available quota)</option>
+                <option value="gemini-3-pro-preview">Gemini 3 Pro Preview (Top Quality - Best for LaTeX)</option>
                 <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fast & Efficient)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash (More Capable)</option>
                 <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental (Legacy - Not Recommended)</option>
