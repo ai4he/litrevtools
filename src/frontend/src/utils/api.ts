@@ -68,6 +68,23 @@ export const searchAPI = {
   },
 };
 
+export interface StepStatus {
+  step: 1 | 2 | 3;
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'error';
+  progress?: number;
+  currentTask?: string;
+  lastUpdate: number;
+  error?: string;
+}
+
+export interface StepStatusResponse {
+  success: boolean;
+  stepStatus: StepStatus | null;
+  isSearching: boolean;
+  sessionProgress: any;
+  sessionStatus: string;
+}
+
 export const sessionAPI = {
   getAll: async () => {
     const response = await api.get('/sessions');
@@ -77,6 +94,12 @@ export const sessionAPI = {
   getById: async (sessionId: string) => {
     const response = await api.get(`/sessions/${sessionId}`);
     return response.data as SearchSession;
+  },
+
+  // Get current step status for a session (for reconnection sync)
+  getStepStatus: async (sessionId: string): Promise<StepStatusResponse> => {
+    const response = await api.get(`/sessions/${sessionId}/step-status`);
+    return response.data;
   },
 
   generate: async (sessionId: string, dataSource?: 'step1' | 'step2' | 'current', options?: {

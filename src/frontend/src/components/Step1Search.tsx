@@ -20,14 +20,14 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
   const [searchParameters, setSearchParameters] = useState<SearchParameters | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { socket } = useSocket();
+  const { socket, reconnectCount } = useSocket();
 
   // Use existingSessionId if available, otherwise use local sessionId
   const effectiveSessionId = existingSessionId || sessionId;
 
   console.log('[Step1Search] Props:', { existingSessionId, sessionId, effectiveSessionId, disabled });
 
-  const { progress, papers, error: progressError, clearError } = useProgress(socket, effectiveSessionId);
+  const { progress, papers, error: progressError, clearError } = useProgress(socket, effectiveSessionId, reconnectCount);
 
   // Update sessionId when existingSessionId prop changes
   useEffect(() => {
