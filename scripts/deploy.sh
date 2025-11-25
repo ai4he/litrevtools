@@ -37,6 +37,15 @@ echo -e "${YELLOW}📦 Installing dependencies...${NC}"
 npm install
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
+# Build Frontend (React)
+echo -e "${YELLOW}📦 Installing frontend dependencies...${NC}"
+npm run frontend:install
+echo -e "${GREEN}✓ Frontend dependencies installed${NC}"
+
+echo -e "${YELLOW}🔨 Building Frontend...${NC}"
+npm run frontend:build
+echo -e "${GREEN}✓ Frontend build complete${NC}"
+
 # Build TypeScript
 echo -e "${YELLOW}🔨 Building TypeScript...${NC}"
 npm run build
@@ -47,6 +56,11 @@ echo -e "${YELLOW}📁 Creating data directories...${NC}"
 mkdir -p data/outputs
 mkdir -p dist/platforms/web/public
 echo -e "${GREEN}✓ Directories created${NC}"
+
+# Copy frontend build to dist
+echo -e "${YELLOW}📋 Copying frontend build...${NC}"
+npm run web:copy-frontend
+echo -e "${GREEN}✓ Frontend build copied${NC}"
 
 # Copy static files (required for web interface)
 if [ -d "src/platforms/web/public" ] && [ "$(ls -A src/platforms/web/public 2>/dev/null)" ]; then

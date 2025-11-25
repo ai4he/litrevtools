@@ -117,7 +117,6 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     const completeEvent = `semantic-filter-complete:${activeSessionId}`;
 
     const handleProgress = (progressData: SemanticFilteringProgress) => {
-      console.log('[Step2] Received progress:', progressData);
       setProgress(progressData);
 
       if (progressData.status === 'running') {
