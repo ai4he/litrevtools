@@ -144,16 +144,41 @@ export interface OutputProgress {
   }>;
 }
 
+export interface SearchSessionProgress {
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'error' | 'estimating';
+  currentTask?: string;
+  nextTask?: string;
+  totalPapers?: number;
+  processedPapers?: number;
+  includedPapers?: number;
+  excludedPapers?: number;
+  duplicateCount?: number;
+  timeElapsed?: number;
+  estimatedTimeRemaining?: number;
+  progress?: number;
+  error?: string;
+  screenshot?: string;
+}
+
 export interface SearchSession {
   id: string;
-  name: string;
-  inclusionKeywords: string[];
-  exclusionKeywords: string[];
+  name?: string;
+  parameters?: {
+    name?: string;
+    inclusionKeywords: string[];
+    exclusionKeywords: string[];
+    maxResults?: number;
+    startYear?: number;
+    endYear?: number;
+  };
+  // Legacy fields for backward compatibility
+  inclusionKeywords?: string[];
+  exclusionKeywords?: string[];
   startYear?: number;
   endYear?: number;
   maxResults?: number;
-  status: 'running' | 'paused' | 'completed' | 'error';
-  progress: number;
+  status?: 'running' | 'paused' | 'completed' | 'error';
+  progress: SearchSessionProgress;
   createdAt: string;
   updatedAt: string;
   papers?: Paper[];

@@ -91,9 +91,9 @@ export const sessionAPI = {
     return response.data as SearchSession[];
   },
 
-  getById: async (sessionId: string) => {
+  getById: async (sessionId: string): Promise<{ success: boolean; session: SearchSession }> => {
     const response = await api.get(`/sessions/${sessionId}`);
-    return response.data as SearchSession;
+    return response.data;
   },
 
   // Get current step status for a session (for reconnection sync)

@@ -9,6 +9,94 @@ export const useProgress = (socket: Socket | null, sessionId: string | null, rec
   const [error, setError] = useState<string | null>(null);
   const lastReconnectCount = useRef(0);
 
+  // Fetch status and papers on initial load when sessionId is provided
+  useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+
+    console.log('[useProgress] Initial load - fetching status for session:', sessionId);
+
+    const fetchInitialData = async () => {
+      try {
+        // Fetch both step status and full session data in parallel
+        const [stepStatusResponse, sessionResponse] = await Promise.all([
+          sessionAPI.getStepStatus(sessionId),
+          sessionAPI.getById(sessionId).catch(() => null) // Don't fail if session fetch fails
+        ]);
+
+        console.log('[useProgress] Initial status response:', stepStatusResponse);
+        console.log('[useProgress] Session response:', sessionResponse);
+
+        // First, try to get data from session (database - most reliable source)
+        if (sessionResponse?.success && sessionResponse.session) {
+          const session = sessionResponse.session;
+
+          // Set progress from session data
+          if (session.progress) {
+            setProgress({
+              status: session.progress.status || 'completed',
+              currentTask: session.progress.currentTask || 'Completed',
+              nextTask: session.progress.nextTask || '',
+              totalPapers: session.progress.totalPapers || 0,
+              processedPapers: session.progress.processedPapers || 0,
+              includedPapers: session.progress.includedPapers || 0,
+              excludedPapers: session.progress.excludedPapers || 0,
+              duplicateCount: session.progress.duplicateCount,
+              timeElapsed: session.progress.timeElapsed || 0,
+              estimatedTimeRemaining: session.progress.estimatedTimeRemaining || 0,
+              progress: session.progress.progress || 100,
+            });
+          }
+
+          // Load papers from session
+          if (session.papers && session.papers.length > 0) {
+            console.log('[useProgress] Loading', session.papers.length, 'papers from session');
+            setPapers(session.papers);
+          }
+        }
+        // Fallback: use step status if no session data (for active searches)
+        else if (stepStatusResponse.success && stepStatusResponse.stepStatus) {
+          const { stepStatus } = stepStatusResponse;
+
+          if (stepStatus.status === 'running') {
+            setProgress({
+              status: 'running',
+              currentTask: stepStatus.currentTask || 'Processing...',
+              nextTask: '',
+              totalPapers: 0,
+              processedPapers: 0,
+              includedPapers: 0,
+              excludedPapers: 0,
+              timeElapsed: 0,
+              estimatedTimeRemaining: 0,
+              progress: stepStatus.progress || 0,
+            });
+          } else if (stepStatus.status === 'completed') {
+            setProgress({
+              status: 'completed',
+              currentTask: 'Completed',
+              nextTask: '',
+              totalPapers: 0,
+              processedPapers: 0,
+              includedPapers: 0,
+              excludedPapers: 0,
+              timeElapsed: 0,
+              estimatedTimeRemaining: 0,
+              progress: 100,
+            });
+          } else if (stepStatus.status === 'error') {
+            setError(stepStatus.error || 'Operation failed');
+          }
+        }
+      } catch (err) {
+        console.error('[useProgress] Failed to fetch initial data:', err);
+      }
+    };
+
+    fetchInitialData();
+  }, [sessionId]);
+
   useEffect(() => {
     if (!socket || !sessionId) {
       console.log('[useProgress] Skipping setup - socket:', !!socket, 'sessionId:', sessionId);

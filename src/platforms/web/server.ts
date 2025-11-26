@@ -205,7 +205,7 @@ app.get('/api/sessions/:id/step-status', (req, res) => {
       isSearching,
       // Include session progress for additional context
       sessionProgress: session.progress,
-      sessionStatus: session.status,
+      sessionStatus: session.progress.status,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -474,7 +474,7 @@ app.post('/api/search/start', optionalAuthMiddleware, async (req: AuthRequest, r
 
         // Update step status for reconnection sync
         updateStepStatus(sid, 1, {
-          status: progress.status === 'searching' ? 'running' : progress.status as any,
+          status: progress.status as any,
           progress: progress.progress,
           currentTask: progress.currentTask || `Step 1: ${progress.status}`,
         });
