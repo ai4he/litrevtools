@@ -815,7 +815,10 @@ export class LLMService {
       batches.push(requests.slice(i, i + concurrentLimit));
     }
 
-    const totalBatches = batches.length;
+    // totalBatches for UI should be the number of paper batches (requests), not concurrent groups
+    // This matches user expectations: "Batch 1/9" means paper batch 1 of 9
+    const totalBatches = requests.length;
+    let completedBatches = 0;
     const availableKeyCount = this.keyManager?.getAllAvailableKeys().length || 1;
 
     console.log(`[Parallel LLM] Processing ${requests.length} requests in ${totalBatches} batches (concurrency: ${concurrentLimit}) using ${availableKeyCount} API keys in parallel`);
@@ -833,12 +836,12 @@ export class LLMService {
           phase,
           totalPapers,
           processedPapers: processedPapersCount, // Use actual tracked count
-          currentBatch: 1, // Approximate, updated in loop
+          currentBatch: Math.min(completedBatches + 1, totalBatches), // Currently processing batch
           totalBatches,
-          papersInCurrentBatch: requests.length, // Total requests? No, this field name is confusing.
+          papersInCurrentBatch: 0,
           timeElapsed: Date.now() - startTime,
           estimatedTimeRemaining: 0,
-          currentAction: `Processing ${streams.length} parallel requests`,
+          currentAction: `Processing ${streams.length} parallel requests (batch ${Math.min(completedBatches + 1, totalBatches)}/${totalBatches})`,
           currentModel,
           healthyKeysCount: this.healthyKeys.length,
           retryCount: providerForProgress?.currentRetryCount || 0,
@@ -888,7 +891,8 @@ export class LLMService {
 
       // Wait while paused
       while (this.isPaused) {
-        console.log(`[Parallel LLM] Processing paused at batch ${batchIndex + 1}/${totalBatches}`);
+        const currentBatchNum = Math.min(completedBatches + 1, totalBatches);
+        console.log(`[Parallel LLM] Processing paused at batch ${currentBatchNum}/${totalBatches}`);
         if (progressCallback) {
           const quotaStatus = this.keyManager?.getQuotaStatus?.() || [];
           const activeStreams = providerForProgress?.getActiveStreams?.() || [];
@@ -897,12 +901,12 @@ export class LLMService {
             phase,
             totalPapers,
             processedPapers: processedPapersCount,
-            currentBatch: batchIndex + 1,
+            currentBatch: currentBatchNum,
             totalBatches,
             papersInCurrentBatch: 0,
             timeElapsed: Date.now() - startTime,
             estimatedTimeRemaining: 0,
-            currentAction: `Paused at batch ${batchIndex + 1}/${totalBatches}`,
+            currentAction: `Paused at batch ${currentBatchNum}/${totalBatches}`,
             currentModel: providerForProgress?.getCurrentModel?.() || 'unknown',
             healthyKeysCount: this.healthyKeys.length,
             retryCount: providerForProgress?.currentRetryCount || 0,
@@ -915,34 +919,33 @@ export class LLMService {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Check every second
       }
 
-      // Process this batch
-      const batch = batches[batchIndex];
-      const results = await this.provider!.batchRequest(batch, this.config.temperature);
+      // Process this concurrent group (which contains multiple paper batches)
+      const concurrentGroup = batches[batchIndex];
+      const results = await this.provider!.batchRequest(concurrentGroup, this.config.temperature);
       allResponses.push(...results);
 
-      // Estimate papers processed in this batch
-      // We don't know exactly how many papers were in each request without parsing context,
-      // but we can approximate or calculate if we assume strict batching.
-      // Better: extract from context if possible.
-      let papersInThisBatch = 0;
-      for (const req of batch) {
+      // Count papers processed in this concurrent group and update completedBatches
+      let papersInThisGroup = 0;
+      for (const req of concurrentGroup) {
         if (req.context && Array.isArray(req.context.papers)) {
-           papersInThisBatch += req.context.papers.length;
+           papersInThisGroup += req.context.papers.length;
         } else {
            // Fallback assumption: 1 paper per request if not batch-request
-           papersInThisBatch += 1;
+           papersInThisGroup += 1;
         }
       }
-      processedPapersCount += papersInThisBatch;
+      processedPapersCount += papersInThisGroup;
+      // Update completedBatches: each request in concurrentGroup represents one paper batch
+      completedBatches += concurrentGroup.length;
 
 
-      // Log completion of this batch
+      // Log completion of this concurrent group
       const timeElapsed = Date.now() - startTime;
       const papersPerMs = processedPapersCount / timeElapsed;
       const remainingPapers = totalPapers - processedPapersCount;
       const estimatedTimeRemaining = papersPerMs > 0 ? Math.round(remainingPapers / papersPerMs) : 0;
 
-      console.log(`[Parallel LLM] Batch ${batchIndex + 1}/${totalBatches} completed (${results.length} requests, ~${papersInThisBatch} papers)`);
+      console.log(`[Parallel LLM] Completed ${completedBatches}/${totalBatches} paper batches (${results.length} requests in this group, ~${papersInThisGroup} papers)`);
 
       // Get latest provider stats
       const currentModel = providerForProgress?.getCurrentModel?.() || 'unknown';
@@ -950,8 +953,8 @@ export class LLMService {
       const keyRotations = providerForProgress?.keyRotationCount || 0;
       const modelFallbacks = providerForProgress?.modelFallbackCount || 0;
 
-      // Build detailed action message
-      let actionMessage = `Processing batch ${batchIndex + 1}/${totalBatches}`;
+      // Build detailed action message using actual paper batch counts
+      let actionMessage = `Completed batch ${completedBatches}/${totalBatches}`;
       if (keyRotations > 0 || modelFallbacks > 0 || retryCount > 0) {
         const details = [];
         if (keyRotations > 0) details.push(`${keyRotations} key rotations`);
@@ -970,7 +973,7 @@ export class LLMService {
           phase,
           totalPapers,
           processedPapers: Math.min(processedPapersCount, totalPapers),
-          currentBatch: batchIndex + 1,
+          currentBatch: completedBatches,
           totalBatches,
           papersInCurrentBatch: 0, // Batch completed
           timeElapsed,

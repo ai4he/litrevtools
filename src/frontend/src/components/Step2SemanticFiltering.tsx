@@ -125,6 +125,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         setError(null);
       } else if (progressData.status === 'completed') {
         setIsFiltering(false);
+        setFilteringCompleted(true);
+        setProgress(null);
       } else if (progressData.status === 'error') {
         setIsFiltering(false);
         setError(progressData.error || 'Semantic filtering failed');
@@ -154,6 +156,93 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     };
   }, [socket, activeSessionId, onFilteringComplete]);
 
+  // Fetch initial status on mount or when sessionId changes
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    console.log('[Step2] Fetching status for session:', activeSessionId, 'filteringCompleted:', filteringCompleted);
+
+    const fetchInitialStatus = async () => {
+      // Skip fetch if already completed - state persists while mounted
+      if (filteringCompleted) {
+        console.log('[Step2] Already completed, skipping status fetch');
+        return;
+      }
+
+      try {
+        const response = await sessionAPI.getStepStatus(activeSessionId);
+        console.log('[Step2] Initial status response:', response);
+
+        if (response.success && response.stepStatus) {
+          const { stepStatus } = response;
+
+          // Only update if this is Step 2 status
+          if (stepStatus.step === 2) {
+            if (stepStatus.status === 'running') {
+              setIsFiltering(true);
+              setFilteringCompleted(false);
+              setProgress({
+                status: 'running',
+                currentTask: stepStatus.currentTask || 'Processing...',
+                progress: stepStatus.progress || 0,
+                phase: 'inclusion',
+                totalPapers: 0,
+                processedPapers: 0,
+                currentBatch: 0,
+                totalBatches: 0,
+              });
+            } else if (stepStatus.status === 'completed') {
+              setIsFiltering(false);
+              setFilteringCompleted(true);
+              setProgress(null);
+              // Also fetch papers for download
+              try {
+                const sessionResponse = await sessionAPI.getById(activeSessionId);
+                if (sessionResponse.success && sessionResponse.session?.papers) {
+                  setFilteredPapers(sessionResponse.session.papers);
+                }
+              } catch (e) {
+                console.error('[Step2] Failed to fetch papers:', e);
+              }
+            } else if (stepStatus.status === 'error') {
+              setIsFiltering(false);
+              setError(stepStatus.error || 'Semantic filtering failed');
+            }
+          } else if (stepStatus.step === 3) {
+            // Step 3 ran after Step 2 - check if papers have LLM filtering data
+            try {
+              const sessionResponse = await sessionAPI.getById(activeSessionId);
+              if (sessionResponse.success && sessionResponse.session?.papers) {
+                const papers = sessionResponse.session.papers;
+                // Check if any paper has systematic_filtering_inclusion_reasoning (only set by LLM in Step 2)
+                // This field is NOT set by Step 1's keyword-based filtering
+                const hasLLMFilteringData = papers.some((p: any) =>
+                  p.systematic_filtering_inclusion_reasoning && p.systematic_filtering_inclusion_reasoning.length > 0
+                );
+                if (hasLLMFilteringData) {
+                  console.log('[Step2] Papers have LLM filtering reasoning - Step 2 was completed');
+                  setIsFiltering(false);
+                  setFilteringCompleted(true);
+                  setProgress(null);
+                  setFilteredPapers(papers);
+                }
+              }
+            } catch (sessionErr) {
+              console.error('[Step2] Failed to fetch session data:', sessionErr);
+            }
+          }
+          // If stepStatus.step === 1, do nothing - Step 2 hasn't started yet
+        }
+      } catch (err) {
+        console.error('[Step2] Failed to fetch initial status:', err);
+      }
+    };
+
+    fetchInitialStatus();
+  }, [activeSessionId, filteringCompleted]); // Re-run when sessionId changes or completion status changes
+
   // Sync status on reconnection
   useEffect(() => {
     // Skip initial render and only act on actual reconnections
@@ -175,7 +264,7 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     const syncStatus = async () => {
       try {
         const response = await sessionAPI.getStepStatus(activeSessionId);
-        console.log('[Step2] Step status response:', response);
+        console.log('[Step2] Reconnection status response:', response);
 
         if (response.success && response.stepStatus) {
           const { stepStatus } = response;
@@ -387,7 +476,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
     }
   };
 
-  const isComplete = filteringCompleted;
+  // Consider complete if filteringCompleted flag is set OR if progress shows completed status
+  const isComplete = filteringCompleted || progress?.status === 'completed';
   const hasError = progress?.status === 'error' || !!error;
 
   const batchProgress: BatchProgress | undefined = progress ? {
@@ -580,8 +670,8 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
         </div>
       )}
 
-      {/* Progress */}
-      {progress && isFiltering && (
+      {/* Progress - only show if actively filtering AND not yet completed */}
+      {progress && isFiltering && !filteringCompleted && (
         <div className="space-y-4">
           <ProgressCard
             title="Semantic Filtering in Progress"

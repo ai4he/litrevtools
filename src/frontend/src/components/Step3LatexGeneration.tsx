@@ -218,6 +218,53 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
     };
   }, [socket, sessionId, tempSessionId]);
 
+  // Fetch initial status on mount
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    console.log('[Step3] Initial mount - fetching status for session:', activeSessionId);
+
+    const fetchInitialStatus = async () => {
+      try {
+        const response = await sessionAPI.getStepStatus(activeSessionId);
+        console.log('[Step3] Initial status response:', response);
+
+        if (response.success && response.stepStatus) {
+          const { stepStatus } = response;
+
+          // Only update if this is Step 3 status
+          if (stepStatus.step === 3) {
+            if (stepStatus.status === 'running') {
+              setIsGenerating(true);
+              setOutputsGenerated(false);
+              setOutputProgress({
+                status: 'running',
+                stage: 'latex',
+                currentTask: stepStatus.currentTask || 'Processing...',
+                totalStages: 5,
+                completedStages: 0,
+                progress: stepStatus.progress || 0,
+              });
+            } else if (stepStatus.status === 'completed') {
+              setIsGenerating(false);
+              setOutputsGenerated(true);
+              setOutputProgress(null);
+            } else if (stepStatus.status === 'error') {
+              setIsGenerating(false);
+              setError(stepStatus.error || 'Output generation failed');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Step3] Failed to fetch initial status:', err);
+      }
+    };
+
+    fetchInitialStatus();
+  }, [activeSessionId]); // Only run on sessionId change (including initial mount)
+
   // Sync status on reconnection
   useEffect(() => {
     // Skip initial render and only act on actual reconnections
@@ -239,7 +286,7 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
     const syncStatus = async () => {
       try {
         const response = await sessionAPI.getStepStatus(activeSessionId);
-        console.log('[Step3] Step status response:', response);
+        console.log('[Step3] Reconnection status response:', response);
 
         if (response.success && response.stepStatus) {
           const { stepStatus } = response;
