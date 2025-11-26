@@ -144,6 +144,7 @@ export const SearchPage: React.FC = () => {
           <Step1Search
             onSearchComplete={handleStep1Complete}
             disabled={false}
+            isComplete={step1Complete}
           />
 
           {/* Step 2: Semantic Filtering */}
@@ -161,6 +162,7 @@ export const SearchPage: React.FC = () => {
             sessionId={step1SessionId}
             enabled={step1Complete}
             onComplete={handleStep3Complete}
+            isComplete={step3Complete}
           />
         </div>
 
