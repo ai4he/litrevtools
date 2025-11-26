@@ -198,3 +198,76 @@ export interface User {
   name: string;
   picture?: string;
 }
+
+// Monitoring types
+export interface ActiveStep {
+  projectId: string;
+  projectName: string;
+  sessionId: string;
+  step: 1 | 2 | 3;
+  status: string;
+  progress: number;
+  currentTask: string;
+  startedAt: number;
+}
+
+export interface ModelUsage {
+  requests: number;
+  tokens: number;
+}
+
+export interface UsageStat {
+  keyLabel: string;
+  apiKeyMasked: string;
+  model: string;
+  requestCount: number;
+  tokenCount: number;
+  lastUsed: string;
+}
+
+export interface DailyUsageSummary {
+  date: string;
+  totalRequests: number;
+  totalTokens: number;
+  byModel: Record<string, ModelUsage>;
+  byKey: Record<string, {
+    requests: number;
+    tokens: number;
+    models: Record<string, ModelUsage>;
+  }>;
+}
+
+export interface MonitoringDashboardData {
+  activeSteps: ActiveStep[];
+  activeStepsCount: number;
+  projects: {
+    total: number;
+    active: number;
+    completed: number;
+    paused: number;
+    error: number;
+  };
+  currentUsage: {
+    date: string;
+    totalRequests: number;
+    totalTokens: number;
+    byModel: Record<string, ModelUsage>;
+    byKey: Record<string, {
+      requests: number;
+      tokens: number;
+      models: Record<string, ModelUsage>;
+    }>;
+  };
+  historicalUsage: DailyUsageSummary[];
+  detailedStats: UsageStat[];
+  serverInfo: {
+    uptime: number;
+    memoryUsage: {
+      heapUsed: number;
+      heapTotal: number;
+      external: number;
+      rss: number;
+    };
+    timestamp: string;
+  };
+}

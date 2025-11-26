@@ -372,4 +372,23 @@ export const authAPI = {
   },
 };
 
+// Monitoring API
+export const monitoringAPI = {
+  /**
+   * Get dashboard monitoring data (active steps, usage, historical)
+   */
+  getDashboard: async () => {
+    const response = await api.get('/monitoring/dashboard');
+    return response.data;
+  },
+
+  /**
+   * Get usage statistics only
+   */
+  getUsageStats: async () => {
+    const response = await api.get('/usage-stats');
+    return response.data;
+  },
+};
+
 export default api;
