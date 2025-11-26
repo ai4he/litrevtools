@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, Clock, CheckCircle, AlertCircle, Play, Trash2, Search, X, RefreshCw } from 'lucide-react';
 import { projectAPI } from '../utils/api';
+import DashboardMonitor from './DashboardMonitor';
 
 interface Project {
   id: string;
@@ -32,6 +33,16 @@ const ProjectsDashboard: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'completed' | 'error'>('all');
+  const [monitorCollapsed, setMonitorCollapsed] = useState(() => {
+    // Persist collapsed state in localStorage
+    const saved = localStorage.getItem('monitorCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Save monitor collapsed state
+  useEffect(() => {
+    localStorage.setItem('monitorCollapsed', JSON.stringify(monitorCollapsed));
+  }, [monitorCollapsed]);
 
   // Load projects on mount and set up polling
   useEffect(() => {
@@ -196,6 +207,12 @@ const ProjectsDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* System Monitor */}
+      <DashboardMonitor
+        collapsed={monitorCollapsed}
+        onToggleCollapse={() => setMonitorCollapsed(!monitorCollapsed)}
+      />
 
       {/* Search and Filters */}
       <div className="mb-6 flex gap-4 items-center">

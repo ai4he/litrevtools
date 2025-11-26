@@ -1381,6 +1381,134 @@ app.get('/api/usage-stats', (req, res) => {
   }
 });
 
+// Dashboard monitoring endpoint - comprehensive overview
+app.get('/api/monitoring/dashboard', (req, res) => {
+  try {
+    const { UsageTracker } = require('../../core/llm/usage-tracker');
+    const projectManager = litrev.getProjectManager();
+
+    // Get usage data
+    const dailySummary = UsageTracker.getDailySummary();
+    const historicalData = UsageTracker.getHistoricalData();
+    const allUsageStats = UsageTracker.getAllUsageStats();
+
+    // Get all projects and find active ones
+    const allProjects = projectManager.getAllProjects();
+
+    // Collect active sessions (steps currently running)
+    const activeSteps: Array<{
+      projectId: string;
+      projectName: string;
+      sessionId: string;
+      step: 1 | 2 | 3;
+      status: string;
+      progress: number;
+      currentTask: string;
+      startedAt: number;
+    }> = [];
+
+    // Check each project for active steps
+    for (const project of allProjects) {
+      // Check step status for each session
+      for (const [sessionId, stepStatus] of sessionStepStatus.entries()) {
+        // Find which project this session belongs to
+        if (
+          project.step1_session_id === sessionId ||
+          project.step2_session_id === sessionId ||
+          project.step3_session_id === sessionId
+        ) {
+          if (stepStatus.status === 'running') {
+            activeSteps.push({
+              projectId: project.id,
+              projectName: project.name,
+              sessionId,
+              step: stepStatus.step,
+              status: stepStatus.status,
+              progress: stepStatus.progress || 0,
+              currentTask: stepStatus.currentTask || '',
+              startedAt: stepStatus.lastUpdate
+            });
+          }
+        }
+      }
+
+      // Also check activeSearches for Step 1
+      if (project.step1_session_id && activeSearches.has(project.step1_session_id)) {
+        const existingActive = activeSteps.find(s => s.sessionId === project.step1_session_id);
+        if (!existingActive) {
+          const session = litrev.getSession(project.step1_session_id);
+          if (session && session.progress.status === 'running') {
+            activeSteps.push({
+              projectId: project.id,
+              projectName: project.name,
+              sessionId: project.step1_session_id,
+              step: 1,
+              status: 'running',
+              progress: session.progress.progress || 0,
+              currentTask: session.progress.currentTask || 'Searching...',
+              startedAt: Date.now()
+            });
+          }
+        }
+      }
+    }
+
+    // Calculate summary stats
+    const totalProjectsActive = allProjects.filter(p => p.status === 'active').length;
+    const totalProjectsCompleted = allProjects.filter(p => p.status === 'completed').length;
+
+    res.json({
+      success: true,
+      data: {
+        // Active operations
+        activeSteps,
+        activeStepsCount: activeSteps.length,
+
+        // Project summary
+        projects: {
+          total: allProjects.length,
+          active: totalProjectsActive,
+          completed: totalProjectsCompleted,
+          paused: allProjects.filter(p => p.status === 'paused').length,
+          error: allProjects.filter(p => p.status === 'error').length
+        },
+
+        // Current usage
+        currentUsage: {
+          date: dailySummary.date,
+          totalRequests: dailySummary.totalRequests,
+          totalTokens: dailySummary.totalTokens,
+          byModel: dailySummary.byModel,
+          byKey: dailySummary.byKey
+        },
+
+        // Historical usage (7 days)
+        historicalUsage: historicalData,
+
+        // Detailed usage stats (for model breakdown)
+        detailedStats: allUsageStats.map((stat: any) => ({
+          keyLabel: stat.keyLabel,
+          apiKeyMasked: stat.apiKeyMasked,
+          model: stat.model,
+          requestCount: stat.requestCount,
+          tokenCount: stat.tokenCount,
+          lastUsed: stat.lastUsed
+        })),
+
+        // Server uptime
+        serverInfo: {
+          uptime: process.uptime(),
+          memoryUsage: process.memoryUsage(),
+          timestamp: new Date().toISOString()
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to get monitoring dashboard:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });
