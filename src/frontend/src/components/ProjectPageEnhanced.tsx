@@ -329,6 +329,7 @@ const ProjectPageEnhanced: React.FC = () => {
                 onSearchComplete={handleStep1Complete}
                 disabled={project.step1_complete}
                 existingSessionId={project.step1_session_id}
+                isComplete={project.step1_complete}
               />
             </>
           )}
@@ -340,6 +341,7 @@ const ProjectPageEnhanced: React.FC = () => {
               sessionId={project.step1_session_id || null}
               enabled={project.step1_complete && !project.step2_complete}
               onFilteringComplete={handleStep2Complete}
+              isComplete={project.step2_complete}
             />
           )}
 
@@ -350,6 +352,7 @@ const ProjectPageEnhanced: React.FC = () => {
               sessionId={project.step2_session_id || project.step1_session_id || null}
               enabled={project.step1_complete}
               onComplete={handleStep3Complete}
+              isComplete={project.step3_complete}
             />
           )}
         </div>

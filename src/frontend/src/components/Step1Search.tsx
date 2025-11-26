@@ -13,9 +13,11 @@ interface Step1SearchProps {
   onSearchComplete: (sessionId: string, rawCsvData: any[], autoMode: boolean, searchParameters?: any) => void;
   disabled?: boolean;
   existingSessionId?: string | null;
+  /** Whether Step 1 was already completed (used to restore UI state when loading completed project) */
+  isComplete?: boolean;
 }
 
-export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disabled, existingSessionId }) => {
+export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disabled, existingSessionId, isComplete: isCompleteProp = false }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [searchParameters, setSearchParameters] = useState<SearchParameters | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -126,7 +128,8 @@ export const Step1Search: React.FC<Step1SearchProps> = ({ onSearchComplete, disa
     }
   }, [progress, effectiveSessionId, existingSessionId, papers, searchParameters, onSearchComplete]);
 
-  const isComplete = progress?.status === 'completed';
+  // Consider complete if prop says so OR progress status is completed
+  const isComplete = isCompleteProp || progress?.status === 'completed';
   const hasError = progress?.status === 'error';
 
   return (

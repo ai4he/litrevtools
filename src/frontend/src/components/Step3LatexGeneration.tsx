@@ -11,6 +11,8 @@ interface Step3LatexGenerationProps {
   sessionId: string | null;
   enabled: boolean;
   onComplete?: (sessionId: string) => void;
+  /** Whether Step 3 was already completed (used to restore UI state when loading completed project) */
+  isComplete?: boolean;
 }
 
 export interface Step3LatexGenerationRef {
@@ -60,7 +62,8 @@ const OUTPUT_FILES: OutputFile[] = [
 
 export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3LatexGenerationProps>(({
   sessionId,
-  onComplete
+  onComplete,
+  isComplete: isCompleteProp = false
 }, ref) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -69,12 +72,14 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
   const [dataSource, setDataSource] = useState<'step1' | 'step2' | 'upload'>('step2');
   const [latexPrompt, setLatexPrompt] = useState('');
   const [downloading, setDownloading] = useState<Set<OutputType>>(new Set());
-  const [outputsGenerated, setOutputsGenerated] = useState(false);
+  // Initialize outputsGenerated from prop (handles completed project restoration)
+  const [outputsGenerated, setOutputsGenerated] = useState(isCompleteProp);
+  // Initialize availableOutputs - assume all available if isCompleteProp is true
   const [availableOutputs, setAvailableOutputs] = useState<Record<OutputType, boolean>>({
-    csv: false,
-    bibtex: false,
-    latex: false,
-    zip: false
+    csv: isCompleteProp,
+    bibtex: isCompleteProp,
+    latex: isCompleteProp,
+    zip: isCompleteProp
   });
   const [llmModel, setLlmModel] = useState<'auto' | 'gemini-3-pro-preview' | 'gemini-2.5-flash-lite' | 'gemini-2.5-flash' | 'gemini-2.0-flash-exp'>('auto');
   const [batchSize, setBatchSize] = useState(30);
