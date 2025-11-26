@@ -152,6 +152,7 @@ export const SearchPage: React.FC = () => {
             sessionId={step1SessionId}
             enabled={step1Complete}
             onFilteringComplete={handleStep2Complete}
+            isComplete={step2Complete}
           />
 
           {/* Step 3: LaTeX Generation */}

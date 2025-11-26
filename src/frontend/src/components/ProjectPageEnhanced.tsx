@@ -340,6 +340,7 @@ const ProjectPageEnhanced: React.FC = () => {
               sessionId={project.step1_session_id || null}
               enabled={project.step1_complete && !project.step2_complete}
               onFilteringComplete={handleStep2Complete}
+              isComplete={project.step2_complete}
             />
           )}
 

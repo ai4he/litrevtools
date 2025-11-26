@@ -50,6 +50,8 @@ interface Step2SemanticFilteringProps {
   sessionId: string | null;
   enabled: boolean;
   onFilteringComplete: (sessionId: string, labeledCsvData: any[]) => void;
+  /** Whether Step 2 was already completed (used to restore UI state after tab switch) */
+  isComplete?: boolean;
 }
 
 export interface Step2SemanticFilteringRef {
@@ -58,11 +60,13 @@ export interface Step2SemanticFilteringRef {
 
 export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step2SemanticFilteringProps>(({
   sessionId,
-  onFilteringComplete
+  onFilteringComplete,
+  isComplete: isCompleteProp = false
 }, ref) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
-  const [filteringCompleted, setFilteringCompleted] = useState(false);
+  // Initialize filteringCompleted from prop (handles tab switch restoration)
+  const [filteringCompleted, setFilteringCompleted] = useState(isCompleteProp);
   const [progress, setProgress] = useState<SemanticFilteringProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [useStep1Data, setUseStep1Data] = useState(true);
@@ -101,6 +105,25 @@ export const Step2SemanticFiltering = forwardRef<Step2SemanticFilteringRef, Step
       }, 100);
     }
   }));
+
+  // Load papers when mounting with isCompleteProp=true (e.g., after tab switch)
+  useEffect(() => {
+    if (isCompleteProp && activeSessionId && filteredPapers.length === 0) {
+      console.log('[Step2] Loading papers for completed step (tab switch restoration)');
+      const loadPapers = async () => {
+        try {
+          const sessionResponse = await sessionAPI.getById(activeSessionId);
+          if (sessionResponse.success && sessionResponse.session?.papers) {
+            setFilteredPapers(sessionResponse.session.papers);
+            console.log('[Step2] Loaded', sessionResponse.session.papers.length, 'papers for download');
+          }
+        } catch (e) {
+          console.error('[Step2] Failed to load papers for completed step:', e);
+        }
+      };
+      loadPapers();
+    }
+  }, [isCompleteProp, activeSessionId]);
 
   // Listen for semantic filter progress events via WebSocket
   useEffect(() => {
