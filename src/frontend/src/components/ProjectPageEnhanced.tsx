@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Pause, Square, CheckCircle } from 'lucide-react';
-import { projectAPI } from '../utils/api';
+import { projectAPI, sessionAPI } from '../utils/api';
 import { Step1Search } from './Step1Search';
 import { Step2SemanticFiltering, Step2SemanticFilteringRef } from './Step2SemanticFiltering';
 import { Step3LatexGeneration, Step3LatexGenerationRef } from './Step3LatexGeneration';
+import { useSocket } from '../hooks/useSocket';
 
 interface Project {
   id: string;
@@ -30,20 +31,23 @@ const ProjectPageEnhanced: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
+  const [stepRunningStatus, setStepRunningStatus] = useState<{
+    step: 1 | 2 | 3 | null;
+    status: 'running' | 'completed' | 'error' | null;
+    progress?: number;
+  }>({ step: null, status: null });
 
   const step2Ref = useRef<Step2SemanticFilteringRef>(null);
   const step3Ref = useRef<Step3LatexGenerationRef>(null);
   const isInitialLoadRef = useRef(true);
+  const { socket, reconnectCount } = useSocket();
+
+  // Track whether a step is running for polling interval
+  const isStepRunningRef = useRef(false);
 
   useEffect(() => {
-    if (id) {
-      isInitialLoadRef.current = true; // Reset on ID change
-      loadProject();
-      // Poll for updates every 30 seconds
-      const interval = setInterval(loadProject, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [id]);
+    isStepRunningRef.current = project?.current_step !== undefined && project?.current_step !== null;
+  }, [project?.current_step]);
 
   const loadProject = useCallback(async () => {
     if (!id) return;
@@ -72,6 +76,187 @@ const ProjectPageEnhanced: React.FC = () => {
       setLoading(false);
     }
   }, [id]);
+
+  // Polling for project updates with dynamic interval
+  useEffect(() => {
+    if (id) {
+      isInitialLoadRef.current = true; // Reset on ID change
+      loadProject();
+
+      // Dynamic polling: check the ref to determine interval
+      // Start with shorter interval and adjust based on state
+      let intervalId: ReturnType<typeof setInterval>;
+
+      const startPolling = () => {
+        // Use shorter polling interval (5s) when a step is running, 30s otherwise
+        const pollInterval = isStepRunningRef.current ? 5000 : 30000;
+        intervalId = setInterval(() => {
+          loadProject();
+          // Reschedule if interval should change
+          const currentShouldBeShort = isStepRunningRef.current;
+          const currentInterval = pollInterval;
+          const newInterval = currentShouldBeShort ? 5000 : 30000;
+          if (currentInterval !== newInterval) {
+            clearInterval(intervalId);
+            startPolling();
+          }
+        }, pollInterval);
+      };
+
+      startPolling();
+      return () => clearInterval(intervalId);
+    }
+  }, [id, loadProject]);
+
+  // Fetch step status immediately when project has a running step and we navigate back
+  useEffect(() => {
+    if (!project) return;
+
+    const currentStep = project.current_step;
+    if (!currentStep) {
+      // No step running, clear the status
+      setStepRunningStatus({ step: null, status: null });
+      return;
+    }
+
+    // Get the session ID for the current step
+    const sessionId = currentStep === 1 ? project.step1_session_id :
+                      currentStep === 2 ? (project.step2_session_id || project.step1_session_id) :
+                      (project.step3_session_id || project.step2_session_id || project.step1_session_id);
+
+    if (!sessionId) return;
+
+    console.log('[ProjectPage] Fetching step status for running step', currentStep, 'session:', sessionId);
+
+    const fetchStepStatus = async () => {
+      try {
+        const response = await sessionAPI.getStepStatus(sessionId);
+        if (response.success && response.stepStatus) {
+          const { stepStatus } = response;
+          console.log('[ProjectPage] Step status response:', stepStatus);
+
+          setStepRunningStatus({
+            step: stepStatus.step as 1 | 2 | 3,
+            status: stepStatus.status as 'running' | 'completed' | 'error',
+            progress: stepStatus.progress
+          });
+
+          // If step completed, refresh project to update completion status
+          if (stepStatus.status === 'completed') {
+            console.log('[ProjectPage] Step completed, refreshing project');
+            loadProject();
+          }
+        }
+      } catch (err) {
+        console.error('[ProjectPage] Failed to fetch step status:', err);
+      }
+    };
+
+    fetchStepStatus();
+  }, [project?.current_step, project?.step1_session_id, project?.step2_session_id, project?.step3_session_id, loadProject]);
+
+  // Socket.IO listener for real-time step progress updates
+  useEffect(() => {
+    if (!socket || !project) return;
+
+    const currentStep = project.current_step;
+    if (!currentStep) return;
+
+    // Get the session ID for the current step
+    const sessionId = currentStep === 1 ? project.step1_session_id :
+                      currentStep === 2 ? (project.step2_session_id || project.step1_session_id) :
+                      (project.step3_session_id || project.step2_session_id || project.step1_session_id);
+
+    if (!sessionId) return;
+
+    console.log('[ProjectPage] Setting up Socket.IO listeners for step', currentStep, 'session:', sessionId);
+
+    // Subscribe to session
+    socket.emit('subscribe', sessionId);
+
+    // Progress event handlers for each step type
+    const handleStep1Progress = (data: any) => {
+      console.log('[ProjectPage] Step 1 progress:', data.status, data.progress);
+      setStepRunningStatus({
+        step: 1,
+        status: data.status,
+        progress: data.progress
+      });
+      if (data.status === 'completed') {
+        console.log('[ProjectPage] Step 1 completed via Socket, refreshing project');
+        loadProject();
+      }
+    };
+
+    const handleStep2Progress = (data: any) => {
+      console.log('[ProjectPage] Step 2 progress:', data.status, data.progress);
+      setStepRunningStatus({
+        step: 2,
+        status: data.status,
+        progress: data.progress
+      });
+      if (data.status === 'completed') {
+        console.log('[ProjectPage] Step 2 completed via Socket, refreshing project');
+        loadProject();
+      }
+    };
+
+    const handleStep2Complete = (_data: any) => {
+      console.log('[ProjectPage] Step 2 complete event received');
+      setStepRunningStatus({ step: 2, status: 'completed' });
+      loadProject();
+    };
+
+    const handleStep3Progress = (data: any) => {
+      console.log('[ProjectPage] Step 3 progress:', data.status, data.progress);
+      setStepRunningStatus({
+        step: 3,
+        status: data.status,
+        progress: data.progress
+      });
+      if (data.status === 'completed') {
+        console.log('[ProjectPage] Step 3 completed via Socket, refreshing project');
+        loadProject();
+      }
+    };
+
+    const handleOutputs = (_data: any) => {
+      console.log('[ProjectPage] Outputs generated event received');
+      setStepRunningStatus({ step: 3, status: 'completed' });
+      loadProject();
+    };
+
+    // Listen for step-specific events
+    const step1ProgressEvent = `progress:${sessionId}`;
+    const step2ProgressEvent = `semantic-filter-progress:${sessionId}`;
+    const step2CompleteEvent = `semantic-filter-complete:${sessionId}`;
+    const step3ProgressEvent = `output-progress:${sessionId}`;
+    const outputsEvent = `outputs:${sessionId}`;
+
+    socket.on(step1ProgressEvent, handleStep1Progress);
+    socket.on(step2ProgressEvent, handleStep2Progress);
+    socket.on(step2CompleteEvent, handleStep2Complete);
+    socket.on(step3ProgressEvent, handleStep3Progress);
+    socket.on(outputsEvent, handleOutputs);
+
+    return () => {
+      console.log('[ProjectPage] Cleaning up Socket.IO listeners for session:', sessionId);
+      socket.off(step1ProgressEvent, handleStep1Progress);
+      socket.off(step2ProgressEvent, handleStep2Progress);
+      socket.off(step2CompleteEvent, handleStep2Complete);
+      socket.off(step3ProgressEvent, handleStep3Progress);
+      socket.off(outputsEvent, handleOutputs);
+      socket.emit('unsubscribe', sessionId);
+    };
+  }, [socket, project?.current_step, project?.step1_session_id, project?.step2_session_id, project?.step3_session_id, loadProject]);
+
+  // Re-sync on socket reconnection
+  useEffect(() => {
+    if (reconnectCount === 0 || !project?.current_step) return;
+
+    console.log('[ProjectPage] Socket reconnected, refreshing project');
+    loadProject();
+  }, [reconnectCount, loadProject]);
 
   const handlePause = async () => {
     if (!id) return;
@@ -241,8 +426,10 @@ const ProjectPageEnhanced: React.FC = () => {
                 <span className={`text-sm font-medium ${project.step1_complete ? 'text-gray-800' : 'text-gray-500'}`}>
                   Step 1
                 </span>
-                {project.current_step === 1 && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Running</span>
+                {(project.current_step === 1 || (stepRunningStatus.step === 1 && stepRunningStatus.status === 'running')) && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                    Running{stepRunningStatus.step === 1 && stepRunningStatus.progress !== undefined ? ` (${Math.round(stepRunningStatus.progress)}%)` : ''}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -254,8 +441,10 @@ const ProjectPageEnhanced: React.FC = () => {
                 <span className={`text-sm font-medium ${project.step2_complete ? 'text-gray-800' : 'text-gray-500'}`}>
                   Step 2
                 </span>
-                {project.current_step === 2 && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Running</span>
+                {(project.current_step === 2 || (stepRunningStatus.step === 2 && stepRunningStatus.status === 'running')) && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                    Running{stepRunningStatus.step === 2 && stepRunningStatus.progress !== undefined ? ` (${Math.round(stepRunningStatus.progress)}%)` : ''}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -267,8 +456,10 @@ const ProjectPageEnhanced: React.FC = () => {
                 <span className={`text-sm font-medium ${project.step3_complete ? 'text-gray-800' : 'text-gray-500'}`}>
                   Step 3
                 </span>
-                {project.current_step === 3 && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Running</span>
+                {(project.current_step === 3 || (stepRunningStatus.step === 3 && stepRunningStatus.status === 'running')) && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                    Running{stepRunningStatus.step === 3 && stepRunningStatus.progress !== undefined ? ` (${Math.round(stepRunningStatus.progress)}%)` : ''}
+                  </span>
                 )}
               </div>
             </div>
