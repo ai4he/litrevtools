@@ -140,6 +140,44 @@ export class SemanticScholarService {
         hasMore: response.data.next !== undefined
       };
     } catch (error: any) {
+      // Handle 400 Bad Request - often means offset exceeded limit or invalid params
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.message || error.response?.data?.error || '';
+        console.warn(`Semantic Scholar API returned 400: ${errorMessage}`);
+
+        // If offset is high, this is likely the API's way of saying "no more results"
+        // The API has a hard limit of 1000 results (offset + limit <= 1000)
+        if (requestedOffset >= 900 || (requestedOffset + requestedLimit > 1000)) {
+          console.log(`Treating 400 error as end of results (offset ${requestedOffset} likely exceeds API limit)`);
+          return {
+            papers: [],
+            total: requestedOffset, // We got at least this many
+            hasMore: false
+          };
+        }
+
+        // For other 400 errors, make it retryable in case it's transient
+        if (retryCount < maxRetries) {
+          const waitTime = 5000 * Math.pow(2, retryCount);
+          console.error(`Bad request (400), waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+          if (onWaitStart) {
+            onWaitStart(waitTime, `Bad request (400), retrying in ${waitTime / 1000}s`);
+          }
+          await this.delay(waitTime);
+          if (onWaitEnd) {
+            onWaitEnd();
+          }
+          return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
+        }
+
+        // After max retries, treat as retryable error for batch recovery
+        const retryableError = new Error(`Bad request (400) after ${maxRetries} retries: ${errorMessage}`);
+        (retryableError as any).retryable = true;
+        (retryableError as any).type = 'bad_request';
+        (retryableError as any).params = params;
+        throw retryableError;
+      }
+
       if (error.response?.status === 429) {
         if (retryCount >= maxRetries) {
           console.error(`Rate limit exceeded. Max retries (${maxRetries}) reached.`);
@@ -231,8 +269,27 @@ export class SemanticScholarService {
         return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
       }
 
+      // For any other errors, make them retryable if we haven't exceeded retries
+      if (retryCount < maxRetries) {
+        const waitTime = 5000 * Math.pow(2, retryCount);
+        console.error(`Unexpected error: ${error.message}, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Unexpected error, retrying in ${waitTime / 1000}s`);
+        }
+        await this.delay(waitTime);
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
+        return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
+      }
+
       console.error(`Semantic Scholar API error: ${error.message}`, error.response?.data || '');
-      throw new Error(`Semantic Scholar API error: ${error.message}`);
+      // Make all errors retryable for batch recovery mechanism
+      const retryableError = new Error(`Semantic Scholar API error after ${maxRetries} retries: ${error.message}`);
+      (retryableError as any).retryable = true;
+      (retryableError as any).type = 'unknown';
+      (retryableError as any).params = params;
+      throw retryableError;
     }
   }
 
