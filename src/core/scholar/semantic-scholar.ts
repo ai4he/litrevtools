@@ -142,17 +142,19 @@ export class SemanticScholarService {
     } catch (error: any) {
       if (error.response?.status === 429) {
         if (retryCount >= maxRetries) {
-          console.error(`Rate limit exceeded. Max retries (${maxRetries}) reached. Returning empty results.`);
-          return {
-            papers: [],
-            total: 0,
-            hasMore: false
-          };
+          console.error(`Rate limit exceeded. Max retries (${maxRetries}) reached.`);
+          // Throw a retryable error instead of returning empty results
+          const retryableError = new Error(`Rate limit exceeded after ${maxRetries} retries`);
+          (retryableError as any).retryable = true;
+          (retryableError as any).type = 'rate_limit';
+          (retryableError as any).params = params;
+          throw retryableError;
         }
-        const waitTime = 10000; // Wait 10 seconds (API should recover quickly)
+        // Exponential backoff: 10s, 20s, 40s, etc.
+        const waitTime = 10000 * Math.pow(2, retryCount);
         console.error(`Rate limit exceeded, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
         if (onWaitStart) {
-          onWaitStart(waitTime, `Rate limit exceeded (429), retrying in ${waitTime / 1000}s`);
+          onWaitStart(waitTime, `Rate limit exceeded (429), retrying in ${waitTime / 1000}s (attempt ${retryCount + 1}/${maxRetries})`);
         }
         await this.delay(waitTime);
         if (onWaitEnd) {
@@ -164,22 +166,69 @@ export class SemanticScholarService {
       // Handle timeout errors
       if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
         if (retryCount >= maxRetries) {
-          console.error(`Request timeout. Max retries (${maxRetries}) reached. Returning empty results.`);
-          return {
-            papers: [],
-            total: 0,
-            hasMore: false
-          };
+          console.error(`Request timeout. Max retries (${maxRetries}) reached.`);
+          // Throw a retryable error instead of returning empty results
+          const retryableError = new Error(`Request timeout after ${maxRetries} retries`);
+          (retryableError as any).retryable = true;
+          (retryableError as any).type = 'timeout';
+          (retryableError as any).params = params;
+          throw retryableError;
         }
-        console.error(`Request timeout, retrying... (attempt ${retryCount + 1}/${maxRetries})`);
-        await this.delay(5000); // Wait 5 seconds before retry
-        return this.search(params, retryCount + 1, maxRetries);
+        // Exponential backoff for timeouts: 5s, 10s, 20s
+        const waitTime = 5000 * Math.pow(2, retryCount);
+        console.error(`Request timeout, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Request timeout, retrying in ${waitTime / 1000}s (attempt ${retryCount + 1}/${maxRetries})`);
+        }
+        await this.delay(waitTime);
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
+        return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
       }
 
-      // Handle network errors
-      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-        console.error(`Network error: ${error.message}. Check your internet connection.`);
-        throw new Error(`Network error: Cannot reach Semantic Scholar API. Please check your internet connection.`);
+      // Handle 5xx server errors (retryable)
+      if (error.response?.status >= 500 && error.response?.status < 600) {
+        if (retryCount >= maxRetries) {
+          console.error(`Server error (${error.response.status}). Max retries (${maxRetries}) reached.`);
+          const retryableError = new Error(`Server error ${error.response.status} after ${maxRetries} retries`);
+          (retryableError as any).retryable = true;
+          (retryableError as any).type = 'server_error';
+          (retryableError as any).params = params;
+          throw retryableError;
+        }
+        const waitTime = 5000 * Math.pow(2, retryCount);
+        console.error(`Server error (${error.response.status}), waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Server error (${error.response.status}), retrying in ${waitTime / 1000}s`);
+        }
+        await this.delay(waitTime);
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
+        return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
+      }
+
+      // Handle network errors (retryable)
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
+        if (retryCount >= maxRetries) {
+          console.error(`Network error: ${error.message}. Max retries (${maxRetries}) reached.`);
+          const retryableError = new Error(`Network error after ${maxRetries} retries: ${error.message}`);
+          (retryableError as any).retryable = true;
+          (retryableError as any).type = 'network';
+          (retryableError as any).params = params;
+          throw retryableError;
+        }
+        const waitTime = 5000 * Math.pow(2, retryCount);
+        console.error(`Network error, waiting ${waitTime / 1000}s before retry... (attempt ${retryCount + 1}/${maxRetries})`);
+        if (onWaitStart) {
+          onWaitStart(waitTime, `Network error, retrying in ${waitTime / 1000}s`);
+        }
+        await this.delay(waitTime);
+        if (onWaitEnd) {
+          onWaitEnd();
+        }
+        return this.search(params, retryCount + 1, maxRetries, onWaitStart, onWaitEnd);
       }
 
       console.error(`Semantic Scholar API error: ${error.message}`, error.response?.data || '');

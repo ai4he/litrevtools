@@ -12,6 +12,7 @@ export class ScholarExtractor {
   private database: LitRevDatabase;
   private sessionId?: string;
   private isRunning: boolean = false;
+  private isPaused: boolean = false;
   private startTime?: number;
   private onProgress?: ProgressCallback;
   private onPaper?: PaperCallback;
@@ -245,6 +246,17 @@ export class ScholarExtractor {
     let allPapers: Paper[] = [];
     let totalFetched = 0; // Track total papers fetched across all years
 
+    // Track failed batches for retry
+    interface FailedBatch {
+      year: number;
+      offset: number;
+      limit: number;
+      attempts: number;
+      lastError: string;
+    }
+    const failedBatches: FailedBatch[] = [];
+    const maxBatchRetries = 5; // Maximum retries per batch after initial failure
+
     try {
       // If no year range is specified, search without year filter
       if (!years) {
@@ -275,6 +287,24 @@ export class ScholarExtractor {
         // Paginate if needed
         // If maxResultsPerYear is undefined, fetch all available papers
         while (true) {
+          // Wait while paused
+          while (this.isPaused) {
+            console.log(`[ScholarExtractor] Search paused at year ${year}, offset ${offset}`);
+            this.updateProgress({
+              currentTask: `⏸️  Search paused at year ${year}`,
+              nextTask: `Waiting to resume`,
+              progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+              currentYear: year
+            });
+            await this.delay(1000); // Check every second
+          }
+
+          // Check if stopped
+          if (!this.isRunning) {
+            console.log('[ScholarExtractor] Search stopped during year iteration');
+            return;
+          }
+
           const limit = maxResultsPerYear
             ? Math.min(maxPerRequest, maxResultsPerYear - fetchedForYear)
             : maxPerRequest;
@@ -287,88 +317,231 @@ export class ScholarExtractor {
             currentYear: year
           });
 
-          const result = await semanticScholar.search(
-            {
-              query: parameters.inclusionKeywords.join(' '),
-              year,
-              limit,
-              offset
-            },
-            0, // retryCount
-            3, // maxRetries
-            (waitTimeMs: number, reason: string) => {
-              // onWaitStart callback - update progress to inform user of waiting
-              this.updateProgress({
-                currentTask: `⏸️  ${reason}`,
-                nextTask: `Will resume after waiting`,
-                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
-                currentYear: year,
-                totalPapers: totalFetched
-              });
-            },
-            () => {
-              // onWaitEnd callback - update progress to resume fetching
-              this.updateProgress({
-                currentTask: `Year ${year}: Fetching papers (offset ${offset}, got ${fetchedForYear} so far)`,
-                nextTask: `Processing batch of ${limit} papers`,
-                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
-                currentYear: year,
-                totalPapers: totalFetched
-              });
-            }
-          );
+          try {
+            const result = await semanticScholar.search(
+              {
+                query: parameters.inclusionKeywords.join(' '),
+                year,
+                limit,
+                offset
+              },
+              0, // retryCount
+              3, // maxRetries
+              (waitTimeMs: number, reason: string) => {
+                // onWaitStart callback - update progress to inform user of waiting
+                this.updateProgress({
+                  currentTask: `⏸️  ${reason}`,
+                  nextTask: `Will resume after waiting`,
+                  progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                  currentYear: year,
+                  totalPapers: totalFetched
+                });
+              },
+              () => {
+                // onWaitEnd callback - update progress to resume fetching
+                this.updateProgress({
+                  currentTask: `Year ${year}: Fetching papers (offset ${offset}, got ${fetchedForYear} so far)`,
+                  nextTask: `Processing batch of ${limit} papers`,
+                  progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                  currentYear: year,
+                  totalPapers: totalFetched
+                });
+              }
+            );
 
-          // Detect stuck loops - if we get empty results repeatedly, stop
-          if (result.papers.length === 0) {
-            consecutiveEmptyResults++;
-            console.log(`Year ${year}: Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
-            if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
-              console.log(`Year ${year}: Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+            // Detect stuck loops - if we get empty results repeatedly, stop
+            if (result.papers.length === 0) {
+              consecutiveEmptyResults++;
+              console.log(`Year ${year}: Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
+              if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
+                console.log(`Year ${year}: Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+                break;
+              }
+            } else {
+              consecutiveEmptyResults = 0; // Reset counter on successful fetch
+            }
+
+            // Filter by date (month/day) if specified
+            let papersToAdd = result.papers;
+            if (parameters.startMonth || parameters.endMonth || parameters.startDay || parameters.endDay) {
+              papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, year, years[0], years[years.length - 1]);
+            }
+
+            allPapers.push(...papersToAdd);
+            totalFetched += papersToAdd.length;
+
+            // Save papers incrementally
+            for (const paper of papersToAdd) {
+              this.database.addPaper(this.sessionId!, paper);
+              if (this.onPaper) {
+                this.onPaper(paper, this.sessionId!);
+              }
+            }
+
+            fetchedForYear += result.papers.length;
+            offset += result.papers.length;
+
+            console.log(`Year ${year}: Found ${fetchedForYear}/${result.total} papers (total across all years: ${totalFetched})`);
+
+            // Update status after fetching batch
+            this.updateProgress({
+              currentTask: `Year ${year}: Retrieved ${fetchedForYear}/${result.total} papers`,
+              nextTask: result.hasMore ? `Fetching next batch` : `Moving to next year`,
+              progress: 20 + (60 * (i + fetchedForYear / Math.max(1, result.total)) / years.length),
+              currentYear: year,
+              totalPapers: totalFetched
+            });
+
+            // Stop if no more results available
+            if (!result.hasMore || result.papers.length === 0) {
               break;
             }
-          } else {
-            consecutiveEmptyResults = 0; // Reset counter on successful fetch
-          }
 
-          // Filter by date (month/day) if specified
-          let papersToAdd = result.papers;
-          if (parameters.startMonth || parameters.endMonth || parameters.startDay || parameters.endDay) {
-            papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, year, years[0], years[years.length - 1]);
-          }
-
-          allPapers.push(...papersToAdd);
-          totalFetched += papersToAdd.length;
-
-          // Save papers incrementally
-          for (const paper of papersToAdd) {
-            this.database.addPaper(this.sessionId!, paper);
-            if (this.onPaper) {
-              this.onPaper(paper, this.sessionId!);
+            // Stop if we've reached the target for this year (when limit is specified)
+            if (maxResultsPerYear && fetchedForYear >= maxResultsPerYear) {
+              break;
+            }
+          } catch (batchError: any) {
+            // Check if this is a retryable error
+            if (batchError.retryable) {
+              console.error(`Failed batch for year ${year}, offset ${offset}: ${batchError.message}`);
+              failedBatches.push({
+                year,
+                offset,
+                limit,
+                attempts: 1,
+                lastError: batchError.message
+              });
+              // Move to next offset to continue with other batches
+              offset += limit;
+              // If we can't determine if there are more results, assume there might be
+              // (up to API limit of 1000 per year)
+              if (offset >= 1000) {
+                break;
+              }
+            } else {
+              // Non-retryable error - throw it
+              throw batchError;
             }
           }
+        }
+      }
 
-          fetchedForYear += result.papers.length;
-          offset += result.papers.length;
+      // Retry failed batches with longer waits
+      if (failedBatches.length > 0) {
+        console.log(`\n=== Retrying ${failedBatches.length} failed batches ===`);
+        this.updateProgress({
+          currentTask: `Retrying ${failedBatches.length} failed batches`,
+          nextTask: 'Recovering missed papers',
+          progress: 75,
+          totalPapers: totalFetched
+        });
 
-          console.log(`Year ${year}: Found ${fetchedForYear}/${result.total} papers (total across all years: ${totalFetched})`);
+        for (const batch of failedBatches) {
+          while (batch.attempts < maxBatchRetries) {
+            // Check if stopped
+            if (!this.isRunning) {
+              console.log('[ScholarExtractor] Search stopped during retry');
+              break;
+            }
 
-          // Update status after fetching batch
-          this.updateProgress({
-            currentTask: `Year ${year}: Retrieved ${fetchedForYear}/${result.total} papers`,
-            nextTask: result.hasMore ? `Fetching next batch` : `Moving to next year`,
-            progress: 20 + (60 * (i + fetchedForYear / Math.max(1, result.total)) / years.length),
-            currentYear: year,
-            totalPapers: totalFetched
-          });
+            // Wait while paused
+            while (this.isPaused) {
+              await this.delay(1000);
+            }
 
-          // Stop if no more results available
-          if (!result.hasMore || result.papers.length === 0) {
-            break;
+            batch.attempts++;
+            // Exponential backoff with longer waits: 30s, 60s, 120s, 240s, 480s
+            const waitTime = 30000 * Math.pow(2, batch.attempts - 1);
+            console.log(`Retrying batch (year ${batch.year}, offset ${batch.offset}) - attempt ${batch.attempts}/${maxBatchRetries} after ${waitTime / 1000}s wait`);
+
+            this.updateProgress({
+              currentTask: `⏸️  Waiting ${waitTime / 1000}s before retry (year ${batch.year}, offset ${batch.offset})`,
+              nextTask: `Attempt ${batch.attempts}/${maxBatchRetries}`,
+              progress: 75,
+              currentYear: batch.year,
+              totalPapers: totalFetched
+            });
+
+            await this.delay(waitTime);
+
+            this.updateProgress({
+              currentTask: `Retrying batch (year ${batch.year}, offset ${batch.offset})`,
+              nextTask: `Attempt ${batch.attempts}/${maxBatchRetries}`,
+              progress: 75,
+              currentYear: batch.year,
+              totalPapers: totalFetched
+            });
+
+            try {
+              const result = await semanticScholar.search(
+                {
+                  query: parameters.inclusionKeywords.join(' '),
+                  year: batch.year,
+                  limit: batch.limit,
+                  offset: batch.offset
+                },
+                0,
+                3, // Still do internal retries
+                (waitTimeMs: number, reason: string) => {
+                  this.updateProgress({
+                    currentTask: `⏸️  ${reason}`,
+                    nextTask: `Retrying batch for year ${batch.year}`,
+                    progress: 75,
+                    currentYear: batch.year,
+                    totalPapers: totalFetched
+                  });
+                },
+                () => {
+                  this.updateProgress({
+                    currentTask: `Retrying batch (year ${batch.year}, offset ${batch.offset})`,
+                    nextTask: `Processing recovered papers`,
+                    progress: 75,
+                    currentYear: batch.year,
+                    totalPapers: totalFetched
+                  });
+                }
+              );
+
+              if (result.papers.length > 0) {
+                // Filter by date if specified
+                let papersToAdd = result.papers;
+                if (parameters.startMonth || parameters.endMonth || parameters.startDay || parameters.endDay) {
+                  papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, batch.year, years![0], years![years!.length - 1]);
+                }
+
+                allPapers.push(...papersToAdd);
+                totalFetched += papersToAdd.length;
+
+                for (const paper of papersToAdd) {
+                  this.database.addPaper(this.sessionId!, paper);
+                  if (this.onPaper) {
+                    this.onPaper(paper, this.sessionId!);
+                  }
+                }
+
+                console.log(`✓ Recovered ${papersToAdd.length} papers from batch (year ${batch.year}, offset ${batch.offset})`);
+              }
+
+              // Successfully recovered - break out of retry loop
+              break;
+            } catch (retryError: any) {
+              batch.lastError = retryError.message;
+              console.error(`Retry failed for batch (year ${batch.year}, offset ${batch.offset}): ${retryError.message}`);
+
+              if (batch.attempts >= maxBatchRetries) {
+                console.error(`✗ Giving up on batch (year ${batch.year}, offset ${batch.offset}) after ${maxBatchRetries} attempts`);
+              }
+            }
           }
+        }
 
-          // Stop if we've reached the target for this year (when limit is specified)
-          if (maxResultsPerYear && fetchedForYear >= maxResultsPerYear) {
-            break;
+        // Log final status of failed batches
+        const stillFailed = failedBatches.filter(b => b.attempts >= maxBatchRetries);
+        if (stillFailed.length > 0) {
+          console.warn(`\n⚠️  ${stillFailed.length} batches could not be recovered after ${maxBatchRetries} attempts each:`);
+          for (const batch of stillFailed) {
+            console.warn(`   - Year ${batch.year}, offset ${batch.offset}: ${batch.lastError}`);
           }
         }
       }
@@ -701,8 +874,36 @@ export class ScholarExtractor {
     let consecutiveEmptyResults = 0; // Track empty results to detect stuck loops
     const maxConsecutiveEmpty = 3; // Stop after 3 consecutive empty results
 
+    // Track failed batches for retry
+    interface FailedBatch {
+      offset: number;
+      limit: number;
+      attempts: number;
+      lastError: string;
+    }
+    const failedBatches: FailedBatch[] = [];
+    const maxBatchRetries = 5; // Maximum retries per batch after initial failure
+
     // Paginate through all results
     while (true) {
+      // Wait while paused
+      while (this.isPaused) {
+        console.log(`[ScholarExtractor] Search paused at offset ${offset}`);
+        this.updateProgress({
+          currentTask: `⏸️  Search paused`,
+          nextTask: `Waiting to resume`,
+          progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+          totalPapers: totalFetched
+        });
+        await this.delay(1000); // Check every second
+      }
+
+      // Check if stopped
+      if (!this.isRunning) {
+        console.log('[ScholarExtractor] Search stopped during pagination');
+        return;
+      }
+
       const limit = maxResults
         ? Math.min(maxPerRequest, maxResults - totalFetched)
         : maxPerRequest;
@@ -715,85 +916,215 @@ export class ScholarExtractor {
         totalPapers: totalFetched
       });
 
-      const result = await semanticScholar.search(
-        {
-          query: parameters.inclusionKeywords.join(' '),
-          // No year filter - search all years
-          limit,
-          offset
-        },
-        0, // retryCount
-        3, // maxRetries
-        (waitTimeMs: number, reason: string) => {
-          // onWaitStart callback - update progress to inform user of waiting
-          this.updateProgress({
-            currentTask: `⏸️  ${reason}`,
-            nextTask: `Will resume after waiting`,
-            progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
-            totalPapers: totalFetched
-          });
-        },
-        () => {
-          // onWaitEnd callback - update progress to resume fetching
-          this.updateProgress({
-            currentTask: `Fetching papers (offset ${offset}, got ${totalFetched} so far)`,
-            nextTask: `Processing batch of ${limit} papers`,
-            progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
-            totalPapers: totalFetched
-          });
-        }
-      );
+      try {
+        const result = await semanticScholar.search(
+          {
+            query: parameters.inclusionKeywords.join(' '),
+            // No year filter - search all years
+            limit,
+            offset
+          },
+          0, // retryCount
+          3, // maxRetries
+          (waitTimeMs: number, reason: string) => {
+            // onWaitStart callback - update progress to inform user of waiting
+            this.updateProgress({
+              currentTask: `⏸️  ${reason}`,
+              nextTask: `Will resume after waiting`,
+              progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+              totalPapers: totalFetched
+            });
+          },
+          () => {
+            // onWaitEnd callback - update progress to resume fetching
+            this.updateProgress({
+              currentTask: `Fetching papers (offset ${offset}, got ${totalFetched} so far)`,
+              nextTask: `Processing batch of ${limit} papers`,
+              progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 1000)) * 60),
+              totalPapers: totalFetched
+            });
+          }
+        );
 
-      // Detect stuck loops - if we get empty results repeatedly, stop
-      if (result.papers.length === 0) {
-        consecutiveEmptyResults++;
-        console.log(`Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
-        if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
-          console.log(`Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+        // Detect stuck loops - if we get empty results repeatedly, stop
+        if (result.papers.length === 0) {
+          consecutiveEmptyResults++;
+          console.log(`Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
+          if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
+            console.log(`Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+            break;
+          }
+        } else {
+          consecutiveEmptyResults = 0; // Reset counter on successful fetch
+        }
+
+        // Filter by month if specified (though this is less meaningful without year context)
+        let papersToAdd = result.papers;
+        if (parameters.startMonth || parameters.endMonth) {
+          console.warn('Month filtering without year range may produce unexpected results');
+          // When no year range is specified, we can't effectively filter by month
+          // So we'll just include all papers
+        }
+
+        totalFetched += papersToAdd.length;
+
+        // Save papers incrementally
+        for (const paper of papersToAdd) {
+          this.database.addPaper(this.sessionId!, paper);
+          if (this.onPaper) {
+            this.onPaper(paper, this.sessionId!);
+          }
+        }
+
+        offset += result.papers.length;
+
+        console.log(`Found ${totalFetched}/${result.total} papers (all years)`);
+
+        // Update status after fetching batch
+        this.updateProgress({
+          currentTask: `Retrieved ${totalFetched}/${result.total} papers`,
+          nextTask: result.hasMore ? `Fetching next batch from offset ${offset}` : 'Finalizing search',
+          progress: 20 + Math.min(60, (totalFetched / Math.max(1, result.total)) * 60),
+          totalPapers: totalFetched
+        });
+
+        // Stop if no more results available
+        if (!result.hasMore || result.papers.length === 0) {
           break;
         }
-      } else {
-        consecutiveEmptyResults = 0; // Reset counter on successful fetch
-      }
 
-      // Filter by month if specified (though this is less meaningful without year context)
-      let papersToAdd = result.papers;
-      if (parameters.startMonth || parameters.endMonth) {
-        console.warn('Month filtering without year range may produce unexpected results');
-        // When no year range is specified, we can't effectively filter by month
-        // So we'll just include all papers
-      }
-
-      totalFetched += papersToAdd.length;
-
-      // Save papers incrementally
-      for (const paper of papersToAdd) {
-        this.database.addPaper(this.sessionId!, paper);
-        if (this.onPaper) {
-          this.onPaper(paper, this.sessionId!);
+        // Stop if we've reached the max results (when limit is specified)
+        if (maxResults && totalFetched >= maxResults) {
+          break;
+        }
+      } catch (batchError: any) {
+        // Check if this is a retryable error
+        if (batchError.retryable) {
+          console.error(`Failed batch at offset ${offset}: ${batchError.message}`);
+          failedBatches.push({
+            offset,
+            limit,
+            attempts: 1,
+            lastError: batchError.message
+          });
+          // Move to next offset to continue with other batches
+          offset += limit;
+          // If we can't determine if there are more results, assume there might be
+          // (up to API limit of 1000)
+          if (offset >= 1000) {
+            break;
+          }
+        } else {
+          // Non-retryable error - throw it
+          throw batchError;
         }
       }
+    }
 
-      offset += result.papers.length;
-
-      console.log(`Found ${totalFetched}/${result.total} papers (all years)`);
-
-      // Update status after fetching batch
+    // Retry failed batches with longer waits
+    if (failedBatches.length > 0) {
+      console.log(`\n=== Retrying ${failedBatches.length} failed batches ===`);
       this.updateProgress({
-        currentTask: `Retrieved ${totalFetched}/${result.total} papers`,
-        nextTask: result.hasMore ? `Fetching next batch from offset ${offset}` : 'Finalizing search',
-        progress: 20 + Math.min(60, (totalFetched / Math.max(1, result.total)) * 60),
+        currentTask: `Retrying ${failedBatches.length} failed batches`,
+        nextTask: 'Recovering missed papers',
+        progress: 75,
         totalPapers: totalFetched
       });
 
-      // Stop if no more results available
-      if (!result.hasMore || result.papers.length === 0) {
-        break;
+      for (const batch of failedBatches) {
+        while (batch.attempts < maxBatchRetries) {
+          // Check if stopped
+          if (!this.isRunning) {
+            console.log('[ScholarExtractor] Search stopped during retry');
+            break;
+          }
+
+          // Wait while paused
+          while (this.isPaused) {
+            await this.delay(1000);
+          }
+
+          batch.attempts++;
+          // Exponential backoff with longer waits: 30s, 60s, 120s, 240s, 480s
+          const waitTime = 30000 * Math.pow(2, batch.attempts - 1);
+          console.log(`Retrying batch (offset ${batch.offset}) - attempt ${batch.attempts}/${maxBatchRetries} after ${waitTime / 1000}s wait`);
+
+          this.updateProgress({
+            currentTask: `⏸️  Waiting ${waitTime / 1000}s before retry (offset ${batch.offset})`,
+            nextTask: `Attempt ${batch.attempts}/${maxBatchRetries}`,
+            progress: 75,
+            totalPapers: totalFetched
+          });
+
+          await this.delay(waitTime);
+
+          this.updateProgress({
+            currentTask: `Retrying batch (offset ${batch.offset})`,
+            nextTask: `Attempt ${batch.attempts}/${maxBatchRetries}`,
+            progress: 75,
+            totalPapers: totalFetched
+          });
+
+          try {
+            const result = await semanticScholar.search(
+              {
+                query: parameters.inclusionKeywords.join(' '),
+                limit: batch.limit,
+                offset: batch.offset
+              },
+              0,
+              3, // Still do internal retries
+              (waitTimeMs: number, reason: string) => {
+                this.updateProgress({
+                  currentTask: `⏸️  ${reason}`,
+                  nextTask: `Retrying batch at offset ${batch.offset}`,
+                  progress: 75,
+                  totalPapers: totalFetched
+                });
+              },
+              () => {
+                this.updateProgress({
+                  currentTask: `Retrying batch (offset ${batch.offset})`,
+                  nextTask: `Processing recovered papers`,
+                  progress: 75,
+                  totalPapers: totalFetched
+                });
+              }
+            );
+
+            if (result.papers.length > 0) {
+              totalFetched += result.papers.length;
+
+              for (const paper of result.papers) {
+                this.database.addPaper(this.sessionId!, paper);
+                if (this.onPaper) {
+                  this.onPaper(paper, this.sessionId!);
+                }
+              }
+
+              console.log(`✓ Recovered ${result.papers.length} papers from batch (offset ${batch.offset})`);
+            }
+
+            // Successfully recovered - break out of retry loop
+            break;
+          } catch (retryError: any) {
+            batch.lastError = retryError.message;
+            console.error(`Retry failed for batch (offset ${batch.offset}): ${retryError.message}`);
+
+            if (batch.attempts >= maxBatchRetries) {
+              console.error(`✗ Giving up on batch (offset ${batch.offset}) after ${maxBatchRetries} attempts`);
+            }
+          }
+        }
       }
 
-      // Stop if we've reached the max results (when limit is specified)
-      if (maxResults && totalFetched >= maxResults) {
-        break;
+      // Log final status of failed batches
+      const stillFailed = failedBatches.filter(b => b.attempts >= maxBatchRetries);
+      if (stillFailed.length > 0) {
+        console.warn(`\n⚠️  ${stillFailed.length} batches could not be recovered after ${maxBatchRetries} attempts each:`);
+        for (const batch of stillFailed) {
+          console.warn(`   - Offset ${batch.offset}: ${batch.lastError}`);
+        }
       }
     }
 
@@ -912,14 +1243,16 @@ export class ScholarExtractor {
    * Pause the current search
    */
   pause(): void {
-    // TODO: Implement pause functionality
+    this.isPaused = true;
+    console.log('[ScholarExtractor] Search paused');
   }
 
   /**
    * Resume a paused search
    */
   resume(): void {
-    // TODO: Implement resume functionality
+    this.isPaused = false;
+    console.log('[ScholarExtractor] Search resumed');
   }
 
   /**
@@ -927,6 +1260,8 @@ export class ScholarExtractor {
    */
   stop(): void {
     this.isRunning = false;
+    this.isPaused = false;
+    console.log('[ScholarExtractor] Search stopped');
   }
 
   /**
