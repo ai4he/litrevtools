@@ -293,6 +293,16 @@ export const Step3LatexGeneration = forwardRef<Step3LatexGenerationRef, Step3Lat
         const response = await sessionAPI.getStepStatus(activeSessionId);
         console.log('[Step3] Reconnection status response:', response);
 
+        // If server returned an actualSessionId (for CSV uploads), update our state
+        if (response.actualSessionId && tempSessionId) {
+          console.log('[Step3] Reconnection: Got actual session ID:', response.actualSessionId);
+          // Update tempSessionId to actual session ID for downloads
+          if (response.actualSessionId !== tempSessionId) {
+            console.log('[Step3] Updating tempSessionId from', tempSessionId, 'to', response.actualSessionId);
+            setTempSessionId(response.actualSessionId);
+          }
+        }
+
         if (response.success && response.stepStatus) {
           const { stepStatus } = response;
 

@@ -48,6 +48,10 @@ export interface Paper {
   systematic_filtering_exclusion?: boolean; // 1 if meets LLM exclusion criteria, 0 otherwise
   systematic_filtering_inclusion_reasoning?: string; // LLM reasoning for inclusion decision
   systematic_filtering_exclusion_reasoning?: string; // LLM reasoning for exclusion decision
+  // Keyword presence detection (post-retrieval validation)
+  all_keywords_present?: boolean; // True if ALL inclusion keywords are found in title/abstract
+  keyword_presence_details?: Record<string, boolean>; // Per-keyword presence map (keyword -> found)
+  missing_keywords?: string[]; // List of keywords NOT found in title/abstract
 }
 
 export interface SearchProgress {

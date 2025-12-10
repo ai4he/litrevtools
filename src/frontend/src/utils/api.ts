@@ -83,6 +83,7 @@ export interface StepStatusResponse {
   isSearching: boolean;
   sessionProgress: any;
   sessionStatus: string;
+  actualSessionId?: string | null; // For CSV uploads: maps temp session ID to actual session ID
 }
 
 export const sessionAPI = {

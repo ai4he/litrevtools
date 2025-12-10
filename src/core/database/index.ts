@@ -100,6 +100,9 @@ export class LitRevDatabase {
         systematic_filtering_inclusion_reasoning TEXT,
         systematic_filtering_exclusion INTEGER,
         systematic_filtering_exclusion_reasoning TEXT,
+        all_keywords_present INTEGER,
+        keyword_presence_details TEXT,
+        missing_keywords TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
       )
     `);
@@ -122,6 +125,23 @@ export class LitRevDatabase {
     }
     try {
       this.db.exec(`ALTER TABLE papers ADD COLUMN systematic_filtering_exclusion_reasoning TEXT`);
+    } catch (e) {
+      // Column already exists
+    }
+
+    // Add keyword presence columns to existing databases (migration)
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN all_keywords_present INTEGER`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN keyword_presence_details TEXT`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE papers ADD COLUMN missing_keywords TEXT`);
     } catch (e) {
       // Column already exists
     }
@@ -579,8 +599,9 @@ export class LitRevDatabase {
         source, pdf_url, venue, doi, keywords, extracted_at, included,
         exclusion_reason, category, llm_confidence, llm_reasoning,
         systematic_filtering_inclusion, systematic_filtering_inclusion_reasoning,
-        systematic_filtering_exclusion, systematic_filtering_exclusion_reasoning
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        systematic_filtering_exclusion, systematic_filtering_exclusion_reasoning,
+        all_keywords_present, keyword_presence_details, missing_keywords
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -606,7 +627,10 @@ export class LitRevDatabase {
       paper.systematic_filtering_inclusion !== undefined ? (paper.systematic_filtering_inclusion ? 1 : 0) : null,
       paper.systematic_filtering_inclusion_reasoning || null,
       paper.systematic_filtering_exclusion !== undefined ? (paper.systematic_filtering_exclusion ? 1 : 0) : null,
-      paper.systematic_filtering_exclusion_reasoning || null
+      paper.systematic_filtering_exclusion_reasoning || null,
+      paper.all_keywords_present !== undefined ? (paper.all_keywords_present ? 1 : 0) : null,
+      paper.keyword_presence_details ? JSON.stringify(paper.keyword_presence_details) : null,
+      paper.missing_keywords ? JSON.stringify(paper.missing_keywords) : null
     );
 
     // Update session counts
@@ -1117,7 +1141,11 @@ export class LitRevDatabase {
       systematic_filtering_inclusion: row.systematic_filtering_inclusion !== null ? (row.systematic_filtering_inclusion === 1) : undefined,
       systematic_filtering_inclusion_reasoning: row.systematic_filtering_inclusion_reasoning,
       systematic_filtering_exclusion: row.systematic_filtering_exclusion !== null ? (row.systematic_filtering_exclusion === 1) : undefined,
-      systematic_filtering_exclusion_reasoning: row.systematic_filtering_exclusion_reasoning
+      systematic_filtering_exclusion_reasoning: row.systematic_filtering_exclusion_reasoning,
+      // Keyword presence fields
+      all_keywords_present: row.all_keywords_present !== null ? (row.all_keywords_present === 1) : undefined,
+      keyword_presence_details: row.keyword_presence_details ? JSON.parse(row.keyword_presence_details) : undefined,
+      missing_keywords: row.missing_keywords ? JSON.parse(row.missing_keywords) : undefined
     };
   }
 

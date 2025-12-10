@@ -367,6 +367,10 @@ export class ScholarExtractor {
               papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, year, years[0], years[years.length - 1]);
             }
 
+            // Apply keyword presence check to validate ALL keywords are present
+            // Semantic Scholar uses relevance-based search, not boolean AND
+            papersToAdd = this.applyKeywordPresenceCheck(papersToAdd, parameters.inclusionKeywords);
+
             allPapers.push(...papersToAdd);
             totalFetched += papersToAdd.length;
 
@@ -509,6 +513,9 @@ export class ScholarExtractor {
                 if (parameters.startMonth || parameters.endMonth || parameters.startDay || parameters.endDay) {
                   papersToAdd = this.filterPapersByDate(result.papers, parameters.startMonth, parameters.endMonth, parameters.startDay, parameters.endDay, batch.year, years![0], years![years!.length - 1]);
                 }
+
+                // Apply keyword presence check
+                papersToAdd = this.applyKeywordPresenceCheck(papersToAdd, parameters.inclusionKeywords);
 
                 allPapers.push(...papersToAdd);
                 totalFetched += papersToAdd.length;
@@ -842,6 +849,52 @@ export class ScholarExtractor {
   }
 
   /**
+   * Check keyword presence in paper title and abstract
+   * This validates that ALL inclusion keywords are present, since Semantic Scholar
+   * API uses semantic/relevance-based search (not boolean AND).
+   *
+   * @param paper The paper to check
+   * @param inclusionKeywords The keywords that should ALL be present
+   * @returns Updated paper with keyword presence fields populated
+   */
+  private checkKeywordPresence(paper: Paper, inclusionKeywords: string[]): Paper {
+    const searchText = `${paper.title} ${paper.abstract || ''}`.toLowerCase();
+
+    const keywordPresenceDetails: Record<string, boolean> = {};
+    const missingKeywords: string[] = [];
+
+    for (const keyword of inclusionKeywords) {
+      const keywordLower = keyword.toLowerCase();
+      // Check for keyword presence (can be part of a larger word or phrase)
+      const isPresent = searchText.includes(keywordLower);
+      keywordPresenceDetails[keyword] = isPresent;
+
+      if (!isPresent) {
+        missingKeywords.push(keyword);
+      }
+    }
+
+    const allKeywordsPresent = missingKeywords.length === 0;
+
+    return {
+      ...paper,
+      all_keywords_present: allKeywordsPresent,
+      keyword_presence_details: keywordPresenceDetails,
+      missing_keywords: missingKeywords.length > 0 ? missingKeywords : undefined
+    };
+  }
+
+  /**
+   * Apply keyword presence check to a batch of papers
+   * @param papers Papers to check
+   * @param inclusionKeywords Keywords that should all be present
+   * @returns Papers with keyword presence fields populated
+   */
+  private applyKeywordPresenceCheck(papers: Paper[], inclusionKeywords: string[]): Paper[] {
+    return papers.map(paper => this.checkKeywordPresence(paper, inclusionKeywords));
+  }
+
+  /**
    * Update search progress
    */
   private updateProgress(progress: Partial<SearchProgress>): void {
@@ -984,6 +1037,10 @@ export class ScholarExtractor {
           // So we'll just include all papers
         }
 
+        // Apply keyword presence check to validate ALL keywords are present
+        // Semantic Scholar uses relevance-based search, not boolean AND
+        papersToAdd = this.applyKeywordPresenceCheck(papersToAdd, parameters.inclusionKeywords);
+
         totalFetched += papersToAdd.length;
 
         // Save papers incrementally
@@ -1111,16 +1168,18 @@ export class ScholarExtractor {
             );
 
             if (result.papers.length > 0) {
-              totalFetched += result.papers.length;
+              // Apply keyword presence check
+              const papersToAdd = this.applyKeywordPresenceCheck(result.papers, parameters.inclusionKeywords);
+              totalFetched += papersToAdd.length;
 
-              for (const paper of result.papers) {
+              for (const paper of papersToAdd) {
                 this.database.addPaper(this.sessionId!, paper);
                 if (this.onPaper) {
                   this.onPaper(paper, this.sessionId!);
                 }
               }
 
-              console.log(`✓ Recovered ${result.papers.length} papers from batch (offset ${batch.offset})`);
+              console.log(`✓ Recovered ${papersToAdd.length} papers from batch (offset ${batch.offset})`);
             }
 
             // Successfully recovered - break out of retry loop

@@ -73,6 +73,9 @@ const activeSearches: Set<string> = new Set();
 // Event buffer to store events until client subscribes
 const eventBuffer: Map<string, Array<{ event: string; data: any }>> = new Map();
 
+// Map temp session IDs (from CSV upload) to actual session IDs
+const tempSessionIdMap: Map<string, string> = new Map();
+
 // Track current step status for each session (for reconnection sync)
 interface StepStatus {
   step: 1 | 2 | 3;
@@ -186,18 +189,45 @@ app.get('/api/sessions/:id', (req, res) => {
 // Get current step status for a session (for reconnection sync)
 app.get('/api/sessions/:id/step-status', (req, res) => {
   try {
-    const sessionId = req.params.id;
-    const session = litrev.getSession(sessionId);
+    let sessionId = req.params.id;
+
+    // Check if this is a temp session ID that maps to an actual session
+    const actualSessionId = tempSessionIdMap.get(sessionId);
+    if (actualSessionId) {
+      console.log(`[step-status] Resolved temp session ${sessionId} to actual session ${actualSessionId}`);
+    }
+
+    // Try to get session with actual ID if available, otherwise use provided ID
+    const sessionIdToLookup = actualSessionId || sessionId;
+    const session = litrev.getSession(sessionIdToLookup);
+
+    // For temp session IDs, also check step status under the temp ID
+    let stepStatus = sessionStepStatus.get(sessionId);
+    if (!stepStatus && actualSessionId) {
+      stepStatus = sessionStepStatus.get(actualSessionId);
+    }
+
+    // If session not found but we have step status (temp session still processing), return that
+    if (!session && stepStatus) {
+      console.log(`[step-status] Session not found but step status exists for ${sessionId}`);
+      res.json({
+        success: true,
+        stepStatus: stepStatus,
+        isSearching: false,
+        sessionProgress: null,
+        sessionStatus: stepStatus.status === 'completed' ? 'completed' : 'running',
+        actualSessionId: actualSessionId || null,
+      });
+      return;
+    }
+
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
       return;
     }
 
-    // Get the tracked step status
-    const stepStatus = sessionStepStatus.get(sessionId);
-
     // Also check if there's an active search
-    const isSearching = activeSearches.has(sessionId);
+    const isSearching = activeSearches.has(sessionIdToLookup);
 
     res.json({
       success: true,
@@ -206,6 +236,7 @@ app.get('/api/sessions/:id/step-status', (req, res) => {
       // Include session progress for additional context
       sessionProgress: session.progress,
       sessionStatus: session.progress.status,
+      actualSessionId: actualSessionId || null,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -884,8 +915,9 @@ app.post('/api/generate/csv', async (req, res) => {
     const actualSessionId = db.createSession(sessionParams);
     console.log('[CSV Upload] Step 4 Complete: Created session', actualSessionId);
 
-    // Copy session ID from temp to actual
+    // Store the mapping from temp ID to actual ID (for reconnection support)
     console.log(`[CSV Upload] Mapping: temp ID ${tempSessionId} -> actual ID ${actualSessionId}`);
+    tempSessionIdMap.set(tempSessionId, actualSessionId);
 
     // Add all papers to the session
     console.log('[CSV Upload] Step 5: Adding papers to session...');
@@ -909,6 +941,24 @@ app.post('/api/generate/csv', async (req, res) => {
       console.log('[CSV Upload] Step 6 Complete: Session status set to completed');
     }
 
+    // Helper to update Step 3 status for temp session ID (so reconnection works)
+    const updateCsvStep3Status = (progress: any) => {
+      const status = progress.status === 'completed' ? 'completed' : progress.status === 'error' ? 'error' : 'running';
+      // Update for both temp and actual session IDs
+      updateStepStatus(tempSessionId, 3, {
+        status,
+        progress: progress.progress,
+        currentTask: progress.currentTask,
+        error: progress.error,
+      });
+      updateStepStatus(sessionIdToUse, 3, {
+        status,
+        progress: progress.progress,
+        currentTask: progress.currentTask,
+        error: progress.error,
+      });
+    };
+
     // Start output generation with progress
     console.log('[CSV Upload] Step 7: Starting output generation...');
     litrev.generateOutputs(sessionIdToUse, (progress) => {
@@ -918,6 +968,9 @@ app.post('/api/generate/csv', async (req, res) => {
         progress: progress.progress,
         currentTask: progress.currentTask?.substring(0, 50)
       });
+
+      // Update step status for reconnection support
+      updateCsvStep3Status(progress);
 
       // Emit to both temp and actual session ID (for client compatibility)
       emitOrBuffer(tempSessionId, 'output-progress', progress);
@@ -929,23 +982,24 @@ app.post('/api/generate/csv', async (req, res) => {
         const updatedSession = litrev.getSession(sessionIdToUse);
         emitOrBuffer(tempSessionId, 'outputs', updatedSession?.outputs);
         emitOrBuffer(sessionIdToUse, 'outputs', updatedSession?.outputs);
+        // Clean up the temp session mapping after a delay (to allow client to catch up)
+        setTimeout(() => {
+          tempSessionIdMap.delete(tempSessionId);
+          sessionStepStatus.delete(tempSessionId);
+        }, 60000); // Keep for 60 seconds after completion
       }
     }).catch((error: any) => {
       console.error('[CSV Upload] ERROR during output generation:', error);
-      emitOrBuffer(tempSessionId, 'output-progress', {
+      const errorProgress = {
         status: 'error',
         stage: 'error',
         currentTask: 'Output generation failed',
         progress: 0,
         error: error.message
-      });
-      emitOrBuffer(sessionIdToUse, 'output-progress', {
-        status: 'error',
-        stage: 'error',
-        currentTask: 'Output generation failed',
-        progress: 0,
-        error: error.message
-      });
+      };
+      updateCsvStep3Status(errorProgress);
+      emitOrBuffer(tempSessionId, 'output-progress', errorProgress);
+      emitOrBuffer(sessionIdToUse, 'output-progress', errorProgress);
     });
 
   } catch (error: any) {
@@ -988,40 +1042,28 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
 
       // Helper to check boolean values
       const isTruthy = (val: string) => val === 'Yes' || val === '1' || val === 'true' || val === 'True' || val === 'TRUE';
-      const isFalsy = (val: string) => val === 'No' || val === '0' || val === 'false' || val === 'False' || val === 'FALSE' || val === '';
+      const isFalsy = (val: string) => val === 'No' || val === '0' || val === 'false' || val === 'False' || val === 'FALSE';
 
-      // Determine inclusion status using comprehensive logic:
-      // 1. If "Included" column exists and is explicit, use it
-      // 2. Otherwise, derive from systematic filtering fields:
-      //    - Systematic Filtering Inclusion must be 1/Yes/true
-      //    - Systematic Filtering Exclusion must be 0/No/false/empty
-      //    - Exclusion Reason must be empty
-      //    - Excluded by Keyword must be No/0/false/empty
-      let isIncluded: boolean;
+      // Determine inclusion status using AND logic - ALL conditions must be met:
+      // 1. Included = Yes/1/true (if column exists)
+      // 2. Systematic Filtering Inclusion = 1/Yes/true OR empty
+      // 3. Systematic Filtering Exclusion = 0/No/false OR empty
+      // 4. Exclusion Reason = empty
 
-      if (includedValue !== '') {
-        // Explicit Included column - use it directly
-        isIncluded = isTruthy(includedValue);
-      } else {
-        // Derive from other fields
-        const passesInclusion = systematicInclusion === '' || isTruthy(systematicInclusion);
-        const passesExclusion = systematicExclusion === '' || isFalsy(systematicExclusion);
-        const noExclusionReason = exclusionReason === '';
-        const notExcludedByKeyword = excludedByKeyword === '' || isFalsy(excludedByKeyword);
+      // Condition 1: Included column (if exists and has value, must be truthy)
+      const passesIncludedColumn = includedValue === '' || isTruthy(includedValue);
 
-        isIncluded = passesInclusion && passesExclusion && noExclusionReason && notExcludedByKeyword;
-      }
+      // Condition 2: Systematic Filtering Inclusion must be truthy or empty
+      const passesSystematicInclusion = systematicInclusion === '' || isTruthy(systematicInclusion);
 
-      // Additional check: if systematic fields indicate exclusion, override
-      if (isTruthy(systematicExclusion) || isFalsy(systematicInclusion) && systematicInclusion !== '') {
-        isIncluded = false;
-      }
-      if (isTruthy(excludedByKeyword)) {
-        isIncluded = false;
-      }
-      if (exclusionReason !== '') {
-        isIncluded = false;
-      }
+      // Condition 3: Systematic Filtering Exclusion must be falsy or empty
+      const passesSystematicExclusion = systematicExclusion === '' || isFalsy(systematicExclusion);
+
+      // Condition 4: Exclusion Reason must be empty
+      const passesExclusionReason = exclusionReason === '';
+
+      // ALL conditions must pass (AND logic)
+      const isIncluded = passesIncludedColumn && passesSystematicInclusion && passesSystematicExclusion && passesExclusionReason;
 
       if (isIncluded) {
         includedCount++;
@@ -1036,7 +1078,12 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
           'Systematic Filtering Inclusion': systematicInclusion,
           'Systematic Filtering Exclusion': systematicExclusion,
           'Exclusion Reason': exclusionReason.substring(0, 50),
-          'Excluded by Keyword': excludedByKeyword,
+          'Passes': {
+            includedColumn: passesIncludedColumn,
+            systematicInclusion: passesSystematicInclusion,
+            systematicExclusion: passesSystematicExclusion,
+            exclusionReason: passesExclusionReason
+          },
           'Final isIncluded': isIncluded
         });
       }

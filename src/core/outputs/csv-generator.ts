@@ -28,6 +28,10 @@ export class CSVGenerator {
       Abstract: paper.abstract || '',
       Keywords: paper.keywords?.join('; ') || '',
       'Excluded by Keyword': paper.excluded_by_keyword ? 'Yes' : 'No',
+      // Keyword presence validation fields
+      'All Keywords Present': this.formatBooleanFlag(paper.all_keywords_present),
+      'Missing Keywords': paper.missing_keywords?.join('; ') || '',
+      'Keyword Presence Details': paper.keyword_presence_details ? this.formatKeywordPresenceDetails(paper.keyword_presence_details) : '',
       'Extracted At': paper.extractedAt.toISOString()
     }));
 
@@ -48,6 +52,9 @@ export class CSVGenerator {
         'Abstract',
         'Keywords',
         'Excluded by Keyword',
+        'All Keywords Present',
+        'Missing Keywords',
+        'Keyword Presence Details',
         'Extracted At'
       ]
     });
@@ -84,6 +91,10 @@ export class CSVGenerator {
       Abstract: paper.abstract || '',
       Keywords: paper.keywords?.join('; ') || '',
       'Excluded by Keyword': paper.excluded_by_keyword ? 'Yes' : 'No',
+      // Keyword presence validation fields
+      'All Keywords Present': this.formatBooleanFlag(paper.all_keywords_present),
+      'Missing Keywords': paper.missing_keywords?.join('; ') || '',
+      'Keyword Presence Details': paper.keyword_presence_details ? this.formatKeywordPresenceDetails(paper.keyword_presence_details) : '',
       // Semantic filtering fields
       'Systematic Filtering Inclusion': this.formatBooleanFlag(paper.systematic_filtering_inclusion),
       'Systematic Filtering Inclusion Reasoning': paper.systematic_filtering_inclusion_reasoning || '',
@@ -115,6 +126,9 @@ export class CSVGenerator {
         'Abstract',
         'Keywords',
         'Excluded by Keyword',
+        'All Keywords Present',
+        'Missing Keywords',
+        'Keyword Presence Details',
         'Systematic Filtering Inclusion',
         'Systematic Filtering Inclusion Reasoning',
         'Systematic Filtering Exclusion',
@@ -161,5 +175,15 @@ export class CSVGenerator {
   private formatBooleanFlag(value: boolean | undefined): string {
     if (value === undefined) return '';
     return value ? '1' : '0';
+  }
+
+  /**
+   * Format keyword presence details as a readable string
+   * Example: "large language model: YES; mathematical reasoning: NO"
+   */
+  private formatKeywordPresenceDetails(details: Record<string, boolean>): string {
+    return Object.entries(details)
+      .map(([keyword, present]) => `${keyword}: ${present ? 'YES' : 'NO'}`)
+      .join('; ');
   }
 }
