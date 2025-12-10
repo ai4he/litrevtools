@@ -584,18 +584,31 @@ export class ScholarExtractor {
 
   /**
    * Apply LLM-based semantic filtering
+   *
+   * OPTIMIZATION: Only processes papers that passed Step 1 keyword filtering.
+   * Papers already excluded by keywords (excluded_by_keyword === true) are
+   * skipped to save LLM tokens and API calls.
    */
   private async applyLLMFilters(papers: Paper[], parameters: SearchParameters): Promise<void> {
     if (!this.sessionId || !this.llmService) return;
 
+    // OPTIMIZATION: Filter out papers already excluded by keyword matching in Step 1
+    // These papers don't need LLM evaluation - they're already excluded
+    const keywordExcludedPapers = papers.filter(p => p.excluded_by_keyword === true);
+    const papersForLLM = papers.filter(p => p.excluded_by_keyword !== true);
+
+    console.log(`[LLM Filters] Total papers: ${papers.length}`);
+    console.log(`[LLM Filters] Papers excluded by keywords (Step 1): ${keywordExcludedPapers.length} (skipping LLM evaluation)`);
+    console.log(`[LLM Filters] Papers to process with LLM (Step 2): ${papersForLLM.length}`);
+
     this.updateProgress({
       currentTask: 'Applying LLM-based semantic filters',
-      nextTask: 'Processing papers with AI',
+      nextTask: `Processing ${papersForLLM.length} papers with AI (${keywordExcludedPapers.length} already excluded by keywords)`,
       progress: 85
     });
 
     try {
-      let filteredPapers: Paper[];
+      let llmFilteredPapers: Paper[];
 
       // Check if semantic prompts are provided for new separate evaluation
       if (parameters.inclusionCriteriaPrompt || parameters.exclusionCriteriaPrompt) {
@@ -624,20 +637,25 @@ export class ScholarExtractor {
         };
 
         // Use new separate evaluation method with progress tracking
-        filteredPapers = await this.llmService.semanticFilterSeparate(
-          papers,
+        // Only send papers that passed keyword filtering (Step 1)
+        llmFilteredPapers = await this.llmService.semanticFilterSeparate(
+          papersForLLM,
           parameters.inclusionCriteriaPrompt,
           parameters.exclusionCriteriaPrompt,
           llmProgressCallback
         );
       } else {
         // Fall back to legacy method using keywords
-        filteredPapers = await this.llmService.semanticFilter(
-          papers,
+        // Only send papers that passed keyword filtering (Step 1)
+        llmFilteredPapers = await this.llmService.semanticFilter(
+          papersForLLM,
           parameters.inclusionKeywords,
           parameters.exclusionKeywords
         );
       }
+
+      // Combine results: keyword-excluded papers + LLM-filtered papers
+      const filteredPapers = [...keywordExcludedPapers, ...llmFilteredPapers];
 
       // Save updated papers to database
       for (const paper of filteredPapers) {
