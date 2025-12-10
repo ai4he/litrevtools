@@ -959,8 +959,14 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
   const lines = csvContent.split('\n').filter(line => line.trim());
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  // Use parseCsvLine for headers too, to handle quoted headers properly
+  const headers = parseCsvLine(lines[0]).map(h => h.trim());
+  console.log('[CSV Parser] Headers found:', headers);
+  console.log('[CSV Parser] Has "Included" column:', headers.includes('Included'));
+
   const papers: Paper[] = [];
+  let includedCount = 0;
+  let excludedCount = 0;
 
   for (let i = 1; i < lines.length; i++) {
     try {
@@ -972,6 +978,21 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
           paper[header] = values[index];
         }
       });
+
+      // Determine inclusion status - check multiple possible values
+      const includedValue = paper.Included || paper.included || '';
+      const isIncluded = includedValue === 'Yes' || includedValue === '1' || includedValue === 'true' || includedValue === 'True' || includedValue === 'TRUE';
+
+      if (isIncluded) {
+        includedCount++;
+      } else {
+        excludedCount++;
+      }
+
+      // Log first few papers for debugging
+      if (i <= 3) {
+        console.log(`[CSV Parser] Paper ${i}: Included raw value = "${includedValue}", parsed as: ${isIncluded}`);
+      }
 
       // Map CSV columns to Paper interface
       papers.push({
@@ -985,7 +1006,7 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
         doi: paper.DOI || paper.doi,
         venue: paper.Venue || paper.venue,
         source: (paper.Source || paper.source || 'other') as 'semantic-scholar' | 'other',
-        included: paper.Included === 'Yes' || paper.Included === '1' || paper.Included === 'true',
+        included: isIncluded,
         exclusionReason: paper['Exclusion Reason'] || paper.exclusionReason,
         excluded_by_keyword: paper['Excluded by Keyword'] === 'Yes' || paper['Excluded by Keyword'] === '1',
         extractedAt: new Date()
@@ -994,6 +1015,8 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
       console.error(`Error parsing line ${i}:`, error);
     }
   }
+
+  console.log(`[CSV Parser] Parsing complete: ${papers.length} total papers, ${includedCount} included, ${excludedCount} excluded`);
 
   return papers;
 }
