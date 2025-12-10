@@ -979,9 +979,49 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
         }
       });
 
-      // Determine inclusion status - check multiple possible values
+      // Parse all filtering-related fields
       const includedValue = paper.Included || paper.included || '';
-      const isIncluded = includedValue === 'Yes' || includedValue === '1' || includedValue === 'true' || includedValue === 'True' || includedValue === 'TRUE';
+      const exclusionReason = paper['Exclusion Reason'] || paper.exclusionReason || '';
+      const excludedByKeyword = paper['Excluded by Keyword'] || '';
+      const systematicInclusion = paper['Systematic Filtering Inclusion'] || '';
+      const systematicExclusion = paper['Systematic Filtering Exclusion'] || '';
+
+      // Helper to check boolean values
+      const isTruthy = (val: string) => val === 'Yes' || val === '1' || val === 'true' || val === 'True' || val === 'TRUE';
+      const isFalsy = (val: string) => val === 'No' || val === '0' || val === 'false' || val === 'False' || val === 'FALSE' || val === '';
+
+      // Determine inclusion status using comprehensive logic:
+      // 1. If "Included" column exists and is explicit, use it
+      // 2. Otherwise, derive from systematic filtering fields:
+      //    - Systematic Filtering Inclusion must be 1/Yes/true
+      //    - Systematic Filtering Exclusion must be 0/No/false/empty
+      //    - Exclusion Reason must be empty
+      //    - Excluded by Keyword must be No/0/false/empty
+      let isIncluded: boolean;
+
+      if (includedValue !== '') {
+        // Explicit Included column - use it directly
+        isIncluded = isTruthy(includedValue);
+      } else {
+        // Derive from other fields
+        const passesInclusion = systematicInclusion === '' || isTruthy(systematicInclusion);
+        const passesExclusion = systematicExclusion === '' || isFalsy(systematicExclusion);
+        const noExclusionReason = exclusionReason === '';
+        const notExcludedByKeyword = excludedByKeyword === '' || isFalsy(excludedByKeyword);
+
+        isIncluded = passesInclusion && passesExclusion && noExclusionReason && notExcludedByKeyword;
+      }
+
+      // Additional check: if systematic fields indicate exclusion, override
+      if (isTruthy(systematicExclusion) || isFalsy(systematicInclusion) && systematicInclusion !== '') {
+        isIncluded = false;
+      }
+      if (isTruthy(excludedByKeyword)) {
+        isIncluded = false;
+      }
+      if (exclusionReason !== '') {
+        isIncluded = false;
+      }
 
       if (isIncluded) {
         includedCount++;
@@ -991,7 +1031,14 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
 
       // Log first few papers for debugging
       if (i <= 3) {
-        console.log(`[CSV Parser] Paper ${i}: Included raw value = "${includedValue}", parsed as: ${isIncluded}`);
+        console.log(`[CSV Parser] Paper ${i}:`, {
+          Included: includedValue,
+          'Systematic Filtering Inclusion': systematicInclusion,
+          'Systematic Filtering Exclusion': systematicExclusion,
+          'Exclusion Reason': exclusionReason.substring(0, 50),
+          'Excluded by Keyword': excludedByKeyword,
+          'Final isIncluded': isIncluded
+        });
       }
 
       // Map CSV columns to Paper interface
@@ -1007,8 +1054,12 @@ async function parseCsvToPapers(csvContent: string): Promise<Paper[]> {
         venue: paper.Venue || paper.venue,
         source: (paper.Source || paper.source || 'other') as 'semantic-scholar' | 'other',
         included: isIncluded,
-        exclusionReason: paper['Exclusion Reason'] || paper.exclusionReason,
-        excluded_by_keyword: paper['Excluded by Keyword'] === 'Yes' || paper['Excluded by Keyword'] === '1',
+        exclusionReason: exclusionReason || undefined,
+        excluded_by_keyword: isTruthy(excludedByKeyword),
+        systematic_filtering_inclusion: systematicInclusion !== '' ? isTruthy(systematicInclusion) : undefined,
+        systematic_filtering_inclusion_reasoning: paper['Systematic Filtering Inclusion Reasoning'] || undefined,
+        systematic_filtering_exclusion: systematicExclusion !== '' ? isTruthy(systematicExclusion) : undefined,
+        systematic_filtering_exclusion_reasoning: paper['Systematic Filtering Exclusion Reasoning'] || undefined,
         extractedAt: new Date()
       });
     } catch (error) {
