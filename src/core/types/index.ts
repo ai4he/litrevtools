@@ -3,6 +3,11 @@
  * These types are shared across all platforms (CLI, Web, Desktop, Mobile)
  */
 
+/**
+ * Paper source for literature search
+ */
+export type PaperSource = 'semantic-scholar' | 'openalex';
+
 export interface SearchParameters {
   name?: string;
   inclusionKeywords: string[];
@@ -14,6 +19,7 @@ export interface SearchParameters {
   endMonth?: number; // 1-12, optional month filter
   startDay?: number; // 1-31, optional day filter
   endDay?: number; // 1-31, optional day filter
+  paperSource?: PaperSource; // Paper source API to use (default: 'semantic-scholar')
   llmConfig?: LLMConfig; // LLM configuration for intelligent tasks
   // Semantic filtering prompts for LLM-based evaluation
   inclusionCriteriaPrompt?: string; // Semantic prompt defining inclusion criteria
@@ -30,7 +36,7 @@ export interface Paper {
   abstract?: string;
   url: string;
   citations?: number;
-  source: 'semantic-scholar' | 'other';
+  source: 'semantic-scholar' | 'openalex' | 'other';
   pdfUrl?: string;
   venue?: string;
   doi?: string;

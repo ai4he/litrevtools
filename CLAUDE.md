@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-LitRevTools is an isomorphic systematic literature review tool using PRISMA methodology. It extracts research papers from Semantic Scholar API, filters them using AI or rule-based methods, and generates publication-ready research papers. The single codebase runs on CLI, Web, Desktop (Electron), and Mobile (Capacitor) platforms.
+LitRevTools is an isomorphic systematic literature review tool using PRISMA methodology. It extracts research papers from multiple sources (Semantic Scholar or OpenAlex), filters them using AI or rule-based methods, and generates publication-ready research papers. The single codebase runs on CLI, Web, Desktop (Electron), and Mobile (Capacitor) platforms.
 
 ## Common Development Commands
 
@@ -67,9 +67,10 @@ The codebase is divided into three layers:
 ### Core Modules (`src/core/`)
 
 - **database/** - SQLite database layer (sessions, papers, PRISMA data, outputs)
-- **scholar/** - Paper extraction from Semantic Scholar API
-  - `index.ts` - Main search orchestrator with LLM filtering
+- **scholar/** - Paper extraction from multiple sources (Semantic Scholar, OpenAlex)
+  - `index.ts` - Main search orchestrator with LLM filtering, supports multiple paper sources
   - `semantic-scholar.ts` - Semantic Scholar API client with rate limiting and pagination
+  - `openalex.ts` - OpenAlex API client with cursor-based pagination (free, 240M+ papers)
 - **llm/** - LLM service for semantic filtering, categorization, and paper generation
   - `llm-service.ts` - Main service orchestrating LLM operations
   - `api-key-manager.ts` - Automatic API key rotation when hitting rate limits
@@ -169,6 +170,10 @@ GOOGLE_CLIENT_SECRET=your_client_secret
 # Semantic Scholar API (optional - increases rate limits)
 SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_key
 
+# OpenAlex API (optional - for polite pool access)
+OPENALEX_API_KEY=your_openalex_api_key            # Optional premium API key
+OPENALEX_EMAIL=your_email@example.com             # Email for polite pool (recommended)
+
 # Database & Storage
 DATABASE_PATH=./data/litrevtools.db
 OUTPUT_DIR=./data/outputs
@@ -253,6 +258,7 @@ const sessionId = await tools.startSearch({
   maxResults: 100,
   startYear: 2020,
   endYear: 2024,
+  paperSource: 'semantic-scholar', // or 'openalex'
   llmConfig: {
     enabled: true,
     provider: 'gemini',
@@ -310,12 +316,18 @@ See `docs/DEPLOYMENT.md` for detailed instructions.
     - Authenticated (with API key): 1 request/second (dedicated, per key)
     - **Result limit**: Maximum 1,000 results per query (offset + limit ≤ 1000)
     - For larger datasets, use bulk search endpoint or Datasets API
+  - OpenAlex:
+    - Rate limit: 10 requests/second, 100,000 requests/day
+    - **No result limit**: Cursor-based pagination allows unlimited results
+    - Polite pool (with email): More consistent response times
+    - 240M+ papers indexed, free and open access
   - Gemini free tier: 60 req/min, 1,500 req/day - use multiple API keys for large reviews
+- **Paper Sources**: Set `paperSource` in search parameters to choose between 'semantic-scholar' (default) or 'openalex'
 - **Database Migrations**: No migration system yet - schema changes require manual SQL or fresh database
 - **Frontend Proxy**: In dev mode, Vite proxy (port 5173) forwards to Express (port 3000)
 - **Real-time Communication**: Web platform uses Socket.IO for progress updates, not polling
 - **Session Management**: Searches return sessionId immediately and run in background
-- **Year Filtering**: Semantic Scholar API supports year ranges for focused literature searches
+- **Year Filtering**: Both Semantic Scholar and OpenAlex support year ranges for focused literature searches
 
 ## Documentation
 

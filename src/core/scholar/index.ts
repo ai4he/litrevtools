@@ -1,12 +1,23 @@
 /**
  * Main Scholar extraction orchestrator
- * Uses Semantic Scholar API for paper search
+ * Supports multiple paper sources: Semantic Scholar and OpenAlex
  */
 
-import { SearchParameters, Paper, SearchProgress, ProgressCallback, PaperCallback } from '../types';
+import { SearchParameters, Paper, SearchProgress, ProgressCallback, PaperCallback, PaperSource } from '../types';
 import { LitRevDatabase } from '../database';
 import { SemanticScholarService } from './semantic-scholar';
+import { OpenAlexService } from './openalex';
 import { LLMService } from '../llm';
+
+/**
+ * Common interface for paper search services
+ */
+interface PaperSearchResult {
+  papers: Paper[];
+  total: number;
+  hasMore: boolean;
+  nextCursor?: string; // Only used by OpenAlex
+}
 
 export class ScholarExtractor {
   private database: LitRevDatabase;
@@ -43,11 +54,14 @@ export class ScholarExtractor {
     // Create session
     this.sessionId = this.database.createSession(parameters);
 
+    // Determine source name for progress message
+    const sourceNameForProgress = parameters.paperSource === 'openalex' ? 'OpenAlex' : 'Semantic Scholar';
+
     // Update progress
     this.updateProgress({
       status: 'running',
       currentTask: 'Initializing search',
-      nextTask: 'Preparing Semantic Scholar search',
+      nextTask: `Preparing ${sourceNameForProgress} search`,
       progress: 5
     });
 
@@ -137,11 +151,14 @@ export class ScholarExtractor {
     // Create session
     this.sessionId = this.database.createSession(parameters);
 
+    // Determine source name for progress message
+    const sourceName = parameters.paperSource === 'openalex' ? 'OpenAlex' : 'Semantic Scholar';
+
     // Update progress
     this.updateProgress({
       status: 'running',
       currentTask: 'Initializing search',
-      nextTask: 'Preparing Semantic Scholar search',
+      nextTask: `Preparing ${sourceName} search`,
       progress: 5
     });
 
@@ -235,14 +252,27 @@ export class ScholarExtractor {
   ): Promise<void> {
     if (!this.sessionId) throw new Error('No active session');
 
-    // Use Semantic Scholar API (preferred method)
+    // Determine paper source (default to semantic-scholar)
+    const paperSource: PaperSource = parameters.paperSource || 'semantic-scholar';
+    const sourceName = paperSource === 'openalex' ? 'OpenAlex' : 'Semantic Scholar';
+
     this.updateProgress({
-      currentTask: 'Starting Semantic Scholar API search',
-      nextTask: 'Fetching papers from Semantic Scholar',
+      currentTask: `Starting ${sourceName} API search`,
+      nextTask: `Fetching papers from ${sourceName}`,
       progress: 20
     });
 
-    const semanticScholar = new SemanticScholarService();
+    // Create the appropriate service based on source
+    const semanticScholar = paperSource === 'semantic-scholar'
+      ? new SemanticScholarService()
+      : null;
+    const openAlex = paperSource === 'openalex'
+      ? new OpenAlexService({
+          apiKey: process.env.OPENALEX_API_KEY,
+          email: process.env.OPENALEX_EMAIL || 'litrevtools@example.com'
+        })
+      : null;
+
     let allPapers: Paper[] = [];
     let totalFetched = 0; // Track total papers fetched across all years
 
@@ -260,7 +290,11 @@ export class ScholarExtractor {
     try {
       // If no year range is specified, search without year filter
       if (!years) {
-        await this.searchWithoutYearFilter(parameters, semanticScholar);
+        if (paperSource === 'openalex' && openAlex) {
+          await this.searchWithoutYearFilterOpenAlex(parameters, openAlex, sourceName);
+        } else if (semanticScholar) {
+          await this.searchWithoutYearFilter(parameters, semanticScholar, sourceName);
+        }
         return;
       }
 
@@ -272,14 +306,16 @@ export class ScholarExtractor {
         const year = years[i];
 
         this.updateProgress({
-          currentTask: `Searching Semantic Scholar for year ${year}`,
+          currentTask: `Searching ${sourceName} for year ${year}`,
           nextTask: i < years.length - 1 ? `Next: year ${years[i + 1]}` : 'Finalizing search',
           progress: 20 + (60 * (i + 1) / years.length),
           currentYear: year
         });
 
-        const maxPerRequest = 100; // Semantic Scholar API limit
+        // OpenAlex allows 200 per request, Semantic Scholar allows 100
+        const maxPerRequest = paperSource === 'openalex' ? 200 : 100;
         let offset = 0;
+        let cursor: string | undefined; // For OpenAlex pagination
         let fetchedForYear = 0;
         let consecutiveEmptyResults = 0; // Track empty results to detect stuck loops
         const maxConsecutiveEmpty = 3; // Stop after 3 consecutive empty results
@@ -318,36 +354,54 @@ export class ScholarExtractor {
           });
 
           try {
-            const result = await semanticScholar.search(
-              {
-                query: parameters.inclusionKeywords.join(' '),
-                year,
-                limit,
-                offset
-              },
-              0, // retryCount
-              3, // maxRetries
-              (waitTimeMs: number, reason: string) => {
-                // onWaitStart callback - update progress to inform user of waiting
-                this.updateProgress({
-                  currentTask: `⏸️  ${reason}`,
-                  nextTask: `Will resume after waiting`,
-                  progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
-                  currentYear: year,
-                  totalPapers: totalFetched
-                });
-              },
-              () => {
-                // onWaitEnd callback - update progress to resume fetching
-                this.updateProgress({
-                  currentTask: `Year ${year}: Fetching papers (offset ${offset}, got ${fetchedForYear} so far)`,
-                  nextTask: `Processing batch of ${limit} papers`,
-                  progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
-                  currentYear: year,
-                  totalPapers: totalFetched
-                });
-              }
-            );
+            // Search using the appropriate service
+            let result: PaperSearchResult;
+
+            const onWaitStart = (waitTimeMs: number, reason: string) => {
+              this.updateProgress({
+                currentTask: `⏸️  ${reason}`,
+                nextTask: `Will resume after waiting`,
+                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                currentYear: year,
+                totalPapers: totalFetched
+              });
+            };
+
+            const onWaitEnd = () => {
+              this.updateProgress({
+                currentTask: `Year ${year}: Fetching papers (${paperSource === 'openalex' ? 'cursor' : 'offset ' + offset}, got ${fetchedForYear} so far)`,
+                nextTask: `Processing batch of ${limit} papers`,
+                progress: 20 + (60 * (i + fetchedForYear / Math.max(1, maxResultsPerYear || 1000)) / years.length),
+                currentYear: year,
+                totalPapers: totalFetched
+              });
+            };
+
+            if (paperSource === 'openalex' && openAlex) {
+              result = await openAlex.search(
+                {
+                  query: parameters.inclusionKeywords.join(' '),
+                  year,
+                  limit,
+                  cursor
+                },
+                0, 3, onWaitStart, onWaitEnd
+              );
+              // Update cursor for next iteration (OpenAlex uses cursor-based pagination)
+              cursor = result.nextCursor;
+            } else if (semanticScholar) {
+              result = await semanticScholar.search(
+                {
+                  query: parameters.inclusionKeywords.join(' '),
+                  year,
+                  limit,
+                  offset
+                },
+                0, 3, onWaitStart, onWaitEnd
+              );
+            } else {
+              throw new Error(`No paper service available for source: ${paperSource}`);
+            }
 
             // Detect stuck loops - if we get empty results repeatedly, stop
             if (result.papers.length === 0) {
@@ -368,7 +422,7 @@ export class ScholarExtractor {
             }
 
             // Apply keyword presence check to validate ALL keywords are present
-            // Semantic Scholar uses relevance-based search, not boolean AND
+            // Both Semantic Scholar and OpenAlex use relevance-based search, not boolean AND
             papersToAdd = this.applyKeywordPresenceCheck(papersToAdd, parameters.inclusionKeywords);
 
             allPapers.push(...papersToAdd);
@@ -408,19 +462,29 @@ export class ScholarExtractor {
           } catch (batchError: any) {
             // Check if this is a retryable error
             if (batchError.retryable) {
-              console.error(`Failed batch for year ${year}, offset ${offset}: ${batchError.message}`);
-              failedBatches.push({
-                year,
-                offset,
-                limit,
-                attempts: 1,
-                lastError: batchError.message
-              });
-              // Move to next offset to continue with other batches
-              offset += limit;
-              // If we can't determine if there are more results, assume there might be
-              // (up to API limit of 1000 per year)
-              if (offset >= 1000) {
+              console.error(`Failed batch for year ${year}, ${paperSource === 'openalex' ? 'cursor' : 'offset ' + offset}: ${batchError.message}`);
+
+              // Only track failed batches for Semantic Scholar (offset-based pagination allows retrying)
+              // OpenAlex uses cursor-based pagination which doesn't allow jumping to arbitrary positions
+              if (paperSource === 'semantic-scholar') {
+                failedBatches.push({
+                  year,
+                  offset,
+                  limit,
+                  attempts: 1,
+                  lastError: batchError.message
+                });
+                // Move to next offset to continue with other batches
+                offset += limit;
+                // If we can't determine if there are more results, assume there might be
+                // (up to API limit of 1000 per year)
+                if (offset >= 1000) {
+                  break;
+                }
+              } else {
+                // For OpenAlex, we can't retry at a specific cursor position
+                // Just log the error and continue to the next year
+                console.warn(`Cannot retry failed batch for OpenAlex (cursor-based pagination)`);
                 break;
               }
             } else {
@@ -431,8 +495,8 @@ export class ScholarExtractor {
         }
       }
 
-      // Retry failed batches with longer waits
-      if (failedBatches.length > 0) {
+      // Retry failed batches with longer waits (only for Semantic Scholar)
+      if (failedBatches.length > 0 && semanticScholar) {
         console.log(`\n=== Retrying ${failedBatches.length} failed batches ===`);
         this.updateProgress({
           currentTask: `Retrying ${failedBatches.length} failed batches`,
@@ -478,7 +542,7 @@ export class ScholarExtractor {
             });
 
             try {
-              const result = await semanticScholar.search(
+              const result = await semanticScholar!.search(
                 {
                   query: parameters.inclusionKeywords.join(' '),
                   year: batch.year,
@@ -697,9 +761,12 @@ export class ScholarExtractor {
         }
       }
 
+      // Determine source name from papers (all papers in a session have the same source)
+      const sourceName = this.getSourceNameFromPapers(papers);
+
       this.database.updatePRISMAData(this.sessionId, {
         identification: {
-          recordsIdentifiedPerSource: { 'Semantic Scholar': totalPapers },
+          recordsIdentifiedPerSource: { [sourceName]: totalPapers },
           totalRecordsIdentified: totalPapers,
           duplicatesRemoved: 0, // TODO: Track actual duplicates
           recordsMarkedIneligibleByAutomation: keywordExcludedCount,
@@ -799,9 +866,12 @@ export class ScholarExtractor {
     const excludedCount = Object.values(exclusionReasons).reduce((a, b) => a + b, 0);
     const includedCount = totalPapers - excludedCount;
 
+    // Determine source name from papers
+    const sourceName = this.getSourceNameFromPapers(papers);
+
     this.database.updatePRISMAData(this.sessionId, {
       identification: {
-        recordsIdentifiedPerSource: { 'Semantic Scholar': totalPapers },
+        recordsIdentifiedPerSource: { [sourceName]: totalPapers },
         totalRecordsIdentified: totalPapers,
         duplicatesRemoved: 0, // TODO: Track actual duplicates
         recordsMarkedIneligibleByAutomation: keywordExcludedCount,
@@ -846,6 +916,26 @@ export class ScholarExtractor {
     }
 
     return null;
+  }
+
+  /**
+   * Get display name for paper source
+   * Maps internal source identifiers to human-readable names for PRISMA reporting
+   */
+  private getSourceNameFromPapers(papers: Paper[]): string {
+    if (papers.length === 0) {
+      return 'Unknown Source';
+    }
+
+    const source = papers[0].source;
+    switch (source) {
+      case 'semantic-scholar':
+        return 'Semantic Scholar';
+      case 'openalex':
+        return 'OpenAlex';
+      default:
+        return 'Other';
+    }
   }
 
   /**
@@ -924,16 +1014,17 @@ export class ScholarExtractor {
   }
 
   /**
-   * Search without year filter - fetches all available papers
+   * Search without year filter - fetches all available papers (Semantic Scholar)
    */
   private async searchWithoutYearFilter(
     parameters: SearchParameters,
-    semanticScholar: SemanticScholarService
+    semanticScholar: SemanticScholarService,
+    sourceName: string
   ): Promise<void> {
     if (!this.sessionId) throw new Error('No active session');
 
     this.updateProgress({
-      currentTask: 'Searching Semantic Scholar (all years)',
+      currentTask: `Searching ${sourceName} (all years)`,
       nextTask: 'Fetching papers',
       progress: 30
     });
@@ -1201,6 +1292,165 @@ export class ScholarExtractor {
         console.warn(`\n⚠️  ${stillFailed.length} batches could not be recovered after ${maxBatchRetries} attempts each:`);
         for (const batch of stillFailed) {
           console.warn(`   - Offset ${batch.offset}: ${batch.lastError}`);
+        }
+      }
+    }
+
+    // Calculate duplicates
+    const uniquePapers = this.database.getPapers(this.sessionId!);
+    const duplicateCount = totalFetched - uniquePapers.length;
+
+    console.log(`Total fetched: ${totalFetched}, Unique papers: ${uniquePapers.length}, Duplicates: ${duplicateCount}`);
+
+    this.updateProgress({
+      currentTask: 'Papers extracted successfully',
+      nextTask: 'Applying exclusion filters',
+      progress: 80,
+      totalPapers: uniquePapers.length,
+      duplicateCount
+    });
+  }
+
+  /**
+   * Search without year filter - fetches all available papers (OpenAlex)
+   * Uses cursor-based pagination for unlimited results
+   */
+  private async searchWithoutYearFilterOpenAlex(
+    parameters: SearchParameters,
+    openAlex: OpenAlexService,
+    sourceName: string
+  ): Promise<void> {
+    if (!this.sessionId) throw new Error('No active session');
+
+    this.updateProgress({
+      currentTask: `Searching ${sourceName} (all years)`,
+      nextTask: 'Fetching papers',
+      progress: 30
+    });
+
+    const maxPerRequest = 200; // OpenAlex API limit
+    const maxResults = parameters.maxResults; // undefined means fetch all
+    let cursor: string | undefined;
+    let totalFetched = 0;
+    let consecutiveEmptyResults = 0;
+    const maxConsecutiveEmpty = 3;
+
+    // Paginate through all results using cursor
+    while (true) {
+      // Wait while paused
+      while (this.isPaused) {
+        console.log(`[ScholarExtractor] Search paused`);
+        this.updateProgress({
+          currentTask: `⏸️  Search paused`,
+          nextTask: `Waiting to resume`,
+          progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 10000)) * 60),
+          totalPapers: totalFetched
+        });
+        await this.delay(1000);
+      }
+
+      // Check if stopped
+      if (!this.isRunning) {
+        console.log('[ScholarExtractor] Search stopped during pagination');
+        return;
+      }
+
+      const limit = maxResults
+        ? Math.min(maxPerRequest, maxResults - totalFetched)
+        : maxPerRequest;
+
+      // Update status before each API call
+      this.updateProgress({
+        currentTask: `Fetching papers (cursor-based, got ${totalFetched} so far)`,
+        nextTask: `Processing batch of ${limit} papers`,
+        progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 10000)) * 60),
+        totalPapers: totalFetched
+      });
+
+      try {
+        const result = await openAlex.search(
+          {
+            query: parameters.inclusionKeywords.join(' '),
+            limit,
+            cursor
+          },
+          0, 3,
+          (waitTimeMs: number, reason: string) => {
+            this.updateProgress({
+              currentTask: `⏸️  ${reason}`,
+              nextTask: `Will resume after waiting`,
+              progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 10000)) * 60),
+              totalPapers: totalFetched
+            });
+          },
+          () => {
+            this.updateProgress({
+              currentTask: `Fetching papers (cursor-based, got ${totalFetched} so far)`,
+              nextTask: `Processing batch of ${limit} papers`,
+              progress: 20 + Math.min(60, (totalFetched / Math.max(1, maxResults || 10000)) * 60),
+              totalPapers: totalFetched
+            });
+          }
+        );
+
+        // Update cursor for next iteration
+        cursor = result.nextCursor;
+
+        // Detect stuck loops
+        if (result.papers.length === 0) {
+          consecutiveEmptyResults++;
+          console.log(`Received 0 papers (attempt ${consecutiveEmptyResults}/${maxConsecutiveEmpty})`);
+          if (consecutiveEmptyResults >= maxConsecutiveEmpty) {
+            console.log(`Stopping after ${maxConsecutiveEmpty} consecutive empty results`);
+            break;
+          }
+        } else {
+          consecutiveEmptyResults = 0;
+        }
+
+        // Apply keyword presence check
+        let papersToAdd = this.applyKeywordPresenceCheck(result.papers, parameters.inclusionKeywords);
+
+        totalFetched += papersToAdd.length;
+
+        // Save papers incrementally
+        for (const paper of papersToAdd) {
+          this.database.addPaper(this.sessionId!, paper);
+          if (this.onPaper) {
+            this.onPaper(paper, this.sessionId!);
+          }
+        }
+
+        console.log(`Found ${totalFetched}/${result.total} papers (all years)`);
+
+        // Update status after fetching batch
+        this.updateProgress({
+          currentTask: `Retrieved ${totalFetched}/${result.total} papers`,
+          nextTask: result.hasMore ? `Fetching next batch` : 'Finalizing search',
+          progress: 20 + Math.min(60, (totalFetched / Math.max(1, result.total)) * 60),
+          totalPapers: totalFetched
+        });
+
+        // Stop if no more results available
+        if (!result.hasMore || result.papers.length === 0) {
+          break;
+        }
+
+        // Stop if we've reached the max results
+        if (maxResults && totalFetched >= maxResults) {
+          break;
+        }
+      } catch (batchError: any) {
+        // For OpenAlex cursor-based pagination, we can't retry at a specific position
+        if (batchError.retryable) {
+          console.error(`Failed batch: ${batchError.message}`);
+          console.warn(`Cannot retry failed batch for OpenAlex (cursor-based pagination)`);
+          // Continue to the next cursor if we have one, otherwise break
+          if (!cursor) {
+            break;
+          }
+        } else {
+          throw batchError;
         }
       }
     }
